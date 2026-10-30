@@ -231,8 +231,11 @@ Integrated directly with GoLaravel's Artisan CLI:
 # Create a new panel
 artisan make:filament-panel Admin
 
-# Create an Ent CRUD resource
+# Create an Ent CRUD resource manually
 artisan make:filament-resource Customer
+
+# Automatically inspect Ent schema AST to generate forms, tables, filters & relations
+artisan make:filament-resource Invoice --generate
 
 # Create a custom panel page
 artisan make:filament-page Settings

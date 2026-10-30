@@ -7,7 +7,7 @@ import (
 )
 
 // Version is the current GoFilament release version.
-const Version = "v1.0.0"
+const Version = "v1.1.0"
 
 // NewPanel creates a new admin panel instance.
 func NewPanel(id string) *filament.Panel {

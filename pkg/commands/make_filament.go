@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/golaravel/gofilament/pkg/codegen"
 	"github.com/golaravel/golaravel/pkg/artisan"
 )
 
@@ -72,9 +73,16 @@ func MakeFilamentResourceCommand() *artisan.Command {
 		Description: "Generate a full Ent CRUD resource with Form and Table schemas",
 		Run: func(args []string) error {
 			if len(args) < 1 {
-				return fmt.Errorf("usage: artisan make:filament-resource <Name>")
+				return fmt.Errorf("usage: artisan make:filament-resource <Name> [--generate]")
 			}
 			name := args[0]
+			autoGenerate := false
+			for _, a := range args[1:] {
+				if a == "--generate" {
+					autoGenerate = true
+				}
+			}
+
 			modelName := strings.Title(name)
 			pluralName := modelName + "s"
 			slug := strings.ToLower(pluralName)
@@ -85,6 +93,39 @@ func MakeFilamentResourceCommand() *artisan.Command {
 			}
 
 			filePath := filepath.Join(dir, fmt.Sprintf("%s_resource.go", strings.ToLower(name)))
+
+			if autoGenerate {
+				schemaPath, err := codegen.FindEntSchemaFile(name)
+				if err != nil {
+					return fmt.Errorf("failed to locate schema for %s: %w", name, err)
+				}
+				parsed, err := codegen.ParseEntSchema(schemaPath)
+				if err != nil {
+					return fmt.Errorf("failed to parse schema %s: %w", schemaPath, err)
+				}
+				content, err := codegen.GenerateResourceCode(parsed)
+				if err != nil {
+					return fmt.Errorf("failed to generate resource code: %w", err)
+				}
+				if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+					return err
+				}
+				fmt.Printf("Resource generated from Ent schema (%s): %s\n", schemaPath, filePath)
+
+				// Generate Relation Managers for edges
+				for _, edge := range parsed.Edges {
+					if edge.EdgeType == "To" && !edge.IsUnique {
+						relDir := filepath.Join(dir, strings.ToLower(name), "relations")
+						_ = os.MkdirAll(relDir, 0755)
+						relFile := filepath.Join(relDir, fmt.Sprintf("%s_relation_manager.go", strings.ToLower(edge.Name)))
+						relContent, _ := codegen.GenerateRelationManagerCode(modelName, edge)
+						_ = os.WriteFile(relFile, []byte(relContent), 0644)
+						fmt.Printf("Relation manager generated for edge %s: %s\n", edge.Name, relFile)
+					}
+				}
+				return nil
+			}
+
 			content := fmt.Sprintf(`package resources
 
 import (
