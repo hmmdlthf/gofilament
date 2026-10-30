@@ -259,6 +259,58 @@ panel := filament.NewPanel("admin").
 
 ---
 
+## 🔗 Interactive In-Place Relation Managers
+
+Relation Managers allow you to embed related child models (e.g. `OrdersRelationManager`, `AddressesRelationManager`, or `LineItemsRelationManager`) directly inside a parent resource's View and Edit screens:
+
+```go
+ordersRM := filament.NewRelationManager[*Order]("orders", "Customer Orders").
+    RecordTitleAttribute("order_no").
+    Form(func(f *forms.Form) *forms.Form {
+        return f.Schema(
+            forms.TextInput("order_no").Required(),
+            forms.TextInput("total").Numeric().Required(),
+            forms.Select("status").Options(map[string]string{
+                "pending":   "Pending",
+                "completed": "Completed",
+            }),
+        )
+    }).
+    Table(func(t *tables.Table[*Order]) *tables.Table[*Order] {
+        return t.Columns(
+            tables.TextColumn[*Order]("id").Sortable(),
+            tables.TextColumn[*Order]("order_no").Searchable(),
+            tables.TextColumn[*Order]("total").Money("USD"),
+            tables.BadgeColumn[*Order]("status"),
+        )
+    }).
+    OnList(func(ctx *filament.Context, customerID string, search, sort, dir string, page, perPage int) ([]*Order, int, error) {
+        // Query child orders where customer_id = customerID
+        return queryOrdersByCustomer(customerID)
+    }).
+    OnCreate(func(ctx *filament.Context, customerID string, data map[string]any) error {
+        // Create order linked to customerID in-place
+        return createOrderForCustomer(customerID, data)
+    }).
+    OnUpdate(func(ctx *filament.Context, customerID, orderID string, data map[string]any) error {
+        // Update order in-place
+        return updateOrder(orderID, data)
+    }).
+    OnDelete(func(ctx *filament.Context, customerID, orderID string) error {
+        // Delete or detach order in-place
+        return deleteOrder(orderID)
+    })
+
+// Attach to parent resource
+customerResource.Relations(ordersRM, addressesRM)
+```
+
+- **In-Place Modals**: Create and Edit operations open clean Alpine.js modal dialogs directly on the parent edit page without full-page navigation.
+- **Multi-Relation Tabs**: Automatically generates responsive tabs (`activeRelTab`) when multiple relation managers are attached.
+- **REST API Support**: Native endpoints for mobile/Flutter clients at `/admin/api/resources/:slug/:id/relations/:rel`.
+
+---
+
 ## 🛡️ Filament Shield & Policy Access Control
 
 GoFilament provides role-based and policy-based access control at the panel, resource, and row levels:

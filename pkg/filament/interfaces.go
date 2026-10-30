@@ -22,6 +22,7 @@ type ResourceInterface interface {
 	RegisterRoutes(p *Panel, r *router.Router)
 	IsGloballySearchable() bool
 	SearchGlobal(ctx *Context, query string) []GlobalSearchResult
+	GetRelations() []RelationManager
 }
 
 // PageInterface defines the contract for custom panel pages.

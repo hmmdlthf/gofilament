@@ -3,6 +3,7 @@ package filament
 import (
 	"encoding/csv"
 	"fmt"
+	"html"
 	"net/http"
 	"strconv"
 	"strings"
@@ -299,6 +300,10 @@ func (r *BaseResource[T]) Relations(rms ...RelationManager) *BaseResource[T] {
 	return r
 }
 
+func (r *BaseResource[T]) GetRelations() []RelationManager {
+	return r.relations
+}
+
 // Handlers binding
 func (r *BaseResource[T]) OnList(fn ListHandlerFunc[T]) *BaseResource[T] {
 	r.onList = fn
@@ -459,6 +464,74 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 	}
 	router.GET(basePath+"/:id/delete", deleteHandler)
 	router.POST(basePath+"/:id/delete", deleteHandler)
+
+	// 4. In-Place Relation Manager Routes
+	for _, rel := range r.relations {
+		relName := rel.Relationship()
+		relManager := rel
+		relURL := fmt.Sprintf("%s/:id/relations/%s", basePath, relName)
+
+		// In-place Create
+		router.POST(relURL+"/create", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			parentID := c.Param("id")
+			_ = ctx.Request.ParseForm()
+			data := make(map[string]any)
+			for k, v := range ctx.Request.PostForm {
+				if len(v) == 1 {
+					data[k] = v[0]
+				} else {
+					data[k] = v
+				}
+			}
+			if err := relManager.HandleCreate(ctx, parentID, data); err != nil {
+				return ctx.String(http.StatusInternalServerError, "Relation create error: %v", err)
+			}
+			return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s/%s/edit", basePath, parentID))
+		})
+
+		// In-place Edit
+		router.POST(relURL+"/:child_id/edit", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			parentID := c.Param("id")
+			childID := c.Param("child_id")
+			_ = ctx.Request.ParseForm()
+			data := make(map[string]any)
+			for k, v := range ctx.Request.PostForm {
+				if len(v) == 1 {
+					data[k] = v[0]
+				} else {
+					data[k] = v
+				}
+			}
+			if err := relManager.HandleUpdate(ctx, parentID, childID, data); err != nil {
+				return ctx.String(http.StatusInternalServerError, "Relation update error: %v", err)
+			}
+			return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s/%s/edit", basePath, parentID))
+		})
+
+		// In-place Delete
+		deleteRelHandler := func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			parentID := c.Param("id")
+			childID := c.Param("child_id")
+			if err := relManager.HandleDelete(ctx, parentID, childID); err != nil {
+				return ctx.String(http.StatusInternalServerError, "Relation delete error: %v", err)
+			}
+			return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s/%s/edit", basePath, parentID))
+		}
+		router.GET(relURL+"/:child_id/delete", deleteRelHandler)
+		router.POST(relURL+"/:child_id/delete", deleteRelHandler)
+	}
 }
 
 // ----------------------------------------------------
@@ -621,8 +694,10 @@ func (r *BaseResource[T]) handleView(ctx *Context, basePath, id string) error {
     <a href="%s" class="btn btn-secondary">Back</a>
   </div>
 </div>
+%s
 %s`,
 		r.modelName, id, editButton, basePath, infolist.Render(),
+		r.renderRelations(ctx, basePath, id),
 	)
 
 	return r.renderPage(ctx, fmt.Sprintf("%s #%s", r.modelName, id), content)
@@ -674,13 +749,58 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
     <a href="%s" class="btn btn-secondary">Cancel</a>
     <button type="submit" form="filament-form" class="btn btn-primary">Save Changes</button>
   </div>
-</div>`,
+</div>
+%s`,
 		r.modelName, id, deleteButton, basePath,
 		form.Render(ctx.GoContext()),
 		basePath,
+		r.renderRelations(ctx, basePath, id),
 	)
 
 	return r.renderPage(ctx, fmt.Sprintf("Edit %s #%s", r.modelName, id), content)
+}
+
+func (r *BaseResource[T]) renderRelations(ctx *Context, basePath, id string) string {
+	if len(r.relations) == 0 {
+		return ""
+	}
+
+	if len(r.relations) == 1 {
+		return fmt.Sprintf(`
+<div class="filament-relations-section" style="margin-top: 2rem;">
+  %s
+</div>`, r.relations[0].Render(ctx, basePath, id))
+	}
+
+	firstRel := r.relations[0].Relationship()
+	var tabButtons strings.Builder
+	var tabPanes strings.Builder
+
+	tabButtons.WriteString(`<div class="filament-tab-bar" style="display: flex; gap: 0.5rem; border-bottom: 2px solid var(--gray-200); margin-bottom: 1.5rem; padding-bottom: 0.5rem;">`)
+	for _, rel := range r.relations {
+		relSlug := rel.Relationship()
+		title := rel.Title()
+		tabButtons.WriteString(fmt.Sprintf(`
+<button type="button" 
+  @click="activeRelTab = '%s'" 
+  :class="{ 'btn-primary': activeRelTab === '%s', 'btn-secondary': activeRelTab !== '%s' }" 
+  class="btn" 
+  style="font-size: 0.875rem; padding: 0.5rem 1rem;">
+  %s
+</button>`, relSlug, relSlug, relSlug, html.EscapeString(title)))
+
+		tabPanes.WriteString(fmt.Sprintf(`
+<div x-show="activeRelTab === '%s'" style="display: none;" :style="activeRelTab === '%s' ? 'display: block;' : 'display: none;'">
+  %s
+</div>`, relSlug, relSlug, rel.Render(ctx, basePath, id)))
+	}
+	tabButtons.WriteString(`</div>`)
+
+	return fmt.Sprintf(`
+<div class="filament-relations-section" style="margin-top: 2rem;" x-data="{ activeRelTab: '%s' }">
+  %s
+  %s
+</div>`, firstRel, tabButtons.String(), tabPanes.String())
 }
 
 func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error {

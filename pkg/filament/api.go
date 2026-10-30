@@ -367,6 +367,122 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			"success": true,
 		})
 	})
+
+	// ----------------------------------------------------
+	// Nested Relation Manager Endpoints
+	// ----------------------------------------------------
+
+	// GET /admin/api/resources/:slug/:id/relations
+	r.GET(resPath+"/:id/relations", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		_ = ctx
+
+		var relationsMeta []map[string]any
+		for _, rel := range res.GetRelations() {
+			relationsMeta = append(relationsMeta, rel.GetAPISchema())
+		}
+		return c.JSON(http.StatusOK, map[string]any{
+			"resource":  slug,
+			"parent_id": c.Param("id"),
+			"relations": relationsMeta,
+		})
+	})
+
+	// Register CRUD for each relation manager on this resource
+	for _, rel := range res.GetRelations() {
+		relName := rel.Relationship()
+		relManager := rel
+		relPath := fmt.Sprintf("%s/:id/relations/%s", resPath, relName)
+
+		// GET /admin/api/resources/:slug/:id/relations/:rel - List
+		r.GET(relPath, func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			parentID := c.Param("id")
+			search := ctx.Query("search")
+			sortCol := ctx.Query("sort")
+			sortDir := ctx.DefaultQuery("direction", "asc")
+			page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+			perPage, _ := strconv.Atoi(ctx.DefaultQuery("perPage", "15"))
+
+			data, total, err := relManager.HandleList(ctx, parentID, search, sortCol, sortDir, page, perPage)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"relationship": relName,
+				"parent_id":    parentID,
+				"data":         data,
+				"total":        total,
+				"page":         page,
+				"per_page":     perPage,
+			})
+		})
+
+		// POST /admin/api/resources/:slug/:id/relations/:rel - Create
+		r.POST(relPath, func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			parentID := c.Param("id")
+			payload := parseRequestData(c)
+
+			if err := relManager.HandleCreate(ctx, parentID, payload); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusCreated, map[string]any{
+				"success": true,
+				"message": fmt.Sprintf("Related %s record created successfully", relName),
+			})
+		})
+
+		// PUT /admin/api/resources/:slug/:id/relations/:rel/:child_id - Update
+		updateRelHandler := func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			parentID := c.Param("id")
+			childID := c.Param("child_id")
+			payload := parseRequestData(c)
+
+			if err := relManager.HandleUpdate(ctx, parentID, childID, payload); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"success": true,
+				"message": fmt.Sprintf("Related %s record updated successfully", relName),
+			})
+		}
+		r.PUT(relPath+"/:child_id", updateRelHandler)
+		r.POST(relPath+"/:child_id", updateRelHandler)
+
+		// DELETE /admin/api/resources/:slug/:id/relations/:rel/:child_id - Delete
+		deleteRelHandler := func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			parentID := c.Param("id")
+			childID := c.Param("child_id")
+
+			if err := relManager.HandleDelete(ctx, parentID, childID); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"success": true,
+				"message": fmt.Sprintf("Related %s record deleted successfully", relName),
+			})
+		}
+		r.DELETE(relPath+"/:child_id", deleteRelHandler)
+		r.POST(relPath+"/:child_id/delete", deleteRelHandler)
+	}
 }
 
 func parseRequestData(c *gcontext.Context) map[string]any {

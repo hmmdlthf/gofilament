@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.6.0] - 2026-10-31
+
+### Added
+- **Interactive In-Place Relation Managers (`pkg/filament/relation.go`, `pkg/filament/resource.go`, `pkg/filament/api.go`)**:
+  - `RelationManager` interface & `BaseRelationManager[T any]` generic implementation for embedding related child models directly into parent resource View and Edit screens.
+  - **In-Place Web Operations (Modals & AJAX)**:
+    - Dedicated child data table with columns, sorting, pagination, and search.
+    - Header action `+ New [Relation]` opening in-place Alpine.js Create Modal without leaving the parent page.
+    - Row action `Edit` opening in-place Edit Modal pre-filled with child record data.
+    - Row action `Delete` with confirmation modal deleting/detaching the related record in-place.
+    - Automatic redirection back to the parent edit screen (`/:id/edit`).
+  - **Interactive Multi-Relation Tab Bar**:
+    - Automatically generates an Alpine.js responsive tab bar (`activeRelTab`) when multiple relation managers are attached to a resource (e.g. Orders, Invoices, Addresses).
+  - **Standardized REST API Endpoints for Nested Relations**:
+    - `GET /admin/api/resources/:slug/:id/relations`: Metadata discovery of all attached relation managers.
+    - `GET /admin/api/resources/:slug/:id/relations/:rel`: Paginated JSON listing of related child records.
+    - `POST /admin/api/resources/:slug/:id/relations/:rel`: In-place record creation via REST.
+    - `PUT /admin/api/resources/:slug/:id/relations/:rel/:child_id`: In-place record update via REST.
+    - `DELETE /admin/api/resources/:slug/:id/relations/:rel/:child_id`: In-place record deletion via REST.
+  - **Artisan Code Generator**:
+    - `php artisan make:filament-relation <Resource> <Relation>` scaffolding type-safe relation managers.
+
+---
+
 ## [v1.5.0] - 2026-10-31
 
 ### Added
