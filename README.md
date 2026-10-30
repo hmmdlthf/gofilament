@@ -191,6 +191,52 @@ func NewUserResource() *UserResource {
 | `forms.Grid(cols)` | Responsive multi-column layout grid |
 | `forms.Section(title)` | Bordered card section with collapsible support |
 | `forms.Tabs(...)` | Tabbed form schemas |
+| `forms.Wizard(...)` | Sequential step-by-step form wizard with progress indicators |
+| `forms.Repeater(name)` | Dynamic nested line-item arrays (add/remove rows) |
+
+### 🧙 Multi-Step Wizard (`forms.Wizard`)
+
+Break complex forms into manageable sequential steps with Alpine.js step indicators, error auto-activation, and custom submit actions:
+
+```go
+forms.Wizard(
+    forms.WizardStep("Account").
+        Description("Login credentials").
+        Schema(
+            forms.TextInput("username").Required(),
+            forms.TextInput("email").Email().Required(),
+        ),
+    forms.WizardStep("Shipping").
+        Description("Delivery destination").
+        Schema(
+            forms.TextInput("address").Required(),
+            forms.TextInput("postal_code").Required(),
+        ),
+    forms.WizardStep("Payment").
+        Description("Billing information").
+        Schema(
+            forms.TextInput("card_number").Required(),
+        ),
+).SubmitAction("Place Order Now")
+```
+
+### 🔁 Dynamic Line-Item Repeater (`forms.Repeater`)
+
+Allow operators to dynamically add, remove, and manage sub-record arrays with automatic input name scoping (`items[0][sku]`, `items[1][sku]`):
+
+```go
+forms.Repeater("line_items").
+    Label("Order Items").
+    ItemLabel("Item").
+    MinItems(1).
+    MaxItems(10).
+    AddActionLabel("+ Add Line Item").
+    Schema(
+        forms.TextInput("sku").Required(),
+        forms.TextInput("quantity").Numeric().Required(),
+        forms.TextInput("price").Numeric().Required(),
+    )
+```
 
 ### Live Reactive Fields (`.Live()`)
 

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.8.0] - 2026-10-31
+
+### Added
+- **Advanced Form Components: Wizard & Repeater (`pkg/forms/advanced_layouts.go`, `pkg/forms/form.go`)**:
+  - **Sequential Multi-Step Wizard (`forms.Wizard([*forms.WizardStep])`)**:
+    - Stepper navigation bar with interactive step pills and connecting progress bars.
+    - Completed step checkmarks (`✓`), active step highlight, and pending steps.
+    - Automatic validation error detection: auto-activates the step containing failing fields.
+    - Built-in Next, Previous, and customizable Submit (`SubmitAction`) buttons.
+  - **Dynamic Line-Item Repeater (`forms.Repeater(name)`)**:
+    - In-place dynamic row additions with template cloning (`<template id="tmpl_...">`).
+    - Client-side row removals and counter updates.
+    - Scoped array field names: automatically formats child inputs as `items[0][field]`, `items[1][field]`, etc.
+    - Constraints: `MinItems`, `MaxItems`, and customizable `AddActionLabel` / `ItemLabel`.
+  - **Recursive Nested Field Resolution**:
+    - Enhanced `form.GetField(...)` to resolve fields deeply nested inside sections, grids, fieldsets, splits, wizards, and repeaters.
+
+---
+
 ## [v1.7.0] - 2026-10-31
 
 ### Added

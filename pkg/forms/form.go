@@ -112,6 +112,32 @@ func findFieldInComponents(components []Component, name string) Component {
 				return match
 			}
 		}
+		// Search in fieldsets
+		if fs, ok := c.(*FieldsetComponent); ok {
+			if match := findFieldInComponents(fs.schema, name); match != nil {
+				return match
+			}
+		}
+		// Search in splits
+		if sp, ok := c.(*SplitComponent); ok {
+			if match := findFieldInComponents(sp.schema, name); match != nil {
+				return match
+			}
+		}
+		// Search in wizards
+		if w, ok := c.(*WizardComponent); ok {
+			for _, step := range w.steps {
+				if match := findFieldInComponents(step.schema, name); match != nil {
+					return match
+				}
+			}
+		}
+		// Search in repeaters
+		if r, ok := c.(*RepeaterComponent); ok {
+			if match := findFieldInComponents(r.schema, name); match != nil {
+				return match
+			}
+		}
 	}
 	return nil
 }
