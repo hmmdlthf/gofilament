@@ -849,3 +849,76 @@ func (r *BaseResource[T]) renderPage(ctx *Context, pageTitle, innerContent strin
 	)
 	return ctx.HTML(http.StatusOK, html)
 }
+
+// API Invoker methods for JSON REST API and Flutter clients
+
+func (r *BaseResource[T]) InvokeList(ctx *Context, search, sortCol, sortDir string, page, perPage int, filters map[string]string) (any, int, error) {
+	if r.canViewAny != nil && !r.canViewAny(ctx) {
+		return nil, 0, fmt.Errorf("403 Forbidden: Access denied")
+	}
+	if r.onList == nil {
+		return []T{}, 0, nil
+	}
+	records, total, err := r.onList(ctx, search, sortCol, sortDir, page, perPage, filters)
+	return records, total, err
+}
+
+func (r *BaseResource[T]) InvokeFind(ctx *Context, id string) (any, error) {
+	if r.onFind == nil {
+		return nil, fmt.Errorf("record not found")
+	}
+	record, err := r.onFind(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if r.canView != nil && !r.canView(ctx, record) {
+		return nil, fmt.Errorf("403 Forbidden: Access denied")
+	}
+	return record, nil
+}
+
+func (r *BaseResource[T]) InvokeCreate(ctx *Context, data map[string]any) error {
+	if r.canCreate != nil && !r.canCreate(ctx) {
+		return fmt.Errorf("403 Forbidden: Access denied")
+	}
+	if r.onCreate == nil {
+		return fmt.Errorf("create not implemented")
+	}
+	return r.onCreate(ctx, data)
+}
+
+func (r *BaseResource[T]) InvokeUpdate(ctx *Context, id string, data map[string]any) error {
+	if r.onFind != nil && r.canEdit != nil {
+		record, err := r.onFind(ctx, id)
+		if err == nil && !r.canEdit(ctx, record) {
+			return fmt.Errorf("403 Forbidden: Access denied")
+		}
+	}
+	if r.onUpdate == nil {
+		return fmt.Errorf("update not implemented")
+	}
+	return r.onUpdate(ctx, id, data)
+}
+
+func (r *BaseResource[T]) InvokeDelete(ctx *Context, id string) error {
+	if r.onFind != nil && r.canDelete != nil {
+		record, err := r.onFind(ctx, id)
+		if err == nil && !r.canDelete(ctx, record) {
+			return fmt.Errorf("403 Forbidden: Access denied")
+		}
+	}
+	if r.onDelete == nil {
+		return fmt.Errorf("delete not implemented")
+	}
+	return r.onDelete(ctx, id)
+}
+
+func (r *BaseResource[T]) InvokeDeleteBulk(ctx *Context, ids []string) error {
+	if r.canDeleteAny != nil && !r.canDeleteAny(ctx) {
+		return fmt.Errorf("403 Forbidden: Access denied")
+	}
+	if r.onDeleteBulk == nil {
+		return fmt.Errorf("bulk delete not implemented")
+	}
+	return r.onDeleteBulk(ctx, ids)
+}

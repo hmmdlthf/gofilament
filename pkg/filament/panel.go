@@ -3,11 +3,14 @@ package filament
 import (
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/assets"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
+	"github.com/golaravel/golaravel/pkg/flutter"
 	"github.com/golaravel/golaravel/pkg/golaravel"
 	"github.com/golaravel/golaravel/pkg/router"
 )
@@ -20,6 +23,14 @@ const (
 	Width6xl  ContentWidth = "max-w-6xl"
 )
 
+// PanelEngine specifies the UI delivery engine for the admin panel.
+type PanelEngine string
+
+const (
+	EngineWeb     PanelEngine = "web"     // Default: Templ SSR + Alpine.js + HTMX
+	EngineFlutter PanelEngine = "flutter" // Flutter Multiplatform (Mobile-First Web, iOS, Android, Desktop)
+)
+
 // NavigationGroup aggregates items under a named section in the sidebar.
 type NavigationGroup struct {
 	Name  string
@@ -30,6 +41,8 @@ type NavigationGroup struct {
 type Panel struct {
 	id                  string
 	path                string
+	engine              PanelEngine
+	flutterDistDir      string
 	brandName           string
 	brandLogo           string
 	favicon             string
@@ -63,6 +76,8 @@ func NewPanel(id string) *Panel {
 	p := &Panel{
 		id:                  id,
 		path:                "/" + strings.Trim(id, "/"),
+		engine:              EngineWeb,
+		flutterDistDir:      "client/build/web",
 		brandName:           "GoFilament",
 		homeURL:             "/" + strings.Trim(id, "/"),
 		colors:              DefaultColorPalette(),
@@ -100,6 +115,42 @@ func (p *Panel) Path(path string) *Panel {
 		p.homeURL = p.path
 	}
 	return p
+}
+
+// Engine configures the UI delivery engine (EngineWeb or EngineFlutter).
+func (p *Panel) Engine(engine PanelEngine) *Panel {
+	p.engine = engine
+	return p
+}
+
+// Flutter configures the panel to run in Flutter Multiplatform mode.
+func (p *Panel) Flutter(distDir ...string) *Panel {
+	p.engine = EngineFlutter
+	if len(distDir) > 0 && distDir[0] != "" {
+		p.flutterDistDir = distDir[0]
+	}
+	return p
+}
+
+// GetEngine returns the active PanelEngine.
+func (p *Panel) GetEngine() PanelEngine {
+	if p.engine == "" {
+		return EngineWeb
+	}
+	return p.engine
+}
+
+// IsFlutter returns true if Flutter engine is selected.
+func (p *Panel) IsFlutter() bool {
+	return p.GetEngine() == EngineFlutter
+}
+
+// GetFlutterDistDir returns the Flutter build directory path.
+func (p *Panel) GetFlutterDistDir() string {
+	if p.flutterDistDir == "" {
+		return "client/build/web"
+	}
+	return p.flutterDistDir
 }
 
 // BrandName sets the text branding displayed in the topbar and sidebar.
@@ -423,6 +474,15 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 func (p *Panel) Mount(r *router.Router) {
 	// 1. Static Assets
 	assets.RegisterRoutes(r, p.path+"/assets")
+
+	// 2. Standardized Panel REST API (powers Flutter, mobile apps, and headless integrations)
+	p.RegisterAPIRoutes(r)
+
+	// 3. If Flutter engine is selected, mount the Flutter Web application
+	if p.IsFlutter() {
+		p.mountFlutter(r)
+		return
+	}
 
 	// Global Search Route
 	if p.hasGlobalSearch {
@@ -754,4 +814,59 @@ func (p *Panel) renderLoginScreen(ctx *Context) error {
 </html>`, p.brandName, p.path, p.path, p.brandName, p.path)
 
 	return ctx.HTML(http.StatusOK, html)
+}
+
+func (p *Panel) mountFlutter(r *router.Router) {
+	distDir := p.GetFlutterDistDir()
+	indexPath := filepath.Join(distDir, "index.html")
+
+	if _, err := os.Stat(indexPath); err == nil {
+		// Serve compiled Flutter Web SPA
+		flutter.ServeWeb(r, flutter.Options{
+			MountPath:   p.path,
+			DistDir:     distDir,
+			FallbackSPA: true,
+		})
+		return
+	}
+
+	// If Flutter Web hasn't been built yet, show guidance page
+	r.GET(p.path, func(c *gcontext.Context) error {
+		clientDir := filepath.Dir(distDir)
+		if strings.HasSuffix(distDir, "web") {
+			clientDir = filepath.Dir(clientDir)
+		}
+		html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>%s - Flutter Mobile-First Admin Panel</title>
+  <link rel="stylesheet" href="%s/assets/filament.css">
+</head>
+<body style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0f172a; color: #f8fafc; font-family: sans-serif; padding: 1rem;">
+  <div style="max-width: 32rem; width: 100%%; padding: 2.5rem; background: #1e293b; border-radius: 1rem; border: 1px solid #334155; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+    <div style="font-size: 3rem; margin-bottom: 1rem;">📱⚡</div>
+    <h1 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; color: #38bdf8;">%s Flutter Admin Active</h1>
+    <p style="font-size: 0.875rem; color: #94a3b8; line-height: 1.5; margin-bottom: 1.5rem;">
+      Your admin panel is running in <strong>Flutter Multiplatform</strong> mode (Mobile-First Web, iOS, Android, Desktop).
+    </p>
+    <div style="background: #090d16; padding: 1rem; border-radius: 0.5rem; text-align: left; font-family: monospace; font-size: 0.8125rem; color: #38bdf8; margin-bottom: 1.5rem;">
+      <div style="color: #64748b;"># 1. Compile Flutter Web client:</div>
+      <div style="color: #4ade80;">cd %s && flutter build web</div>
+      <div style="color: #64748b; margin-top: 0.5rem;"># 2. Or run natively on iOS / Android:</div>
+      <div style="color: #4ade80;">cd %s && flutter run</div>
+    </div>
+    <div style="display: flex; gap: 0.75rem; justify-content: center;">
+      <a href="%s/api/schema" style="display: inline-block; padding: 0.5rem 1rem; border-radius: 0.375rem; background: #38bdf8; color: #0f172a; font-weight: 600; text-decoration: none; font-size: 0.875rem;">View JSON Schema</a>
+    </div>
+  </div>
+</body>
+</html>`, p.brandName, p.path, p.brandName, clientDir, clientDir, p.path)
+		return c.HTML(http.StatusOK, html)
+	})
+
+	r.GET(p.path+"/", func(c *gcontext.Context) error {
+		return c.Redirect(http.StatusMovedPermanently, p.path)
+	})
 }

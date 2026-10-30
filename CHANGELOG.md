@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.5.0] - 2026-10-31
+
+### Added
+- **Multi-Engine Admin Panels & Mobile-First Flutter Engine (`pkg/filament/panel.go`, `pkg/filament/api.go`, `pkg/flutterclient`)**:
+  - `PanelEngine` selection (`filament.EngineWeb` SSR default or `filament.EngineFlutter`).
+  - `panel.Flutter(distDir...)` fluent method enabling compiled Flutter Web SPA serving and cross-platform native clients.
+  - **Standardized Panel REST API (`pkg/filament/api.go`)**:
+    - `GET /admin/api/schema`: Complete panel schema discovery (navigation groups, resource definitions, tenant configuration, engine mode, brand metadata).
+    - `GET /admin/api/resources/:slug`: Paginated resource listings with search, sort, and filters.
+    - `GET /admin/api/resources/:slug/:id`: Single record retrieval.
+    - `POST /admin/api/resources/:slug`: Record creation with policy validation.
+    - `PUT /admin/api/resources/:slug/:id`: Record update with policy validation.
+    - `DELETE /admin/api/resources/:slug/:id`: Record deletion with policy validation.
+    - `POST /admin/api/resources/:slug/bulk`: Bulk operations.
+    - `GET /admin/api/tenants` & `POST /admin/api/tenants/switch`: Tenancy management for mobile/SPA clients.
+    - `GET /admin/api/widgets`: Real-time dashboard stats and charts.
+  - **Mobile-First Responsive Flutter Client Generator (`pkg/flutterclient/scaffold.go`)**:
+    - Material 3 theme with Dark & Light mode toggle.
+    - Adaptive `ResponsiveLayout` supporting mobile phones, tablets, and desktop workstations.
+    - **Mobile-First Experience**:
+      - One-thumb bottom `NavigationBar` with icons, badges, and smooth animations.
+      - Pull-to-refresh (`RefreshIndicator`) for instant table/feed updates.
+      - Floating action buttons (`FloatingActionButton`) for one-tap record creation.
+      - Bottom-sheet modal forms (`showModalBottomSheet`) optimized for single-hand mobile inputs.
+      - Swipe-to-delete dismissible list cards (`Dismissible`) with confirmation feedback.
+    - **Tablet & Desktop Experience**:
+      - Expandable `NavigationRail` sidebar.
+      - High-density data grid tables with column sorting.
+      - Split-pane master-detail inspect view.
+    - Cross-compiles to Web SPA (`flutter build web`), iOS, Android, macOS, Linux, and Windows (`flutter run`).
+  - **Artisan Generator Commands (`pkg/commands/make_filament.go`)**:
+    - `php artisan make:filament-panel [name] --engine=flutter`: Scaffolds a Flutter-ready panel provider.
+    - `php artisan make:filament-flutter [panel] [--dir=client]`: Scaffolds a ready-to-run mobile-first Flutter admin client connected to GoFilament.
+
+---
+
 ## [v1.4.0] - 2026-10-31
 
 ### Added

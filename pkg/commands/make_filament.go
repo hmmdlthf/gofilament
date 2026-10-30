@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/codegen"
+	"github.com/golaravel/gofilament/pkg/flutterclient"
 	"github.com/golaravel/golaravel/pkg/artisan"
 )
 
@@ -17,20 +18,28 @@ func RegisterFilamentCommands(reg *artisan.Registry) {
 	reg.Register(MakeFilamentPageCommand())
 	reg.Register(MakeFilamentWidgetCommand())
 	reg.Register(MakeFilamentRelationCommand())
+	reg.Register(MakeFilamentFlutterCommand())
 }
 
 // MakeFilamentPanelCommand creates a new admin panel configuration.
 func MakeFilamentPanelCommand() *artisan.Command {
 	return &artisan.Command{
 		Name:        "make:filament-panel",
-		Description: "Create a new GoFilament panel configuration",
+		Description: "Create a new GoFilament panel configuration (supports --engine=web|flutter)",
 		Run: func(args []string) error {
 			if len(args) < 1 {
-				return fmt.Errorf("usage: artisan make:filament-panel <Name>")
+				return fmt.Errorf("usage: artisan make:filament-panel <Name> [--engine=flutter]")
 			}
 			name := args[0]
 			id := strings.ToLower(name)
 			structName := strings.Title(id) + "Panel"
+
+			isFlutter := false
+			for _, arg := range args[1:] {
+				if arg == "--engine=flutter" || arg == "--flutter" {
+					isFlutter = true
+				}
+			}
 
 			dir := filepath.Join("app", "filament", "panels")
 			if err := os.MkdirAll(dir, 0755); err != nil {
@@ -38,6 +47,11 @@ func MakeFilamentPanelCommand() *artisan.Command {
 			}
 
 			filePath := filepath.Join(dir, fmt.Sprintf("%s_panel.go", id))
+			engineChain := ""
+			if isFlutter {
+				engineChain = "\n\t\tEngine(filament.EngineFlutter)."
+			}
+
 			content := fmt.Sprintf(`package panels
 
 import (
@@ -47,7 +61,7 @@ import (
 // %s creates and configures the %s panel.
 func %s() *filament.Panel {
 	return filament.NewPanel("%s").
-		Path("/%s").
+		Path("/%s").%s
 		BrandName("%s Portal").
 		DarkMode(true).
 		SidebarCollapsibleOnDesktop().
@@ -55,12 +69,39 @@ func %s() *filament.Panel {
 		GlobalSearch(true).
 		DatabaseNotifications(true)
 }
-`, structName, name, structName, id, id, strings.Title(id))
+`, structName, name, structName, id, id, engineChain, strings.Title(id))
 
 			if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
 				return err
 			}
 			fmt.Printf("Panel successfully created: %s\n", filePath)
+			return nil
+		},
+	}
+}
+
+// MakeFilamentFlutterCommand scaffolds a responsive mobile-first Flutter admin client project.
+func MakeFilamentFlutterCommand() *artisan.Command {
+	return &artisan.Command{
+		Name:        "make:filament-flutter",
+		Description: "Scaffold a mobile-first responsive Flutter admin client for GoFilament",
+		Run: func(args []string) error {
+			name := "admin"
+			targetDir := "client"
+			if len(args) > 0 && !strings.HasPrefix(args[0], "--") {
+				name = args[0]
+			}
+			for _, a := range args {
+				if strings.HasPrefix(a, "--dir=") {
+					targetDir = strings.TrimPrefix(a, "--dir=")
+				}
+			}
+
+			err := flutterclient.GenerateFlutterAdmin(targetDir, name, "")
+			if err != nil {
+				return fmt.Errorf("failed to generate Flutter admin client: %w", err)
+			}
+			fmt.Printf("Mobile-first responsive Flutter admin client created in: %s\n", targetDir)
 			return nil
 		},
 	}

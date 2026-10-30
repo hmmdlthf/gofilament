@@ -1,0 +1,387 @@
+package filament
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+
+	gcontext "github.com/golaravel/golaravel/pkg/context"
+	"github.com/golaravel/golaravel/pkg/router"
+)
+
+// RegisterAPIRoutes mounts the standardized Panel JSON REST API.
+func (p *Panel) RegisterAPIRoutes(r *router.Router) {
+	apiPrefix := p.path + "/api"
+
+	// 1. Panel Schema Endpoint
+	r.GET(apiPrefix+"/schema", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		navGroups := p.BuildNavigation(ctx)
+		type navItemDTO struct {
+			Label  string `json:"label"`
+			URL    string `json:"url"`
+			Icon   string `json:"icon"`
+			Badge  string `json:"badge,omitempty"`
+			Active bool   `json:"active"`
+		}
+		type navGroupDTO struct {
+			Name  string       `json:"name"`
+			Items []navItemDTO `json:"items"`
+		}
+
+		var navDTOs []navGroupDTO
+		for _, g := range navGroups {
+			groupDTO := navGroupDTO{Name: g.Name}
+			for _, it := range g.Items {
+				groupDTO.Items = append(groupDTO.Items, navItemDTO{
+					Label:  it.Label,
+					URL:    it.URL,
+					Icon:   it.Icon,
+					Badge:  it.Badge,
+					Active: it.Active,
+				})
+			}
+			navDTOs = append(navDTOs, groupDTO)
+		}
+
+		type resourceDTO struct {
+			Slug            string `json:"slug"`
+			ModelName       string `json:"model_name"`
+			PluralModelName string `json:"plural_model_name"`
+			NavIcon         string `json:"icon"`
+			NavGroup        string `json:"group"`
+		}
+
+		var resourceDTOs []resourceDTO
+		for _, res := range p.resources {
+			item := res.NavigationItem(ctx)
+			if item != nil {
+				resourceDTOs = append(resourceDTOs, resourceDTO{
+					Slug:            res.Slug(),
+					ModelName:       item.Label,
+					PluralModelName: item.Label,
+					NavIcon:         item.Icon,
+					NavGroup:        item.Group,
+				})
+			}
+		}
+
+		type tenantDTO struct {
+			Key    string `json:"key"`
+			Name   string `json:"name"`
+			Avatar string `json:"avatar,omitempty"`
+			Active bool   `json:"active"`
+		}
+
+		var tenantsDTO []tenantDTO
+		activeTenantKey := ctx.Tenant()
+		if p.tenantConfig != nil && p.tenantConfig.Enabled && p.tenantConfig.TenantLoader != nil {
+			if list, err := p.tenantConfig.TenantLoader(ctx); err == nil {
+				for _, t := range list {
+					tenantsDTO = append(tenantsDTO, tenantDTO{
+						Key:    t.GetTenantKey(),
+						Name:   t.GetTenantName(),
+						Avatar: t.GetTenantAvatar(),
+						Active: t.GetTenantKey() == activeTenantKey,
+					})
+				}
+			}
+		}
+
+		schema := map[string]any{
+			"id":            p.id,
+			"brand_name":    p.brandName,
+			"path":          p.path,
+			"engine":        string(p.GetEngine()),
+			"dark_mode":     p.darkMode,
+			"active_tenant": activeTenantKey,
+			"tenants":       tenantsDTO,
+			"navigation":    navDTOs,
+			"resources":     resourceDTOs,
+			"widgets_count": len(p.widgets),
+		}
+
+		return c.JSON(http.StatusOK, schema)
+	})
+
+	// 2. Multi-Tenant API Endpoints
+	if p.tenantConfig != nil && p.tenantConfig.Enabled {
+		r.GET(apiPrefix+"/tenants", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			var list []Tenant
+			if p.tenantConfig.TenantLoader != nil {
+				list, _ = p.tenantConfig.TenantLoader(ctx)
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"active_tenant": ctx.Tenant(),
+				"tenants":       list,
+			})
+		})
+
+		r.POST(apiPrefix+"/tenants/switch", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			targetKey := c.Query("tenant")
+			if targetKey == "" {
+				targetKey = c.FormValue("tenant")
+			}
+			if targetKey == "" {
+				var body map[string]string
+				if err := json.NewDecoder(c.Request.Body).Decode(&body); err == nil {
+					targetKey = body["tenant"]
+				}
+			}
+
+			if targetKey != "" {
+				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", false, true)
+				ctx.SetTenant(targetKey)
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"success":       true,
+				"active_tenant": targetKey,
+			})
+		})
+	}
+
+	// 3. Widgets Evaluation API
+	r.GET(apiPrefix+"/widgets", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		_ = ctx
+
+		var widgetData []map[string]any
+		for _, w := range p.widgets {
+			widgetData = append(widgetData, map[string]any{
+				"id":          w.ID(),
+				"sort":        w.Sort(),
+				"column_span": w.ColumnSpan(),
+			})
+		}
+		return c.JSON(http.StatusOK, map[string]any{
+			"widgets": widgetData,
+		})
+	})
+
+	// 4. Register REST Endpoints for each resource
+	for _, res := range p.resources {
+		p.registerResourceAPI(res, apiPrefix, r)
+	}
+}
+
+// registerResourceAPI binds JSON endpoints for a specific Resource.
+func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *router.Router) {
+	slug := res.Slug()
+	resPath := fmt.Sprintf("%s/resources/%s", apiPrefix, slug)
+
+	// GET /admin/api/resources/:slug - List
+	r.GET(resPath, func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		search := ctx.Query("search")
+		sortCol := ctx.Query("sort")
+		sortDir := ctx.DefaultQuery("direction", "asc")
+		page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+		perPage, _ := strconv.Atoi(ctx.DefaultQuery("perPage", "15"))
+
+		filters := make(map[string]string)
+		for k, v := range ctx.Request.URL.Query() {
+			if strings.HasPrefix(k, "filter_") && len(v) > 0 {
+				filters[strings.TrimPrefix(k, "filter_")] = v[0]
+			}
+		}
+
+		// Generic handler invoker
+		if invoker, ok := res.(interface {
+			InvokeList(ctx *Context, search, sortCol, sortDir string, page, perPage int, filters map[string]string) (any, int, error)
+		}); ok {
+			records, total, err := invoker.InvokeList(ctx, search, sortCol, sortDir, page, perPage, filters)
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"data":     records,
+				"total":    total,
+				"page":     page,
+				"per_page": perPage,
+			})
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"data":     []any{},
+			"total":    0,
+			"page":     page,
+			"per_page": perPage,
+		})
+	})
+
+	// GET /admin/api/resources/:slug/:id - Find
+	r.GET(resPath+"/:id", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		id := c.Param("id")
+
+		if invoker, ok := res.(interface {
+			InvokeFind(ctx *Context, id string) (any, error)
+		}); ok {
+			record, err := invoker.InvokeFind(ctx, id)
+			if err != nil {
+				return c.JSON(http.StatusNotFound, map[string]string{"error": "Record not found"})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"data": record,
+			})
+		}
+
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Record not found"})
+	})
+
+	// POST /admin/api/resources/:slug - Create
+	r.POST(resPath, func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		data := parseRequestData(c)
+
+		if invoker, ok := res.(interface {
+			InvokeCreate(ctx *Context, data map[string]any) error
+		}); ok {
+			if err := invoker.InvokeCreate(ctx, data); err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusCreated, map[string]any{
+				"success": true,
+				"message": "Record created successfully",
+			})
+		}
+
+		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Create not implemented"})
+	})
+
+	// PUT /admin/api/resources/:slug/:id - Update
+	updateHandler := func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		id := c.Param("id")
+		data := parseRequestData(c)
+
+		if invoker, ok := res.(interface {
+			InvokeUpdate(ctx *Context, id string, data map[string]any) error
+		}); ok {
+			if err := invoker.InvokeUpdate(ctx, id, data); err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"success": true,
+				"message": "Record updated successfully",
+			})
+		}
+
+		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Update not implemented"})
+	}
+	r.PUT(resPath+"/:id", updateHandler)
+	r.POST(resPath+"/:id", updateHandler)
+
+	// DELETE /admin/api/resources/:slug/:id - Delete
+	deleteHandler := func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		id := c.Param("id")
+
+		if invoker, ok := res.(interface {
+			InvokeDelete(ctx *Context, id string) error
+		}); ok {
+			if err := invoker.InvokeDelete(ctx, id); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"success": true,
+				"message": "Record deleted successfully",
+			})
+		}
+
+		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Delete not implemented"})
+	}
+	r.DELETE(resPath+"/:id", deleteHandler)
+	r.POST(resPath+"/:id/delete", deleteHandler)
+
+	// POST /admin/api/resources/:slug/bulk - Bulk Action
+	r.POST(resPath+"/bulk", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		data := parseRequestData(c)
+		action := fmt.Sprintf("%v", data["bulk_action"])
+
+		var ids []string
+		if rawIDs, ok := data["selected_ids[]"]; ok {
+			if slice, ok := rawIDs.([]string); ok {
+				ids = slice
+			} else if sliceAny, ok := rawIDs.([]any); ok {
+				for _, it := range sliceAny {
+					ids = append(ids, fmt.Sprintf("%v", it))
+				}
+			}
+		}
+
+		if action == "delete_bulk" && len(ids) > 0 {
+			if invoker, ok := res.(interface {
+				InvokeDeleteBulk(ctx *Context, ids []string) error
+			}); ok {
+				if err := invoker.InvokeDeleteBulk(ctx, ids); err != nil {
+					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				}
+				return c.JSON(http.StatusOK, map[string]any{
+					"success": true,
+					"message": fmt.Sprintf("%d records deleted successfully", len(ids)),
+				})
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"success": true,
+		})
+	})
+}
+
+func parseRequestData(c *gcontext.Context) map[string]any {
+	data := make(map[string]any)
+	if strings.Contains(c.Header("Content-Type"), "application/json") && c.Request.Body != nil {
+		_ = json.NewDecoder(c.Request.Body).Decode(&data)
+		return data
+	}
+	_ = c.Request.ParseForm()
+	for k, v := range c.Request.PostForm {
+		if len(v) == 1 {
+			data[k] = v[0]
+		} else {
+			data[k] = v
+		}
+	}
+	return data
+}

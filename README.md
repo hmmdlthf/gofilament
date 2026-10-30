@@ -292,6 +292,52 @@ taskResource.AuthorizeWithGate("tasks")
 
 ---
 
+## 📱 Flutter Multiplatform & Mobile-First Admin Engine
+
+GoFilament introduces **multi-engine admin panel support**. In addition to the default Templ SSR web engine, you can run your admin panel with **Flutter Multiplatform** (`filament.EngineFlutter`), turning your admin panel into a **native, responsive, mobile-first experience** across iOS, Android, macOS, Windows, Linux, and compiled Web SPA:
+
+```go
+panel := filament.NewPanel("admin").
+    Path("/admin").
+    BrandName("TechMart Operations").
+    Flutter(). // Automatically enables Flutter engine & mounts client/build/web
+    Resource(productResource)
+```
+
+### 📱 Mobile-First Features:
+- **One-Thumb Navigation**: Bottom `NavigationBar` for natural mobile interaction without stretching across large phone screens.
+- **Pull-to-Refresh**: Native `RefreshIndicator` on all resource listings for seamless pull-to-refresh data updates.
+- **Floating Action Button (FAB)**: Quick one-tap record creation docked at the bottom right.
+- **Bottom-Sheet Forms**: Record creation and editing occur inside mobile-optimized bottom sheets (`showModalBottomSheet`) rather than cumbersome desktop modals.
+- **Swipe-to-Delete**: Dismissible swipe gestures (`Dismissible`) with confirmation feedback.
+
+### 🖥️ Responsive Desktop & Tablet Adaptation:
+- **Adaptive Breakpoints**: Screen widths > 768px seamlessly switch from the bottom nav bar to an expandable `NavigationRail` sidebar.
+- **Split-Pane & Data Grid**: Displays dense tables with column sorting and split-view master-detail inspection on tablets and desktops.
+
+### ⚡ Scaffolding a Flutter Admin:
+```bash
+# 1. Create a Flutter-enabled panel provider
+php artisan make:filament-panel MobileStore --engine=flutter
+
+# 2. Generate the responsive Flutter admin client
+php artisan make:filament-flutter MobileStore --dir=client
+
+# 3. Run natively or compile for web
+cd client && flutter run         # iOS, Android, Desktop
+cd client && flutter build web   # Compiles to Web SPA served by GoLaravel
+```
+
+### 🔌 Standardized Panel REST API:
+The Flutter client connects to GoFilament's standardized JSON REST API:
+- `GET /admin/api/schema`: Panel metadata, registered resources, fields, and navigation groups.
+- `GET /admin/api/resources/:slug`: Paginated, searchable, sortable list endpoints.
+- `GET/POST/PUT/DELETE /admin/api/resources/:slug/:id`: Full CRUD with Shield policy authorization.
+- `GET /admin/api/tenants` & `POST /admin/api/tenants/switch`: Active tenant management.
+- `GET /admin/api/widgets`: Real-time KPI stats overview and sparklines.
+
+---
+
 ## 💻 Artisan CLI Generators
 
 Integrated directly with GoLaravel's Artisan CLI:
