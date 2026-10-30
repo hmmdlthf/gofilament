@@ -1,0 +1,55 @@
+package views
+
+import "fmt"
+
+templ Shell(title, brandName, basePath, maxWidth string, sidebar, topbar, content templ.Component) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } - { brandName }</title>
+			<link rel="stylesheet" href={ fmt.Sprintf("%s/assets/filament.css", basePath) }/>
+			<script src={ fmt.Sprintf("%s/assets/filament.js", basePath) }></script>
+		</head>
+		<body class="filament-body">
+			<div class="filament-shell">
+				if sidebar != nil {
+					@sidebar
+				}
+				<div class="filament-main">
+					if topbar != nil {
+						@topbar
+					}
+					<main class={ fmt.Sprintf("filament-content %s", maxWidth) }>
+						@content
+					</main>
+				</div>
+			</div>
+			<div id="filament-notifications" class="notifications-container"></div>
+		</body>
+	</html>
+}
+
+templ Topbar(brandName, basePath string) {
+	<header class="filament-topbar">
+		<div style="display: flex; align-items: center; gap: 1rem;">
+			<button class="btn btn-secondary btn-sm" onclick="Filament.theme.toggle()" title="Toggle Dark/Light Mode">🌓</button>
+		</div>
+		<div style="display: flex; align-items: center; gap: 1rem;">
+			<div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 500;">
+				<span>Administrator</span>
+			</div>
+		</div>
+	</header>
+}
+
+templ StatWidget(label, value, description, color string) {
+	<div class="stat-card filament-card">
+		<span style="font-size: 0.875rem; font-weight: 500; color: var(--gray-500);">{ label }</span>
+		<div class="stat-value" style="margin-top: 0.25rem;">{ value }</div>
+		if description != "" {
+			<div style="margin-top: 0.5rem; font-size: 0.8125rem;" class={ fmt.Sprintf("text-%s", color) }>{ description }</div>
+		}
+	</div>
+}

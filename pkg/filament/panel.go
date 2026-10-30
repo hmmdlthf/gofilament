@@ -1,0 +1,539 @@
+package filament
+
+import (
+	"fmt"
+	"net/http"
+	"sort"
+	"strings"
+
+	"github.com/golaravel/gofilament/pkg/assets"
+	gcontext "github.com/golaravel/golaravel/pkg/context"
+	"github.com/golaravel/golaravel/pkg/golaravel"
+	"github.com/golaravel/golaravel/pkg/router"
+)
+
+type ContentWidth string
+
+const (
+	WidthFull ContentWidth = "max-w-full"
+	Width7xl  ContentWidth = "max-w-7xl"
+	Width6xl  ContentWidth = "max-w-6xl"
+)
+
+// NavigationGroup aggregates items under a named section in the sidebar.
+type NavigationGroup struct {
+	Name  string
+	Items []*NavigationItem
+}
+
+// Panel represents an isolated administrative portal.
+type Panel struct {
+	id                  string
+	path                string
+	brandName           string
+	brandLogo           string
+	favicon             string
+	homeURL             string
+	colors              ColorPalette
+	darkMode            bool
+	sidebarCollapsible  bool
+	topNavigation       bool
+	maxContentWidth     ContentWidth
+	navigationGroups    []string
+	userMenu            *UserMenu
+	hasNotifications    bool
+	hasGlobalSearch     bool
+	hasTenantScoping    bool
+	hasLogin            bool
+	hasRegistration     bool
+	hasPasswordReset    bool
+	hasProfile          bool
+	authGuard           any
+	resources           []ResourceInterface
+	pages               []PageInterface
+	widgets             []WidgetInterface
+	dashboardRenderFunc func(ctx *Context) error
+}
+
+// NewPanel creates a new Panel with sensible defaults.
+func NewPanel(id string) *Panel {
+	p := &Panel{
+		id:                  id,
+		path:                "/" + strings.Trim(id, "/"),
+		brandName:           "GoFilament",
+		homeURL:             "/" + strings.Trim(id, "/"),
+		colors:              DefaultColorPalette(),
+		darkMode:            true,
+		sidebarCollapsible:  true,
+		maxContentWidth:     Width7xl,
+		navigationGroups:    make([]string, 0),
+		userMenu:            NewUserMenu(),
+		resources:           make([]ResourceInterface, 0),
+		pages:               make([]PageInterface, 0),
+		widgets:             make([]WidgetInterface, 0),
+	}
+
+	// Default user menu
+	p.userMenu.Item("Profile", p.path+"/profile").Icon("heroicon-user")
+	p.userMenu.Item("Sign Out", p.path+"/logout").Icon("heroicon-arrow-left-on-rectangle").Color("danger")
+
+	return p
+}
+
+// ID returns the unique identifier of the panel.
+func (p *Panel) ID() string {
+	return p.id
+}
+
+// GetPath returns the root URL path for this panel.
+func (p *Panel) GetPath() string {
+	return p.path
+}
+
+// Path sets the root URL path prefix.
+func (p *Panel) Path(path string) *Panel {
+	p.path = "/" + strings.Trim(path, "/")
+	if p.homeURL == "" || p.homeURL == "/admin" {
+		p.homeURL = p.path
+	}
+	return p
+}
+
+// BrandName sets the text branding displayed in the topbar and sidebar.
+func (p *Panel) BrandName(name string) *Panel {
+	p.brandName = name
+	return p
+}
+
+// GetBrandName returns the panel brand name.
+func (p *Panel) GetBrandName() string {
+	return p.brandName
+}
+
+// BrandLogo sets an image URL for the brand logo.
+func (p *Panel) BrandLogo(logo string) *Panel {
+	p.brandLogo = logo
+	return p
+}
+
+// Favicon sets the panel favicon icon path.
+func (p *Panel) Favicon(fav string) *Panel {
+	p.favicon = fav
+	return p
+}
+
+// HomeURL sets the redirect URL when clicking the brand logo or home icon.
+func (p *Panel) HomeURL(url string) *Panel {
+	p.homeURL = url
+	return p
+}
+
+// GetHomeURL returns the configured home URL.
+func (p *Panel) GetHomeURL() string {
+	return p.homeURL
+}
+
+// Colors overrides the default color palette.
+func (p *Panel) Colors(palette ColorPalette) *Panel {
+	p.colors = palette
+	return p
+}
+
+// DarkMode toggles dark mode availability.
+func (p *Panel) DarkMode(enabled bool) *Panel {
+	p.darkMode = enabled
+	return p
+}
+
+// IsDarkMode returns whether dark mode is supported.
+func (p *Panel) IsDarkMode() bool {
+	return p.darkMode
+}
+
+// SidebarCollapsibleOnDesktop configures if desktop sidebar can collapse to mini icon mode.
+func (p *Panel) SidebarCollapsibleOnDesktop(enabled ...bool) *Panel {
+	if len(enabled) > 0 {
+		p.sidebarCollapsible = enabled[0]
+	} else {
+		p.sidebarCollapsible = true
+	}
+	return p
+}
+
+// TopNavigation switches sidebar navigation to topbar navigation mode.
+func (p *Panel) TopNavigation(enabled ...bool) *Panel {
+	if len(enabled) > 0 {
+		p.topNavigation = enabled[0]
+	} else {
+		p.topNavigation = true
+	}
+	return p
+}
+
+// MaxContentWidth sets max container width class.
+func (p *Panel) MaxContentWidth(w ContentWidth) *Panel {
+	p.maxContentWidth = w
+	return p
+}
+
+// NavigationGroups defines the preferred group ordering in the navigation sidebar.
+func (p *Panel) NavigationGroups(groups []string) *Panel {
+	p.navigationGroups = groups
+	return p
+}
+
+// UserMenu customizes the profile dropdown items.
+func (p *Panel) UserMenu(fn func(m *UserMenu)) *Panel {
+	fn(p.userMenu)
+	return p
+}
+
+// GetUserMenu returns the user menu.
+func (p *Panel) GetUserMenu() *UserMenu {
+	return p.userMenu
+}
+
+// DatabaseNotifications enables database notification bell & drawer.
+func (p *Panel) DatabaseNotifications(enabled ...bool) *Panel {
+	if len(enabled) > 0 {
+		p.hasNotifications = enabled[0]
+	} else {
+		p.hasNotifications = true
+	}
+	return p
+}
+
+// GlobalSearch enables cross-resource debounced search in the topbar.
+func (p *Panel) GlobalSearch(enabled ...bool) *Panel {
+	if len(enabled) > 0 {
+		p.hasGlobalSearch = enabled[0]
+	} else {
+		p.hasGlobalSearch = true
+	}
+	return p
+}
+
+// TenantScoping enables multi-tenant scoping.
+func (p *Panel) TenantScoping(enabled ...bool) *Panel {
+	if len(enabled) > 0 {
+		p.hasTenantScoping = enabled[0]
+	} else {
+		p.hasTenantScoping = true
+	}
+	return p
+}
+
+// AuthGuard specifies an authentication guard.
+func (p *Panel) AuthGuard(guard any) *Panel {
+	p.authGuard = guard
+	return p
+}
+
+// Login enables default login screen.
+func (p *Panel) Login(enabled ...bool) *Panel {
+	p.hasLogin = len(enabled) == 0 || enabled[0]
+	return p
+}
+
+// Registration enables self-registration screen.
+func (p *Panel) Registration(enabled ...bool) *Panel {
+	p.hasRegistration = len(enabled) == 0 || enabled[0]
+	return p
+}
+
+// PasswordReset enables forgot/reset password screen.
+func (p *Panel) PasswordReset(enabled ...bool) *Panel {
+	p.hasPasswordReset = len(enabled) == 0 || enabled[0]
+	return p
+}
+
+// Profile enables self-service user profile screen.
+func (p *Panel) Profile(enabled ...bool) *Panel {
+	p.hasProfile = len(enabled) == 0 || enabled[0]
+	return p
+}
+
+// Resource registers a single CRUD resource.
+func (p *Panel) Resource(r ResourceInterface) *Panel {
+	p.resources = append(p.resources, r)
+	return p
+}
+
+// Resources registers multiple CRUD resources.
+func (p *Panel) Resources(rs ...ResourceInterface) *Panel {
+	p.resources = append(p.resources, rs...)
+	return p
+}
+
+// Page registers a custom panel page.
+func (p *Panel) Page(page PageInterface) *Panel {
+	p.pages = append(p.pages, page)
+	return p
+}
+
+// Pages registers multiple custom panel pages.
+func (p *Panel) Pages(pages ...PageInterface) *Panel {
+	p.pages = append(p.pages, pages...)
+	return p
+}
+
+// Widget registers a dashboard widget.
+func (p *Panel) Widget(w WidgetInterface) *Panel {
+	p.widgets = append(p.widgets, w)
+	return p
+}
+
+// Widgets registers multiple dashboard widgets.
+func (p *Panel) Widgets(ws ...WidgetInterface) *Panel {
+	p.widgets = append(p.widgets, ws...)
+	return p
+}
+
+// GetWidgets returns all registered dashboard widgets.
+func (p *Panel) GetWidgets() []WidgetInterface {
+	return p.widgets
+}
+
+// CustomDashboard sets a custom dashboard rendering function.
+func (p *Panel) CustomDashboard(fn func(ctx *Context) error) *Panel {
+	p.dashboardRenderFunc = fn
+	return p
+}
+
+// BuildNavigation constructs the grouped navigation structure for this panel.
+func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
+	var allItems []*NavigationItem
+
+	// 1. Dashboard item
+	currentPath := ctx.Request.URL.Path
+	allItems = append(allItems, &NavigationItem{
+		Label:  "Dashboard",
+		URL:    p.path,
+		Icon:   "heroicon-home",
+		Sort:   -100,
+		Active: currentPath == p.path || currentPath == p.path+"/",
+	})
+
+	// 2. Resource items
+	for _, res := range p.resources {
+		item := res.NavigationItem(ctx)
+		if item != nil {
+			if item.Visible == nil || item.Visible(ctx) {
+				if item.URL == "" {
+					item.URL = fmt.Sprintf("%s/%s", p.path, res.Slug())
+				}
+				item.Active = strings.HasPrefix(currentPath, item.URL)
+				allItems = append(allItems, item)
+			}
+		}
+	}
+
+	// 3. Custom page items
+	for _, pg := range p.pages {
+		item := pg.NavigationItem(ctx)
+		if item != nil {
+			if item.Visible == nil || item.Visible(ctx) {
+				if item.URL == "" {
+					item.URL = fmt.Sprintf("%s/%s", p.path, pg.Slug())
+				}
+				item.Active = strings.HasPrefix(currentPath, item.URL)
+				allItems = append(allItems, item)
+			}
+		}
+	}
+
+	// Group items
+	groupMap := make(map[string][]*NavigationItem)
+	for _, item := range allItems {
+		groupName := item.Group
+		groupMap[groupName] = append(groupMap[groupName], item)
+	}
+
+	// Sort items in each group by Sort
+	for _, items := range groupMap {
+		sort.SliceStable(items, func(i, j int) bool {
+			return items[i].Sort < items[j].Sort
+		})
+	}
+
+	var result []NavigationGroup
+	// Add configured groups first in order
+	usedGroups := make(map[string]bool)
+
+	// Ungrouped items first (or dashboard)
+	if items, ok := groupMap[""]; ok {
+		result = append(result, NavigationGroup{Name: "", Items: items})
+		usedGroups[""] = true
+	}
+
+	for _, g := range p.navigationGroups {
+		if items, ok := groupMap[g]; ok {
+			result = append(result, NavigationGroup{Name: g, Items: items})
+			usedGroups[g] = true
+		}
+	}
+
+	// Remaining groups
+	for g, items := range groupMap {
+		if !usedGroups[g] {
+			result = append(result, NavigationGroup{Name: g, Items: items})
+		}
+	}
+
+	return result
+}
+
+// Mount attaches all routes for this panel into the given GoLaravel router.
+func (p *Panel) Mount(r *router.Router) {
+	// 1. Static Assets
+	assets.RegisterRoutes(r, p.path+"/assets")
+
+	// 2. Dashboard Route
+	r.GET(p.path, func(c *gcontext.Context) error {
+		ctx := NewContext(c, p)
+		if p.dashboardRenderFunc != nil {
+			return p.dashboardRenderFunc(ctx)
+		}
+		return p.renderDefaultDashboard(ctx)
+	})
+
+	// Also support trailing slash
+	r.GET(p.path+"/", func(c *gcontext.Context) error {
+		return c.Redirect(http.StatusMovedPermanently, p.path)
+	})
+
+	// 3. Register Resources
+	for _, res := range p.resources {
+		res.RegisterRoutes(p, r)
+	}
+
+	// 4. Register Pages
+	for _, pg := range p.pages {
+		pg.RegisterRoutes(p, r)
+	}
+}
+
+// Register mounts the panel onto a GoLaravel Engine.
+func (p *Panel) Register(app *golaravel.Engine) error {
+	p.Mount(app.Router)
+	return nil
+}
+
+// Default Dashboard fallback
+func (p *Panel) renderDefaultDashboard(ctx *Context) error {
+	title := "Dashboard"
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>%s - %s</title>
+  <link rel="stylesheet" href="%s/assets/filament.css">
+  <script src="%s/assets/filament.js"></script>
+</head>
+<body class="filament-body">
+  <div class="filament-shell">
+    %s
+    <div class="filament-main">
+      %s
+      <main class="filament-content %s">
+        <div class="filament-header">
+          <div>
+            <h1 class="filament-title">%s</h1>
+            <p class="filament-description">Welcome to your %s administration workspace.</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="stat-card filament-card">
+            <span class="text-sm font-medium text-gray-500">System Status</span>
+            <span class="stat-value text-emerald-600 mt-2">Operational</span>
+            <span class="text-xs text-gray-400 mt-1">GoLaravel Kernel Active</span>
+          </div>
+          <div class="stat-card filament-card">
+            <span class="text-sm font-medium text-gray-500">Active Resources</span>
+            <span class="stat-value mt-2">%d</span>
+            <span class="text-xs text-gray-400 mt-1">Configured Ent entities</span>
+          </div>
+          <div class="stat-card filament-card">
+            <span class="text-sm font-medium text-gray-500">Panel Architecture</span>
+            <span class="stat-value mt-2">Compiled SSR</span>
+            <span class="text-xs text-gray-400 mt-1">Zero-allocation Radix Router</span>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>`,
+		title, p.brandName,
+		p.path, p.path,
+		p.renderSidebarHTML(ctx),
+		p.renderTopbarHTML(ctx),
+		p.maxContentWidth,
+		title, p.brandName,
+		len(p.resources),
+	)
+	return ctx.HTML(http.StatusOK, html)
+}
+
+// GetMaxContentWidth returns the max width CSS class.
+func (p *Panel) GetMaxContentWidth() string {
+	return string(p.maxContentWidth)
+}
+
+func (p *Panel) RenderSidebar(ctx *Context) string {
+	return p.renderSidebarHTML(ctx)
+}
+
+func (p *Panel) RenderTopbar(ctx *Context) string {
+	return p.renderTopbarHTML(ctx)
+}
+
+func (p *Panel) renderSidebarHTML(ctx *Context) string {
+	var sb strings.Builder
+	sb.WriteString(`<aside class="filament-sidebar">`)
+	sb.WriteString(fmt.Sprintf(`<div style="padding: 1.25rem 1.5rem; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid var(--gray-200);">
+		<span style="font-weight: 700; font-size: 1.125rem; color: var(--primary-600);">%s</span>
+	</div>`, p.brandName))
+	sb.WriteString(`<nav style="padding: 1rem 0; flex: 1; overflow-y: auto;">`)
+
+	groups := p.BuildNavigation(ctx)
+	for _, g := range groups {
+		if g.Name != "" {
+			sb.WriteString(fmt.Sprintf(`<div class="nav-group-title">%s</div>`, g.Name))
+		}
+		for _, item := range g.Items {
+			activeClass := ""
+			if item.Active {
+				activeClass = "active"
+			}
+			badgeHTML := ""
+			if item.Badge != "" {
+				badgeHTML = fmt.Sprintf(`<span class="nav-badge">%s</span>`, item.Badge)
+			}
+			sb.WriteString(fmt.Sprintf(`<a href="%s" class="nav-link %s"><span>%s</span>%s</a>`,
+				item.URL, activeClass, item.Label, badgeHTML))
+		}
+	}
+
+	sb.WriteString(`</nav></aside>`)
+	return sb.String()
+}
+
+func (p *Panel) renderTopbarHTML(ctx *Context) string {
+	var sb strings.Builder
+	sb.WriteString(`<header class="filament-topbar">`)
+	sb.WriteString(`<div style="display: flex; align-items: center; gap: 1rem;">`)
+	sb.WriteString(`<button class="btn btn-secondary btn-sm" onclick="Filament.theme.toggle()">🌓</button>`)
+	sb.WriteString(`</div>`)
+
+	sb.WriteString(`<div style="display: flex; align-items: center; gap: 1rem;">`)
+	// User menu
+	sb.WriteString(`<div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 500;">`)
+	sb.WriteString(`<span>Administrator</span>`)
+	sb.WriteString(`</div>`)
+	sb.WriteString(`</div>`)
+
+	sb.WriteString(`</header>`)
+	return sb.String()
+}
