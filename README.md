@@ -166,6 +166,14 @@ func NewUserResource() *UserResource {
 }
 ```
 
+```go
+    // In your resource constructor:
+    userResource := resources.NewUserResource()
+
+    // Bind directly to your Ent client with zero boilerplate!
+    entdriver.BindClient(userResource, client.User)
+```
+
 ---
 
 ## 🎨 Form Builder Components

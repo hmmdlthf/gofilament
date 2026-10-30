@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.2.0] - 2026-10-31
+
+### Added
+- **Zero-Boilerplate Ent Driver Adapter (`pkg/entdriver`)**:
+  - `entdriver.BindClient(resource, client.User)` or `gofilament.BindEntClient(resource, client.User)`.
+  - Automatic query pagination (`Count`, `Limit`, `Offset`, `All`) on any Ent query builder.
+  - Automatic `Create` and `Update` form data reflection mapper supporting typed setters (`SetName`, `SetEmail`, etc.).
+  - Automatic string ID type conversion to model primary key type (`int`, `int64`, `string`, `uuid.UUID`).
+  - Automatic `DeleteOneID(id)` and bulk delete execution.
+
+---
+
 ## [v1.1.0] - 2026-10-31
 
 ### Added

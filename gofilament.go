@@ -3,11 +3,12 @@
 package gofilament
 
 import (
+	"github.com/golaravel/gofilament/pkg/entdriver"
 	"github.com/golaravel/gofilament/pkg/filament"
 )
 
 // Version is the current GoFilament release version.
-const Version = "v1.1.0"
+const Version = "v1.2.0"
 
 // NewPanel creates a new admin panel instance.
 func NewPanel(id string) *filament.Panel {
@@ -17,4 +18,9 @@ func NewPanel(id string) *filament.Panel {
 // NewResource creates a new typed CRUD resource specification.
 func NewResource[T any](slug string) *filament.BaseResource[T] {
 	return filament.NewResource[T](slug)
+}
+
+// BindEntClient binds an Ent entity client (e.g. client.User, client.Invoice) to a resource with zero boilerplate.
+func BindEntClient[T any](res *filament.BaseResource[T], client any) *filament.BaseResource[T] {
+	return entdriver.BindClient(res, client)
 }

@@ -269,6 +269,30 @@ func (r *BaseResource[T]) OnDeleteBulk(fn DeleteBulkHandlerFunc) *BaseResource[T
 	return r
 }
 
+func (r *BaseResource[T]) GetOnList() ListHandlerFunc[T] {
+	return r.onList
+}
+
+func (r *BaseResource[T]) GetOnFind() FindHandlerFunc[T] {
+	return r.onFind
+}
+
+func (r *BaseResource[T]) GetOnCreate() CreateHandlerFunc {
+	return r.onCreate
+}
+
+func (r *BaseResource[T]) GetOnUpdate() UpdateHandlerFunc {
+	return r.onUpdate
+}
+
+func (r *BaseResource[T]) GetOnDelete() DeleteHandlerFunc {
+	return r.onDelete
+}
+
+func (r *BaseResource[T]) GetOnDeleteBulk() DeleteBulkHandlerFunc {
+	return r.onDeleteBulk
+}
+
 func (r *BaseResource[T]) NavigationItem(ctx *Context) *NavigationItem {
 	badge := ""
 	if r.navBadge != nil {
