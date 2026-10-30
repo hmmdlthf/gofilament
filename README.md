@@ -259,6 +259,39 @@ panel := filament.NewPanel("admin").
 
 ---
 
+## 🛡️ Filament Shield & Policy Access Control
+
+GoFilament provides role-based and policy-based access control at the panel, resource, and row levels:
+
+```go
+// 1. Guard the entire panel with roles or abilities
+adminPanel.CanAccess(filament.Role("admin", "super-admin"))
+
+// 2. Define a typed Ent resource policy
+type InvoicePolicy struct {
+    filament.BasePolicy[Invoice]
+}
+
+func (p InvoicePolicy) Create(ctx *filament.Context) bool {
+    return ctx.User() != nil && ctx.User().HasPermission("invoices.create")
+}
+
+func (p InvoicePolicy) Delete(ctx *filament.Context, record Invoice) bool {
+    return record.Status != "paid" // Cannot delete paid invoices
+}
+
+// 3. Attach policy or GoLaravel Gate to resource
+invoiceResource.Policy(&InvoicePolicy{})
+// Or bind directly to GoLaravel's auth.Gate conventions
+taskResource.AuthorizeWithGate("tasks")
+```
+
+- **Panel Guarding**: Unauthorized requests return 403 Forbidden or redirect to `/admin/login`.
+- **Automatic UI Pruning**: Unauthorized resources disappear from sidebar navigation; prohibited create/edit/delete buttons are removed from tables and infolists automatically.
+- **Row-Level Action Visibility**: `tables.Action.Visible(func(record T) bool)` conditionally toggles table action buttons per record.
+
+---
+
 ## 💻 Artisan CLI Generators
 
 Integrated directly with GoLaravel's Artisan CLI:

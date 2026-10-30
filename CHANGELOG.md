@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.4.0] - 2026-10-31
+
+### Added
+- **Filament Shield & Policy-Based Access Control (`pkg/filament/shield.go`)**:
+  - `ShieldUser` interface with `HasRole` and `HasPermission` methods.
+  - `SimpleShieldUser` standard model with multi-role hierarchy (`super-admin` > `admin` > user roles).
+  - `Policy[T]` interface and `BasePolicy[T]` default allow-all implementation for complete CRUD control (`ViewAny`, `View`, `Create`, `Update`, `Delete`, `DeleteAny`).
+  - `filament.Role(roles...)`, `filament.Permission(perm)`, and `filament.Gate(ability, args...)` authorization predicates.
+  - **Panel-Level Authorization**:
+    - `panel.CanAccess(func(ctx *filament.Context) bool)` guarding dashboard, global search, resources, and custom pages.
+    - Automatic redirection to `/admin/login` for unauthenticated requests, and `403 Forbidden` for unauthorized users.
+  - **Resource-Level Granular Guards**:
+    - `CanViewAny`: Hides resource from sidebar navigation and blocks `/admin/{resource}` with 403.
+    - `CanCreate`: Omit "New [Model]" button from table header actions and blocks `GET/POST /admin/{resource}/create` with 403.
+    - `CanView`: Gates `GET /admin/{resource}/:id`.
+    - `CanEdit`: Omit edit buttons from infolists and blocks `GET/POST /admin/{resource}/:id/edit` with 403.
+    - `CanDelete`: Omit delete button from edit views and blocks `GET/POST /admin/{resource}/:id/delete` with 403.
+    - `CanDeleteAny`: Blocks bulk delete action on `POST /admin/{resource}/bulk` with 403.
+  - **GoLaravel Global Gate Integration**:
+    - `res.AuthorizeWithGate("prefix")` automatically wiring GoLaravel's `auth.Gate` (`viewAny_{name}`, `create_{name}`, `update_{name}`, etc.).
+  - **Row-Level Action Visibility**:
+    - `tableAction.Visible(func(record T) bool)` conditionally displaying actions (e.g. Refund, Approve) on specific table rows.
+
+---
+
 ## [v1.3.0] - 2026-10-31
 
 ### Added

@@ -14,6 +14,7 @@ type TableAction[T any] struct {
 	requiresConfirmation bool
 	modalHeading         string
 	modalDescription     string
+	visibleFunc          func(record T) bool
 	urlFunc              func(record T) string
 	handler              func(record T) error
 }
@@ -84,6 +85,18 @@ func (a *TableAction[T]) URL(fn func(record T) string) *TableAction[T] {
 func (a *TableAction[T]) Action(fn func(record T) error) *TableAction[T] {
 	a.handler = fn
 	return a
+}
+
+func (a *TableAction[T]) Visible(fn func(record T) bool) *TableAction[T] {
+	a.visibleFunc = fn
+	return a
+}
+
+func (a *TableAction[T]) IsVisible(record T) bool {
+	if a.visibleFunc == nil {
+		return true
+	}
+	return a.visibleFunc(record)
 }
 
 func (a *TableAction[T]) Render(record T, recordID string, basePath string) string {

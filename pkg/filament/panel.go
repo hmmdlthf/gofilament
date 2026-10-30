@@ -50,6 +50,8 @@ type Panel struct {
 	hasPasswordReset    bool
 	hasProfile          bool
 	authGuard           any
+	canAccess           func(ctx *Context) bool
+	middlewares         []gcontext.HandlerFunc
 	resources           []ResourceInterface
 	pages               []PageInterface
 	widgets             []WidgetInterface
@@ -230,6 +232,30 @@ func (p *Panel) AuthGuard(guard any) *Panel {
 	return p
 }
 
+// CanAccess configures an authorization guard for the entire panel.
+func (p *Panel) CanAccess(fn func(ctx *Context) bool) *Panel {
+	p.canAccess = fn
+	return p
+}
+
+// Middleware appends router middleware to all non-asset routes on this panel.
+func (p *Panel) Middleware(mw ...gcontext.HandlerFunc) *Panel {
+	p.middlewares = append(p.middlewares, mw...)
+	return p
+}
+
+// AuthorizeAccess verifies panel authorization for the incoming request context.
+func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
+	ctx := NewContext(c, p)
+	if p.canAccess != nil && !p.canAccess(ctx) {
+		if p.hasLogin && ctx.User() == nil {
+			return ctx, c.Redirect(http.StatusSeeOther, p.path+"/login")
+		}
+		return ctx, c.String(http.StatusForbidden, "403 Forbidden: Panel access denied")
+	}
+	return ctx, nil
+}
+
 // Login enables default login screen.
 func (p *Panel) Login(enabled ...bool) *Panel {
 	p.hasLogin = len(enabled) == 0 || enabled[0]
@@ -401,7 +427,10 @@ func (p *Panel) Mount(r *router.Router) {
 	// Global Search Route
 	if p.hasGlobalSearch {
 		r.GET(p.path+"/global-search", func(c *gcontext.Context) error {
-			ctx := NewContext(c, p)
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
 			query := ctx.Query("query")
 			var allResults []GlobalSearchResult
 			if len(query) >= 2 {
@@ -438,7 +467,10 @@ func (p *Panel) Mount(r *router.Router) {
 	// 2. Tenant Switch Route
 	if p.tenantConfig != nil && p.tenantConfig.Enabled {
 		tenantSwitchHandler := func(c *gcontext.Context) error {
-			ctx := NewContext(c, p)
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
 			targetKey := ctx.Query("tenant")
 			if targetKey == "" {
 				targetKey = ctx.FormValue("tenant")
@@ -499,7 +531,10 @@ func (p *Panel) Mount(r *router.Router) {
 
 	// 4. Dashboard Route
 	r.GET(p.path, func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		if p.dashboardRenderFunc != nil {
 			return p.dashboardRenderFunc(ctx)
 		}

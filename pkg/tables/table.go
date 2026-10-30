@@ -260,7 +260,9 @@ func (t *Table[T]) Render(basePath string) string {
 			if len(t.actions) > 0 {
 				sb.WriteString(`<td style="text-align: right;"><div style="display: inline-flex; gap: 0.375rem;">`)
 				for _, act := range t.actions {
-					sb.WriteString(act.Render(rec, recID, basePath))
+					if act.IsVisible(rec) {
+						sb.WriteString(act.Render(rec, recID, basePath))
+					}
 				}
 				sb.WriteString(`</div></td>`)
 			}

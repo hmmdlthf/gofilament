@@ -10,6 +10,7 @@ import (
 	"github.com/golaravel/gofilament/pkg/forms"
 	"github.com/golaravel/gofilament/pkg/infolists"
 	"github.com/golaravel/gofilament/pkg/tables"
+	"github.com/golaravel/golaravel/pkg/auth"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/router"
 )
@@ -55,10 +56,12 @@ type BaseResource[T any] struct {
 	onDelete     DeleteHandlerFunc
 	onDeleteBulk DeleteBulkHandlerFunc
 	// Authorization
-	canViewAny func(ctx *Context) bool
-	canCreate  func(ctx *Context) bool
-	canEdit    func(ctx *Context, record T) bool
-	canDelete  func(ctx *Context, record T) bool
+	canViewAny   func(ctx *Context) bool
+	canView      func(ctx *Context, record T) bool
+	canCreate    func(ctx *Context) bool
+	canEdit      func(ctx *Context, record T) bool
+	canDelete    func(ctx *Context, record T) bool
+	canDeleteAny func(ctx *Context) bool
 
 	// Global Search
 	globallySearchable bool
@@ -146,6 +149,11 @@ func (r *BaseResource[T]) CanViewAny(fn func(ctx *Context) bool) *BaseResource[T
 	return r
 }
 
+func (r *BaseResource[T]) CanView(fn func(ctx *Context, record T) bool) *BaseResource[T] {
+	r.canView = fn
+	return r
+}
+
 func (r *BaseResource[T]) CanCreate(fn func(ctx *Context) bool) *BaseResource[T] {
 	r.canCreate = fn
 	return r
@@ -158,6 +166,59 @@ func (r *BaseResource[T]) CanEdit(fn func(ctx *Context, record T) bool) *BaseRes
 
 func (r *BaseResource[T]) CanDelete(fn func(ctx *Context, record T) bool) *BaseResource[T] {
 	r.canDelete = fn
+	return r
+}
+
+func (r *BaseResource[T]) CanDeleteAny(fn func(ctx *Context) bool) *BaseResource[T] {
+	r.canDeleteAny = fn
+	return r
+}
+
+// Policy attaches a comprehensive Policy[T] defining rules for all CRUD actions.
+func (r *BaseResource[T]) Policy(p Policy[T]) *BaseResource[T] {
+	if p == nil {
+		return r
+	}
+	r.canViewAny = func(ctx *Context) bool { return p.ViewAny(ctx) }
+	r.canView = func(ctx *Context, record T) bool { return p.View(ctx, record) }
+	r.canCreate = func(ctx *Context) bool { return p.Create(ctx) }
+	r.canEdit = func(ctx *Context, record T) bool { return p.Update(ctx, record) }
+	r.canDelete = func(ctx *Context, record T) bool { return p.Delete(ctx, record) }
+	r.canDeleteAny = func(ctx *Context) bool { return p.DeleteAny(ctx) }
+	return r
+}
+
+// AuthorizeWithGate binds authorization checks to GoLaravel's global auth.Gate naming conventions.
+// Convention: viewAny_{name}, view_{name}, create_{name}, update_{name}, delete_{name}, deleteAny_{name}.
+func (r *BaseResource[T]) AuthorizeWithGate(resourcePrefix ...string) *BaseResource[T] {
+	name := r.slug
+	if len(resourcePrefix) > 0 && resourcePrefix[0] != "" {
+		name = resourcePrefix[0]
+	}
+	r.canViewAny = func(ctx *Context) bool {
+		u := ctx.User()
+		return u != nil && auth.Allows("viewAny_"+name, u)
+	}
+	r.canView = func(ctx *Context, record T) bool {
+		u := ctx.User()
+		return u != nil && auth.Allows("view_"+name, u, record)
+	}
+	r.canCreate = func(ctx *Context) bool {
+		u := ctx.User()
+		return u != nil && auth.Allows("create_"+name, u)
+	}
+	r.canEdit = func(ctx *Context, record T) bool {
+		u := ctx.User()
+		return u != nil && auth.Allows("update_"+name, u, record)
+	}
+	r.canDelete = func(ctx *Context, record T) bool {
+		u := ctx.User()
+		return u != nil && auth.Allows("delete_"+name, u, record)
+	}
+	r.canDeleteAny = func(ctx *Context) bool {
+		u := ctx.User()
+		return u != nil && auth.Allows("deleteAny_"+name, u)
+	}
 	return r
 }
 
@@ -294,6 +355,9 @@ func (r *BaseResource[T]) GetOnDeleteBulk() DeleteBulkHandlerFunc {
 }
 
 func (r *BaseResource[T]) NavigationItem(ctx *Context) *NavigationItem {
+	if r.canViewAny != nil && !r.canViewAny(ctx) {
+		return nil
+	}
 	badge := ""
 	if r.navBadge != nil {
 		badge = r.navBadge(ctx)
@@ -313,54 +377,84 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 
 	// 1. List Records
 	router.GET(basePath, func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleList(ctx, basePath)
 	})
 
 	// 2. Static routes first (before wildcard :id)
 	router.GET(basePath+"/create", func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleCreateView(ctx, basePath)
 	})
 
 	router.POST(basePath+"/create", func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleStore(ctx, basePath)
 	})
 
 	router.POST(basePath+"/bulk", func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleBulk(ctx, basePath)
 	})
 
 	router.GET(basePath+"/export", func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleExportCSV(ctx)
 	})
 
 	router.POST(basePath+"/live", func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleLive(ctx)
 	})
 
 	// 3. Wildcard :id routes
 	router.GET(basePath+"/:id", func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleView(ctx, basePath, c.Param("id"))
 	})
 
 	router.GET(basePath+"/:id/edit", func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleEditView(ctx, basePath, c.Param("id"))
 	})
 
 	router.POST(basePath+"/:id/edit", func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleUpdate(ctx, basePath, c.Param("id"))
 	})
 
 	deleteHandler := func(c *gcontext.Context) error {
-		ctx := NewContext(c, p)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
 		return r.handleDelete(ctx, basePath, c.Param("id"))
 	}
 	router.GET(basePath+"/:id/delete", deleteHandler)
@@ -372,6 +466,10 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 // ----------------------------------------------------
 
 func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
+	if r.canViewAny != nil && !r.canViewAny(ctx) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+
 	tbl := tables.New[T]()
 	if r.tableBuilder != nil {
 		tbl = r.tableBuilder(tbl)
@@ -404,7 +502,9 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	}
 
 	tbl.SetData(records, total, page, perPage, search, sortCol, sortDir, filters)
-	tbl.HeaderActions(tables.Action[T]("create").Label(fmt.Sprintf("New %s", r.modelName)))
+	if r.canCreate == nil || r.canCreate(ctx) {
+		tbl.HeaderActions(tables.Action[T]("create").Label(fmt.Sprintf("New %s", r.modelName)))
+	}
 
 	content := fmt.Sprintf(`
 <div class="filament-header">
@@ -422,6 +522,10 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 }
 
 func (r *BaseResource[T]) handleCreateView(ctx *Context, basePath string) error {
+	if r.canCreate != nil && !r.canCreate(ctx) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+
 	form := forms.New()
 	if r.formBuilder != nil {
 		form = r.formBuilder(form)
@@ -452,6 +556,10 @@ func (r *BaseResource[T]) handleCreateView(ctx *Context, basePath string) error 
 }
 
 func (r *BaseResource[T]) handleStore(ctx *Context, basePath string) error {
+	if r.canCreate != nil && !r.canCreate(ctx) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+
 	_ = ctx.Request.ParseForm()
 	data := make(map[string]any)
 	for k, v := range ctx.Request.PostForm {
@@ -488,11 +596,20 @@ func (r *BaseResource[T]) handleView(ctx *Context, basePath, id string) error {
 		return ctx.String(http.StatusNotFound, "Record not found: %v", err)
 	}
 
+	if r.canView != nil && !r.canView(ctx, record) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+
 	infolist := infolists.New()
 	if r.infolistBuilder != nil {
 		infolist = r.infolistBuilder(infolist)
 	}
 	infolist.SetRecord(record)
+
+	editButton := ""
+	if r.canEdit == nil || r.canEdit(ctx, record) {
+		editButton = fmt.Sprintf(`<a href="%s/%s/edit" class="btn btn-primary">Edit</a>`, basePath, id)
+	}
 
 	content := fmt.Sprintf(`
 <div class="filament-header">
@@ -500,12 +617,12 @@ func (r *BaseResource[T]) handleView(ctx *Context, basePath, id string) error {
     <h1 class="filament-title">View %s #%s</h1>
   </div>
   <div style="display: flex; gap: 0.5rem;">
-    <a href="%s/%s/edit" class="btn btn-primary">Edit</a>
+    %s
     <a href="%s" class="btn btn-secondary">Back</a>
   </div>
 </div>
 %s`,
-		r.modelName, id, basePath, id, basePath, infolist.Render(),
+		r.modelName, id, editButton, basePath, infolist.Render(),
 	)
 
 	return r.renderPage(ctx, fmt.Sprintf("%s #%s", r.modelName, id), content)
@@ -521,6 +638,10 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 		return ctx.String(http.StatusNotFound, "Record not found")
 	}
 
+	if r.canEdit != nil && !r.canEdit(ctx, record) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+
 	form := forms.New()
 	if r.formBuilder != nil {
 		form = r.formBuilder(form)
@@ -531,6 +652,11 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 		form.Fill(m)
 	}
 
+	deleteButton := ""
+	if r.canDelete == nil || r.canDelete(ctx, record) {
+		deleteButton = fmt.Sprintf(`<a href="%s/%s/delete" class="btn btn-danger" onclick="return confirm('Delete this record?');">Delete</a>`, basePath, id)
+	}
+
 	content := fmt.Sprintf(`
 <div class="filament-header">
   <div>
@@ -538,7 +664,7 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
     <p class="filament-description">Modify record fields and save changes.</p>
   </div>
   <div style="display: flex; gap: 0.5rem;">
-    <a href="%s/%s/delete" class="btn btn-danger" onclick="return confirm('Delete this record?');">Delete</a>
+    %s
     <a href="%s" class="btn btn-secondary">Back</a>
   </div>
 </div>
@@ -549,7 +675,7 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
     <button type="submit" form="filament-form" class="btn btn-primary">Save Changes</button>
   </div>
 </div>`,
-		r.modelName, id, basePath, id, basePath,
+		r.modelName, id, deleteButton, basePath,
 		form.Render(ctx.GoContext()),
 		basePath,
 	)
@@ -558,6 +684,13 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 }
 
 func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error {
+	if r.onFind != nil && r.canEdit != nil {
+		record, err := r.onFind(ctx, id)
+		if err == nil && !r.canEdit(ctx, record) {
+			return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+		}
+	}
+
 	_ = ctx.Request.ParseForm()
 	data := make(map[string]any)
 	for k, v := range ctx.Request.PostForm {
@@ -578,6 +711,13 @@ func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error 
 }
 
 func (r *BaseResource[T]) handleDelete(ctx *Context, basePath, id string) error {
+	if r.onFind != nil && r.canDelete != nil {
+		record, err := r.onFind(ctx, id)
+		if err == nil && !r.canDelete(ctx, record) {
+			return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+		}
+	}
+
 	if r.onDelete != nil {
 		if err := r.onDelete(ctx, id); err != nil {
 			return ctx.String(http.StatusInternalServerError, "Delete error: %v", err)
@@ -587,6 +727,10 @@ func (r *BaseResource[T]) handleDelete(ctx *Context, basePath, id string) error 
 }
 
 func (r *BaseResource[T]) handleBulk(ctx *Context, basePath string) error {
+	if r.canDeleteAny != nil && !r.canDeleteAny(ctx) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+
 	_ = ctx.Request.ParseForm()
 	action := ctx.Request.PostFormValue("bulk_action")
 	selectedIDs := ctx.Request.PostForm["selected_ids[]"]
