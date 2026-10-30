@@ -44,6 +44,7 @@ type Panel struct {
 	hasNotifications    bool
 	hasGlobalSearch     bool
 	hasTenantScoping    bool
+	tenantConfig        *TenantConfig
 	hasLogin            bool
 	hasRegistration     bool
 	hasPasswordReset    bool
@@ -304,14 +305,23 @@ func (p *Panel) CustomDashboard(fn func(ctx *Context) error) *Panel {
 func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 	var allItems []*NavigationItem
 
+	basePrefix := p.path
+	if p.tenantConfig != nil && p.tenantConfig.PathScoping && ctx.Tenant() != "" {
+		basePrefix = fmt.Sprintf("%s/%s", p.path, ctx.Tenant())
+	}
+
 	// 1. Dashboard item
-	currentPath := ctx.Request.URL.Path
+	currentPath := ""
+	if ctx.Request != nil && ctx.Request.URL != nil {
+		currentPath = ctx.Request.URL.Path
+	}
+	dashURL := basePrefix
 	allItems = append(allItems, &NavigationItem{
 		Label:  "Dashboard",
-		URL:    p.path,
+		URL:    dashURL,
 		Icon:   "heroicon-home",
 		Sort:   -100,
-		Active: currentPath == p.path || currentPath == p.path+"/",
+		Active: currentPath == dashURL || currentPath == dashURL+"/",
 	})
 
 	// 2. Resource items
@@ -320,7 +330,7 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 		if item != nil {
 			if item.Visible == nil || item.Visible(ctx) {
 				if item.URL == "" {
-					item.URL = fmt.Sprintf("%s/%s", p.path, res.Slug())
+					item.URL = fmt.Sprintf("%s/%s", basePrefix, res.Slug())
 				}
 				item.Active = strings.HasPrefix(currentPath, item.URL)
 				allItems = append(allItems, item)
@@ -334,7 +344,7 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 		if item != nil {
 			if item.Visible == nil || item.Visible(ctx) {
 				if item.URL == "" {
-					item.URL = fmt.Sprintf("%s/%s", p.path, pg.Slug())
+					item.URL = fmt.Sprintf("%s/%s", basePrefix, pg.Slug())
 				}
 				item.Active = strings.HasPrefix(currentPath, item.URL)
 				allItems = append(allItems, item)
@@ -425,7 +435,54 @@ func (p *Panel) Mount(r *router.Router) {
 		})
 	}
 
-	// 2. Auth Routes (Login, Logout, Profile)
+	// 2. Tenant Switch Route
+	if p.tenantConfig != nil && p.tenantConfig.Enabled {
+		tenantSwitchHandler := func(c *gcontext.Context) error {
+			ctx := NewContext(c, p)
+			targetKey := ctx.Query("tenant")
+			if targetKey == "" {
+				targetKey = ctx.FormValue("tenant")
+			}
+
+			if targetKey != "" {
+				var targetTenant Tenant
+				if p.tenantConfig.TenantLoader != nil {
+					tenants, _ := p.tenantConfig.TenantLoader(ctx)
+					for _, t := range tenants {
+						if t.GetTenantKey() == targetKey {
+							targetTenant = t
+							break
+						}
+					}
+				}
+				if targetTenant == nil {
+					targetTenant = &TenantItem{Key: targetKey, Name: targetKey}
+				}
+
+				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", false, true)
+
+				ctx.setTenantInstance(targetTenant)
+
+				if p.tenantConfig.OnTenantSwitch != nil {
+					_ = p.tenantConfig.OnTenantSwitch(ctx, targetTenant)
+				}
+			}
+
+			redirectURL := p.path
+			if p.tenantConfig.PathScoping && targetKey != "" {
+				redirectURL = fmt.Sprintf("%s/%s", p.path, targetKey)
+			} else if ref := c.Header("Referer"); ref != "" {
+				redirectURL = ref
+			}
+
+			return c.Redirect(http.StatusSeeOther, redirectURL)
+		}
+
+		r.GET(p.path+"/tenant/switch", tenantSwitchHandler)
+		r.POST(p.path+"/tenant/switch", tenantSwitchHandler)
+	}
+
+	// 3. Auth Routes (Login, Logout, Profile)
 	if p.hasLogin {
 		r.GET(p.path+"/login", func(c *gcontext.Context) error {
 			ctx := NewContext(c, p)
@@ -440,7 +497,7 @@ func (p *Panel) Mount(r *router.Router) {
 		})
 	}
 
-	// 3. Dashboard Route
+	// 4. Dashboard Route
 	r.GET(p.path, func(c *gcontext.Context) error {
 		ctx := NewContext(c, p)
 		if p.dashboardRenderFunc != nil {
@@ -578,6 +635,11 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 
 	sb.WriteString(`<div style="display: flex; align-items: center; gap: 1rem; flex: 1;">`)
 	sb.WriteString(`<button class="btn btn-secondary btn-sm" onclick="Filament.theme.toggle()" title="Toggle Dark/Light Mode">🌓</button>`)
+
+	// Tenant Switcher dropdown
+	if p.tenantConfig != nil && p.tenantConfig.Enabled {
+		sb.WriteString(p.renderTenantSwitcherHTML(ctx))
+	}
 
 	// Global Search bar
 	if p.hasGlobalSearch {

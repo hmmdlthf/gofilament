@@ -231,6 +231,34 @@ notifications.Make("Invoice Generated").
 
 ---
 
+## 🏢 Multi-Tenancy & Tenant Switcher
+
+GoFilament integrates natively with GoLaravel's `privacy.TenantMixin`, providing tenant resolution, automatic privacy scope injection, and an interactive topbar organization switcher:
+
+```go
+panel := filament.NewPanel("admin").
+    Path("/admin").
+    Tenancy(&filament.TenantConfig{
+        Enabled:         true,
+        PathScoping:     true, // scoped URLs: /admin/{tenant}/...
+        RegistrationURL: "/admin/tenants/new",
+        ProfileURL:      "/admin/{tenant}/settings",
+    }).
+    TenantLoader(func(ctx *filament.Context) ([]filament.Tenant, error) {
+        // Return workspaces accessible to the authenticated user
+        return []filament.Tenant{
+            filament.TenantItem{Key: "acme", Name: "Acme Corp"},
+            filament.TenantItem{Key: "wayne", Name: "Wayne Enterprises"},
+        }, nil
+    })
+```
+
+- **Seamless Privacy Integration**: Automatically injects `privacy.WithTenantID` into standard `context.Context`, scoping all Ent queries and mutations without manual `WHERE tenant_id = ?` clauses.
+- **Flexible Resolution**: Resolves tenants via route params (`:tenant`), cookies (`filament_tenant`), headers (`X-Tenant-ID`), subdomains (`{tenant}.app.com`), or custom resolvers.
+- **Instant Switcher Dropdown**: Live dropdown in topbar with avatar initials, organization switching links, and settings/registration buttons.
+
+---
+
 ## 💻 Artisan CLI Generators
 
 Integrated directly with GoLaravel's Artisan CLI:

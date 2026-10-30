@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.3.0] - 2026-10-31
+
+### Added
+- **Multi-Tenancy & Tenant Switcher Engine (`pkg/filament/tenant.go`)**:
+  - `Tenant` interface and `TenantItem` model for workspace/organization isolation.
+  - Automatic tenant resolution pipeline via:
+    1. Custom callback (`panel.CurrentTenant(...)`)
+    2. Route parameter (`:tenant` with `panel.TenantPathScoping(true)`)
+    3. HTTP Cookie (`filament_tenant`)
+    4. HTTP Header (`X-Tenant-ID`)
+    5. Host subdomain (`acme.domain.com` with `panel.TenantDomainScoping(...)`)
+    6. User tenant list loader (`panel.TenantLoader(...)`)
+  - **GoLaravel Privacy Layer Integration**:
+    - Automatically injects `privacy.WithTenantID` into standard `context.Context` and `c.Request.Context()`.
+    - Seamless zero-boilerplate integration with GoLaravel's Ent `TenantScope` and `TenantMutationHook` preventing cross-tenant data leaks.
+  - **Topbar Tenant Switcher Dropdown**:
+    - Interactive Alpine.js dropdown switcher displaying tenant avatar/initials, name, and total organization count.
+    - Tenant list with active checkmark and instant switch URLs (`/admin/tenant/switch?tenant={key}`).
+    - Built-in links for Tenant Profile (`panel.TenantProfile(...)`) and New Tenant onboarding (`panel.TenantRegistration(...)`).
+  - **Path Scoping Support (`panel.TenantPathScoping(true)`)**:
+    - Tenant-scoped navigation links and `panel.TenantURL(ctx, subpath)` generating `/admin/{tenant}/...` routes.
+
+---
+
 ## [v1.2.0] - 2026-10-31
 
 ### Added
