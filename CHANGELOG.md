@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.7.0] - 2026-10-31
+
+### Added
+- **Real-Time Database Notifications Drawer & SSE Push (`pkg/notifications`, `pkg/filament/panel.go`, `pkg/filament/api.go`)**:
+  - `NotificationStore` interface and `MemoryNotificationStore` thread-safe in-memory database notification persistence.
+  - `notifications.Send(user, notif)` and `notifications.SendToAll(notif)` dispatchers with automatic real-time broadcast over GoLaravel's `pkg/broadcast` hub.
+  - **Topbar Notification Bell & Live Badge**:
+    - Animated bell button displaying unread badge count (`#notif-unread-badge`).
+    - Real-time increment and decrement on new alerts and read actions.
+  - **Slide-Out Notification Drawer**:
+    - Animated slide-in right drawer (`#filament-notifications-drawer`) accessible from anywhere in the admin panel.
+    - View notification title, formatted body text, timestamp, and optional call-to-action link.
+    - Inline "Mark as read" button on unread notification items.
+    - Drawer header controls: "Mark all read", "Clear all", and close drawer.
+  - **Server-Sent Events (SSE) Real-Time Stream**:
+    - `GET /admin/notifications/stream`: Real-time SSE endpoint streaming new alerts directly into connected browsers.
+    - Auto-injected client listener (`Filament.initSSE(...)`) displaying toast popups and updating drawer state without page refreshes.
+  - **Web Endpoints & REST API**:
+    - `GET /admin/notifications` & `GET /admin/api/notifications`
+    - `POST /admin/notifications/mark-read` & `POST /admin/api/notifications/mark-read`
+    - `POST /admin/notifications/mark-all-read` & `POST /admin/api/notifications/mark-all-read`
+    - `POST /admin/notifications/clear` & `POST /admin/api/notifications/clear`
+
+---
+
 ## [v1.6.0] - 2026-10-31
 
 ### Added

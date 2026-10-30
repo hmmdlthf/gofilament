@@ -1,7 +1,9 @@
 package filament
 
 import (
+	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/assets"
+	"github.com/golaravel/gofilament/pkg/notifications"
+	"github.com/golaravel/golaravel/pkg/broadcast"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/flutter"
 	"github.com/golaravel/golaravel/pkg/golaravel"
@@ -606,6 +610,88 @@ func (p *Panel) Mount(r *router.Router) {
 		return c.Redirect(http.StatusMovedPermanently, p.path)
 	})
 
+	// 5. Database Notifications Routes
+	if p.hasNotifications {
+		r.GET(p.path+"/notifications", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			user := "all"
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
+			}
+			items, _ := notifications.DefaultStore().List(user, 50)
+			unreadCount, _ := notifications.DefaultStore().CountUnread(user)
+
+			if strings.Contains(c.Header("Accept"), "application/json") {
+				return c.JSON(http.StatusOK, map[string]any{
+					"unread_count": unreadCount,
+					"items":        items,
+				})
+			}
+			return c.HTML(http.StatusOK, p.renderNotificationsDrawerHTML(ctx))
+		})
+
+		r.POST(p.path+"/notifications/mark-read", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			user := "all"
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
+			}
+			id := c.Query("id")
+			if id == "" {
+				id = c.FormValue("id")
+			}
+			if id == "" {
+				var body map[string]string
+				_ = json.NewDecoder(c.Request.Body).Decode(&body)
+				id = body["id"]
+			}
+			_ = notifications.DefaultStore().MarkAsRead(user, id)
+			return c.JSON(http.StatusOK, map[string]any{"success": true})
+		})
+
+		r.POST(p.path+"/notifications/mark-all-read", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			user := "all"
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
+			}
+			_ = notifications.DefaultStore().MarkAllAsRead(user)
+			return c.JSON(http.StatusOK, map[string]any{"success": true})
+		})
+
+		r.POST(p.path+"/notifications/clear", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			user := "all"
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
+			}
+			_ = notifications.DefaultStore().Clear(user)
+			return c.JSON(http.StatusOK, map[string]any{"success": true})
+		})
+
+		r.GET(p.path+"/notifications/stream", func(c *gcontext.Context) error {
+			user := "all"
+			if authUser := c.Header("X-User-ID"); authUser != "" {
+				user = authUser
+			}
+			channel := "filament:notifications:" + user
+			c.Request.URL.RawQuery = "channel=" + channel
+			return broadcast.SSEHandler()(c)
+		})
+	}
+
 	// 3. Register Resources
 	for _, res := range p.resources {
 		res.RegisterRoutes(p, r)
@@ -760,11 +846,20 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 
 	// Notifications bell icon
 	if p.hasNotifications {
-		sb.WriteString(`
-<button type="button" class="btn btn-secondary btn-sm" style="position: relative;" onclick="Filament.notify({title:'Notifications', body:'You are all caught up!'})">
+		user := "all"
+		if ctx.User() != nil {
+			user = ctx.User().GetAuthIdentifier()
+		}
+		unreadCount, _ := notifications.DefaultStore().CountUnread(user)
+		badgeDisplay := "display: none;"
+		if unreadCount > 0 {
+			badgeDisplay = "display: inline-flex;"
+		}
+		sb.WriteString(fmt.Sprintf(`
+<button type="button" class="btn btn-secondary btn-sm" style="position: relative;" onclick="Filament.openNotificationDrawer()" title="Notifications">
   🔔
-  <span style="position: absolute; top: -0.25rem; right: -0.25rem; width: 0.625rem; height: 0.625rem; border-radius: 9999px; background-color: var(--primary-500);"></span>
-</button>`)
+  <span id="notif-unread-badge" class="badge-count" style="%s">%d</span>
+</button>`, badgeDisplay, unreadCount))
 	}
 
 	// User menu
@@ -774,7 +869,105 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 	sb.WriteString(`</div>`)
 
 	sb.WriteString(`</header>`)
+
+	// Append notification drawer and SSE script if notifications enabled
+	if p.hasNotifications {
+		sb.WriteString(p.renderNotificationsDrawerHTML(ctx))
+	}
+
 	return sb.String()
+}
+
+func (p *Panel) renderNotificationsDrawerHTML(ctx *Context) string {
+	user := "all"
+	if ctx.User() != nil {
+		user = ctx.User().GetAuthIdentifier()
+	}
+
+	unreadCount, _ := notifications.DefaultStore().CountUnread(user)
+	items, _ := notifications.DefaultStore().List(user, 50)
+
+	var listHTML strings.Builder
+	if len(items) == 0 {
+		listHTML.WriteString(`<div class="empty-notif-msg" style="text-align: center; color: var(--gray-400); padding: 3rem 1rem;">No notifications yet.</div>`)
+	} else {
+		for _, it := range items {
+			unreadClass := ""
+			if !it.Read {
+				unreadClass = "unread"
+			}
+			actionBtn := ""
+			if it.ActionURL != "" {
+				lbl := it.ActionLabel
+				if lbl == "" {
+					lbl = "View"
+				}
+				actionBtn = fmt.Sprintf(`<a href="%s" class="btn btn-primary btn-xs" style="margin-top: 0.5rem; text-decoration: none; display: inline-block;">%s</a>`, html.EscapeString(it.ActionURL), html.EscapeString(lbl))
+			}
+			markReadBtn := ""
+			if !it.Read {
+				markReadBtn = fmt.Sprintf(`<button type="button" class="btn btn-secondary btn-xs" onclick="Filament.markNotificationRead('%s/notifications/mark-read', '%s')" style="margin-top: 0.5rem;">Mark as read</button>`, p.path, it.ID)
+			}
+			timeStr := it.CreatedAt.Format("Jan 02, 15:04")
+
+			bodyHTML := ""
+			if it.BodyText != "" {
+				bodyHTML = fmt.Sprintf(`<div style="font-size: 0.8125rem; color: var(--gray-500); margin-top: 0.25rem;">%s</div>`, html.EscapeString(it.BodyText))
+			}
+
+			listHTML.WriteString(fmt.Sprintf(`
+<div id="notif-item-%s" class="notification-item %s">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+    <div style="font-weight: 600; font-size: 0.875rem;">%s</div>
+    <span style="font-size: 0.6875rem; color: var(--gray-400);">%s</span>
+  </div>
+  %s
+  <div style="display: flex; gap: 0.5rem; align-items: center;">
+    %s
+    %s
+  </div>
+</div>`,
+				it.ID, unreadClass,
+				html.EscapeString(it.Title),
+				timeStr,
+				bodyHTML,
+				actionBtn,
+				markReadBtn,
+			))
+		}
+	}
+
+	unreadBadge := fmt.Sprintf("%d unread", unreadCount)
+	return fmt.Sprintf(`
+<div id="filament-notifications-drawer" class="notifications-drawer-backdrop" style="display: none;" onclick="if(event.target === this) Filament.closeNotificationDrawer();">
+  <div class="notifications-drawer">
+    <div class="notifications-drawer-header">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <span style="font-size: 1.125rem;">🔔</span>
+        <h3 style="font-size: 1rem; font-weight: 600;">Notifications</h3>
+        <span id="drawer-unread-count" class="badge badge-info">%s</span>
+      </div>
+      <div style="display: flex; gap: 0.375rem; align-items: center;">
+        <button type="button" class="btn btn-secondary btn-xs" onclick="Filament.markAllNotificationsRead('%s/notifications/mark-all-read')">Mark all read</button>
+        <button type="button" class="btn btn-danger btn-xs" onclick="Filament.clearAllNotifications('%s/notifications/clear')">Clear all</button>
+        <button type="button" onclick="Filament.closeNotificationDrawer()" style="background: none; border: none; font-size: 1.25rem; cursor: pointer; color: var(--gray-400); margin-left: 0.25rem;">&times;</button>
+      </div>
+    </div>
+    <div id="notifications-drawer-list" class="notifications-drawer-list">
+      %s
+    </div>
+  </div>
+</div>
+<script>
+  if (window.Filament && window.Filament.initSSE) {
+    window.Filament.initSSE('%s/notifications/stream');
+  }
+</script>`,
+		unreadBadge,
+		p.path, p.path,
+		listHTML.String(),
+		p.path,
+	)
 }
 
 func (p *Panel) renderLoginScreen(ctx *Context) error {

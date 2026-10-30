@@ -218,16 +218,30 @@ forms.TextInput("title").
 
 ---
 
-## 🔔 Notifications Engine
+## 🔔 Real-Time Notifications Engine & Drawer
 
-Toast notifications and topbar unread alert drawers:
+GoFilament features a complete notification ecosystem with toast popups, database persistence, an interactive slide-out drawer, and real-time Server-Sent Events (SSE) push powered by GoLaravel's `pkg/broadcast` hub:
 
 ```go
-notifications.Make("Invoice Generated").
+// 1. Enable Database Notifications on your panel
+adminPanel.DatabaseNotifications(true)
+
+// 2. Dispatch a real-time notification from any handler, background job, or event listener
+notifications.Send("admin_user", notifications.Make("Order #101 Placed").
     Success().
-    Body("Invoice #INV-2026-09 was created and sent to customer.").
-    DurationMs(4000)
+    Body("Customer placed a new order for $250.").
+    Action("View Order", "/admin/orders/101").
+    DurationMs(4000),
+)
+
+// Or broadcast to all connected operators
+notifications.SendToAll(notifications.Make("Deployment Succeeded").Info())
 ```
+
+- **Topbar Bell & Badge**: Displays live unread count (`#notif-unread-badge`), which auto-increments upon receiving real-time events.
+- **Slide-Out Notification Drawer**: Click the bell icon to slide out the notification center, view historical alerts, open action links, mark individual items as read, or clear all.
+- **Server-Sent Events (SSE)**: Built-in `GET /admin/notifications/stream` connection streams new alerts instantly into the browser with zero polling overhead.
+- **REST API Support**: Native endpoints for mobile/Flutter clients at `/admin/api/notifications`.
 
 ---
 

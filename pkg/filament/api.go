@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/golaravel/gofilament/pkg/notifications"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/router"
 )
@@ -175,7 +176,68 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		})
 	})
 
-	// 4. Register REST Endpoints for each resource
+	// 4. Notifications REST API
+	if p.hasNotifications {
+		r.GET(apiPrefix+"/notifications", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			user := "all"
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
+			}
+			items, _ := notifications.DefaultStore().List(user, 50)
+			unread, _ := notifications.DefaultStore().CountUnread(user)
+			return c.JSON(http.StatusOK, map[string]any{
+				"unread_count":  unread,
+				"notifications": items,
+			})
+		})
+
+		r.POST(apiPrefix+"/notifications/mark-read", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			user := "all"
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
+			}
+			payload := parseRequestData(c)
+			id := fmt.Sprintf("%v", payload["id"])
+			_ = notifications.DefaultStore().MarkAsRead(user, id)
+			return c.JSON(http.StatusOK, map[string]any{"success": true})
+		})
+
+		r.POST(apiPrefix+"/notifications/mark-all-read", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			user := "all"
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
+			}
+			_ = notifications.DefaultStore().MarkAllAsRead(user)
+			return c.JSON(http.StatusOK, map[string]any{"success": true})
+		})
+
+		r.POST(apiPrefix+"/notifications/clear", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			user := "all"
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
+			}
+			_ = notifications.DefaultStore().Clear(user)
+			return c.JSON(http.StatusOK, map[string]any{"success": true})
+		})
+	}
+
+	// 5. Register REST Endpoints for each resource
 	for _, res := range p.resources {
 		p.registerResourceAPI(res, apiPrefix, r)
 	}

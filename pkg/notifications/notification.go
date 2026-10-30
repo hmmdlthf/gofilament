@@ -17,13 +17,15 @@ const (
 
 // Notification represents a toast or database alert.
 type Notification struct {
-	ID        string           `json:"id"`
-	Type      NotificationType `json:"type"`
-	Title     string           `json:"title"`
-	BodyText  string           `json:"body,omitempty"`
-	Duration  int              `json:"duration,omitempty"` // in ms
-	CreatedAt time.Time        `json:"created_at"`
-	Read      bool             `json:"read"`
+	ID          string           `json:"id"`
+	Type        NotificationType `json:"type"`
+	Title       string           `json:"title"`
+	BodyText    string           `json:"body,omitempty"`
+	Duration    int              `json:"duration,omitempty"` // in ms
+	CreatedAt   time.Time        `json:"created_at"`
+	Read        bool             `json:"read"`
+	ActionLabel string           `json:"action_label,omitempty"`
+	ActionURL   string           `json:"action_url,omitempty"`
 }
 
 // Make creates a new Notification builder.
@@ -64,6 +66,12 @@ func (n *Notification) Body(body string) *Notification {
 
 func (n *Notification) DurationMs(ms int) *Notification {
 	n.Duration = ms
+	return n
+}
+
+func (n *Notification) Action(label, url string) *Notification {
+	n.ActionLabel = label
+	n.ActionURL = url
 	return n
 }
 
