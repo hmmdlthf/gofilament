@@ -122,6 +122,36 @@ func (t *Table[T]) extractRecordID(record T) string {
 	return ""
 }
 
+// GetColumns returns the configured columns.
+func (t *Table[T]) GetColumns() []ColumnRenderer[T] {
+	return t.columns
+}
+
+// GetHeaderActions returns the configured header actions.
+func (t *Table[T]) GetHeaderActions() []*TableAction[T] {
+	return t.headerActions
+}
+
+// GetActions returns the row-level actions.
+func (t *Table[T]) GetActions() []*TableAction[T] {
+	return t.actions
+}
+
+// GetBulkActions returns the bulk actions.
+func (t *Table[T]) GetBulkActions() []*BulkActionDef {
+	return t.bulkActions
+}
+
+// ExtractFieldValue extracts a field value by name using reflection or closures.
+func (t *Table[T]) ExtractFieldValue(record T, name string) any {
+	return t.extractFieldValue(record, name)
+}
+
+// ExtractRecordID returns the record ID.
+func (t *Table[T]) ExtractRecordID(record T) string {
+	return t.extractRecordID(record)
+}
+
 // extractFieldValue extracts a field by name using struct field matching.
 func (t *Table[T]) extractFieldValue(record T, name string) any {
 	val := reflect.ValueOf(record)
@@ -182,7 +212,13 @@ func (t *Table[T]) Render(basePath string) string {
 	if len(t.headerActions) > 0 {
 		sb.WriteString(`<div style="display: flex; gap: 0.5rem; align-items: center;">`)
 		for _, ha := range t.headerActions {
-			sb.WriteString(fmt.Sprintf(`<a href="%s/%s" class="btn btn-primary">%s</a>`, basePath, ha.name, html.EscapeString(ha.label)))
+			btnClass := "btn-primary"
+			if ha.color == "secondary" {
+				btnClass = "btn-secondary"
+			} else if ha.color == "danger" {
+				btnClass = "btn-danger"
+			}
+			sb.WriteString(fmt.Sprintf(`<a href="%s/%s" class="btn %s">%s</a>`, basePath, ha.name, btnClass, html.EscapeString(ha.label)))
 		}
 		sb.WriteString(`</div>`)
 	}

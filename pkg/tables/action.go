@@ -45,6 +45,32 @@ func EditAction[T any]() *TableAction[T] {
 	}
 }
 
+func ImportAction[T any](name ...string) *TableAction[T] {
+	actName := "import"
+	if len(name) > 0 && name[0] != "" {
+		actName = name[0]
+	}
+	return &TableAction[T]{
+		name:  actName,
+		label: "Import",
+		icon:  "heroicon-arrow-up-tray",
+		color: "secondary",
+	}
+}
+
+func ExportAction[T any](name ...string) *TableAction[T] {
+	actName := "export"
+	if len(name) > 0 && name[0] != "" {
+		actName = name[0]
+	}
+	return &TableAction[T]{
+		name:  actName,
+		label: "Export",
+		icon:  "heroicon-arrow-down-tray",
+		color: "secondary",
+	}
+}
+
 func DeleteAction[T any]() *TableAction[T] {
 	return &TableAction[T]{
 		name:                 "delete",

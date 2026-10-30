@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.9.0] - 2026-10-31
+
+### Added
+- **High-Throughput Data Streaming (Export Engine)** (`pkg/filament/resource.go`, `pkg/filament/api.go`, `pkg/tables`):
+  - Direct HTTP chunked streaming for large datasets ($O(\text{chunk size})$ memory footprint) with periodic `http.Flusher` flushes.
+  - Multi-format support: **CSV** (`text/csv`), **TSV** (`text/tab-separated-values`), and **JSON** (`application/json`).
+  - Dynamic inspection of configured table columns and labels, extracting raw and formatted values with automated HTML tag stripping for clean data.
+  - Comprehensive query filtering: query strings (`search`, `sort`, `direction`), custom filters (`filter_*`), and explicit IDs (`?ids=1,2,3`).
+  - Bulk action integration: `tables.ExportBulkAction()` natively hooks into row selection checkboxes.
+- **Interactive Column-Mapping Import Engine** (`pkg/filament/resource.go`, `pkg/filament/api.go`, `pkg/tables`):
+  - Web import page (`GET /admin/{resource}/import`) with sample CSV download link, file selector, and auto-mapping overview.
+  - Auto-normalization of column headers (case-insensitive, whitespace, hyphen, and underscore canonicalization).
+  - Explicit column mapping overrides (`mapping[source]=target`).
+  - Row-by-row batch insertion via `r.onCreate` with failure tracking and error reporting.
+  - Real-time notification dispatch via `notifications.Send(...)` for completion and warnings.
+  - REST API import & export endpoints:
+    - `GET /admin/api/resources/:slug/export` (supports `format=csv|tsv|json`, `ids`, `search`, filters).
+    - `POST /admin/api/resources/:slug/import` (supports multipart file upload, JSON array batches `{"data": [...]}`, and raw CSV string payloads `{"csv": "..."}`).
+- **Table DSL Extensions**:
+  - `tables.ImportAction[T]()` and `tables.ExportAction[T]()` for table header action bars.
+  - `.Label(string)` chaining methods for `BadgeColumnDef`, `ImageColumnDef`, and `ToggleColumnDef`.
+  - Column and action accessors on `tables.Table[T]` (`GetColumns()`, `GetHeaderActions()`, `GetActions()`, `GetBulkActions()`, `ExtractFieldValue()`, `ExtractRecordID()`).
+
+---
+
 ## [v1.8.0] - 2026-10-31
 
 ### Added

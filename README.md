@@ -441,12 +441,46 @@ cd client && flutter build web   # Compiles to Web SPA served by GoLaravel
 ```
 
 ### 🔌 Standardized Panel REST API:
-The Flutter client connects to GoFilament's standardized JSON REST API:
+The Flutter client and external integrations connect to GoFilament's standardized JSON REST API:
 - `GET /admin/api/schema`: Panel metadata, registered resources, fields, and navigation groups.
 - `GET /admin/api/resources/:slug`: Paginated, searchable, sortable list endpoints.
+- `GET /admin/api/resources/:slug/export`: Direct streaming data export (`format=csv|tsv|json`, `ids`, `search`, filters).
+- `POST /admin/api/resources/:slug/import`: High-throughput batch import (multipart CSV file, raw CSV string, or JSON array batches).
 - `GET/POST/PUT/DELETE /admin/api/resources/:slug/:id`: Full CRUD with Shield policy authorization.
 - `GET /admin/api/tenants` & `POST /admin/api/tenants/switch`: Active tenant management.
 - `GET /admin/api/widgets`: Real-time KPI stats overview and sparklines.
+
+---
+
+## ⚡ High-Throughput Data Streaming: Import & Export
+
+GoFilament features a streaming data export and interactive column-mapping import engine designed for large datasets with minimal memory overhead ($O(\text{chunk size})$):
+
+### 📤 High-Throughput Export:
+- Stream thousands of records directly to the browser or API clients without buffering whole tables in memory.
+- Formats supported: **CSV** (`text/csv`), **TSV** (`text/tab-separated-values`), and **JSON** (`application/json`).
+- Automatically exports configured table columns and labels, stripping HTML tags to output clean data.
+- Row-level bulk export via `tables.ExportBulkAction()`, or header actions with `tables.ExportAction()`.
+- Filter-aware: respects table search terms, active column filters, and selected record IDs.
+
+```go
+// Add Export to table header actions or bulk actions
+table.HeaderActions(
+    tables.ExportAction[*Customer](),
+    tables.ImportAction[*Customer](),
+).BulkActions(
+    tables.ExportBulkAction(),
+)
+```
+
+### 📥 Interactive Column-Mapping Import:
+- Upload CSV or TSV files via web modal (`/admin/{resource}/import`) or REST API.
+- **Smart Auto-Mapping**: Automatically normalizes file headers (e.g., `Customer Name` $\rightarrow$ `customer_name` $\rightarrow$ `name`) to match model fields.
+- **Explicit Mapping**: Override column definitions with custom mapping fields.
+- **Batch Processing & Error Resilience**: Processes rows sequentially with `OnCreate`, collecting failure logs without terminating the batch.
+- **Real-Time Notification**: Dispatches toast and drawer notifications with success counts and warning reports via `notifications.Send(...)`.
+
+---
 
 ---
 

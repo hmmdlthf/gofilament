@@ -3,6 +3,7 @@ package filament
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -292,6 +293,155 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		})
 	})
 
+	// GET /admin/api/resources/:slug/export - Streaming Export
+	r.GET(resPath+"/export", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		if exporter, ok := res.(interface {
+			InvokeExport(ctx *Context, format string, filterIDs []string, search, sortCol, sortDir string, filters map[string]string) error
+		}); ok {
+			format := strings.ToLower(ctx.DefaultQuery("format", "csv"))
+			search := ctx.Query("search")
+			sortCol := ctx.Query("sort")
+			sortDir := ctx.DefaultQuery("direction", "asc")
+			var filterIDs []string
+			if idsQuery := ctx.Query("ids"); idsQuery != "" {
+				for _, id := range strings.Split(idsQuery, ",") {
+					id = strings.TrimSpace(id)
+					if id != "" {
+						filterIDs = append(filterIDs, id)
+					}
+				}
+			}
+			filters := make(map[string]string)
+			for k, v := range ctx.Request.URL.Query() {
+				if strings.HasPrefix(k, "filter_") && len(v) > 0 {
+					filters[strings.TrimPrefix(k, "filter_")] = v[0]
+				}
+			}
+
+			return exporter.InvokeExport(ctx, format, filterIDs, search, sortCol, sortDir, filters)
+		}
+
+		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Export not implemented"})
+	})
+
+	// POST /admin/api/resources/:slug/import - Batch & CSV Import
+	r.POST(resPath+"/import", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		// 1. Check multipart form file upload
+		contentType := c.Header("Content-Type")
+		if strings.HasPrefix(contentType, "multipart/form-data") {
+			_ = c.Request.ParseMultipartForm(32 << 20)
+			file, _, err := c.Request.FormFile("file")
+			if err != nil {
+				file, _, err = c.Request.FormFile("csv_file")
+			}
+			if err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "Missing file in upload"})
+			}
+			defer file.Close()
+
+			mapping := make(map[string]string)
+			for k, v := range c.Request.PostForm {
+				if strings.HasPrefix(k, "mapping[") && strings.HasSuffix(k, "]") && len(v) > 0 {
+					src := strings.TrimSuffix(strings.TrimPrefix(k, "mapping["), "]")
+					mapping[src] = v[0]
+				}
+			}
+
+			if importer, ok := res.(interface {
+				InvokeImportCSV(ctx *Context, rdr io.Reader, explicitMapping map[string]string) (*ImportResult, error)
+			}); ok {
+				result, err := importer.InvokeImportCSV(ctx, file, mapping)
+				if err != nil {
+					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				}
+				return c.JSON(http.StatusOK, result)
+			}
+			return c.JSON(http.StatusNotImplemented, map[string]string{"error": "CSV import not implemented"})
+		}
+
+		// 2. Check JSON payload ({"data": [ {...}, ... ]} or {"csv": "..."})
+		var jsonBody struct {
+			Data []map[string]any  `json:"data"`
+			CSV  string            `json:"csv"`
+			Map  map[string]string `json:"mapping"`
+		}
+		if err := json.NewDecoder(c.Request.Body).Decode(&jsonBody); err == nil {
+			if len(jsonBody.Data) > 0 {
+				if importer, ok := res.(interface {
+					InvokeImportRecords(ctx *Context, rows []map[string]any) (*ImportResult, error)
+				}); ok {
+					result, err := importer.InvokeImportRecords(ctx, jsonBody.Data)
+					if err != nil {
+						return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+					}
+					return c.JSON(http.StatusOK, result)
+				}
+			} else if jsonBody.CSV != "" {
+				if importer, ok := res.(interface {
+					InvokeImportCSV(ctx *Context, rdr io.Reader, explicitMapping map[string]string) (*ImportResult, error)
+				}); ok {
+					result, err := importer.InvokeImportCSV(ctx, strings.NewReader(jsonBody.CSV), jsonBody.Map)
+					if err != nil {
+						return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+					}
+					return c.JSON(http.StatusOK, result)
+				}
+			}
+		}
+
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid import request payload"})
+	})
+
+	// POST /admin/api/resources/:slug/bulk - Bulk Action
+	r.POST(resPath+"/bulk", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		data := parseRequestData(c)
+		action := fmt.Sprintf("%v", data["bulk_action"])
+
+		var ids []string
+		if rawIDs, ok := data["selected_ids[]"]; ok {
+			if slice, ok := rawIDs.([]string); ok {
+				ids = slice
+			} else if sliceAny, ok := rawIDs.([]any); ok {
+				for _, it := range sliceAny {
+					ids = append(ids, fmt.Sprintf("%v", it))
+				}
+			}
+		}
+
+		if action == "delete_bulk" && len(ids) > 0 {
+			if invoker, ok := res.(interface {
+				InvokeDeleteBulk(ctx *Context, ids []string) error
+			}); ok {
+				if err := invoker.InvokeDeleteBulk(ctx, ids); err != nil {
+					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				}
+				return c.JSON(http.StatusOK, map[string]any{
+					"success": true,
+					"message": fmt.Sprintf("%d records deleted successfully", len(ids)),
+				})
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"success": true,
+		})
+	})
+
 	// GET /admin/api/resources/:slug/:id - Find
 	r.GET(resPath+"/:id", func(c *gcontext.Context) error {
 		ctx, err := p.AuthorizeAccess(c)
@@ -389,46 +539,6 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 	}
 	r.DELETE(resPath+"/:id", deleteHandler)
 	r.POST(resPath+"/:id/delete", deleteHandler)
-
-	// POST /admin/api/resources/:slug/bulk - Bulk Action
-	r.POST(resPath+"/bulk", func(c *gcontext.Context) error {
-		ctx, err := p.AuthorizeAccess(c)
-		if err != nil {
-			return err
-		}
-
-		data := parseRequestData(c)
-		action := fmt.Sprintf("%v", data["bulk_action"])
-
-		var ids []string
-		if rawIDs, ok := data["selected_ids[]"]; ok {
-			if slice, ok := rawIDs.([]string); ok {
-				ids = slice
-			} else if sliceAny, ok := rawIDs.([]any); ok {
-				for _, it := range sliceAny {
-					ids = append(ids, fmt.Sprintf("%v", it))
-				}
-			}
-		}
-
-		if action == "delete_bulk" && len(ids) > 0 {
-			if invoker, ok := res.(interface {
-				InvokeDeleteBulk(ctx *Context, ids []string) error
-			}); ok {
-				if err := invoker.InvokeDeleteBulk(ctx, ids); err != nil {
-					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-				}
-				return c.JSON(http.StatusOK, map[string]any{
-					"success": true,
-					"message": fmt.Sprintf("%d records deleted successfully", len(ids)),
-				})
-			}
-		}
-
-		return c.JSON(http.StatusOK, map[string]any{
-			"success": true,
-		})
-	})
 
 	// ----------------------------------------------------
 	// Nested Relation Manager Endpoints

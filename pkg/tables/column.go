@@ -201,6 +201,11 @@ func BadgeColumn[T any](name string) *BadgeColumnDef[T] {
 	}
 }
 
+func (c *BadgeColumnDef[T]) Label(l string) *BadgeColumnDef[T] {
+	c.BaseColumn.Label(l)
+	return c
+}
+
 func (c *BadgeColumnDef[T]) Colors(colors map[string]string) *BadgeColumnDef[T] {
 	c.colors = colors
 	return c
@@ -236,6 +241,11 @@ func ImageColumn[T any](name string) *ImageColumnDef[T] {
 		BaseColumn: BaseColumn[T]{name: name},
 		size:       "2.25rem",
 	}
+}
+
+func (c *ImageColumnDef[T]) Label(l string) *ImageColumnDef[T] {
+	c.BaseColumn.Label(l)
+	return c
 }
 
 func (c *ImageColumnDef[T]) Circular(circ ...bool) *ImageColumnDef[T] {
@@ -274,6 +284,11 @@ func ToggleColumn[T any](name string) *ToggleColumnDef[T] {
 	return &ToggleColumnDef[T]{
 		BaseColumn: BaseColumn[T]{name: name},
 	}
+}
+
+func (c *ToggleColumnDef[T]) Label(l string) *ToggleColumnDef[T] {
+	c.BaseColumn.Label(l)
+	return c
 }
 
 func (c *ToggleColumnDef[T]) RenderCell(record T, rawValue any) string {
