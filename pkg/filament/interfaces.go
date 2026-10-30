@@ -4,6 +4,14 @@ import (
 	"github.com/golaravel/golaravel/pkg/router"
 )
 
+// GlobalSearchResult represents a single search match across any resource.
+type GlobalSearchResult struct {
+	Title   string            `json:"title"`
+	URL     string            `json:"url"`
+	Details map[string]string `json:"details,omitempty"`
+	Group   string            `json:"group"`
+}
+
 // ResourceInterface defines the contract for all CRUD resources.
 type ResourceInterface interface {
 	ID() string
@@ -12,6 +20,8 @@ type ResourceInterface interface {
 	Slug() string
 	NavigationItem(ctx *Context) *NavigationItem
 	RegisterRoutes(p *Panel, r *router.Router)
+	IsGloballySearchable() bool
+	SearchGlobal(ctx *Context, query string) []GlobalSearchResult
 }
 
 // PageInterface defines the contract for custom panel pages.

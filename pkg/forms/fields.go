@@ -88,6 +88,12 @@ func (f *BaseField) Dehydrated(fn func(state any) bool) *BaseField {
 	return f
 }
 
+func (f *BaseField) TriggerAfterUpdated(state any, form *Form) {
+	if f.afterUpdated != nil {
+		f.afterUpdated(state, form)
+	}
+}
+
 func (f *BaseField) formatLabel() string {
 	if f.label != "" {
 		return f.label

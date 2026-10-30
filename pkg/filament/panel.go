@@ -388,7 +388,59 @@ func (p *Panel) Mount(r *router.Router) {
 	// 1. Static Assets
 	assets.RegisterRoutes(r, p.path+"/assets")
 
-	// 2. Dashboard Route
+	// Global Search Route
+	if p.hasGlobalSearch {
+		r.GET(p.path+"/global-search", func(c *gcontext.Context) error {
+			ctx := NewContext(c, p)
+			query := ctx.Query("query")
+			var allResults []GlobalSearchResult
+			if len(query) >= 2 {
+				for _, res := range p.resources {
+					if res.IsGloballySearchable() {
+						matches := res.SearchGlobal(ctx, query)
+						allResults = append(allResults, matches...)
+					}
+				}
+			}
+
+			// If client accepts JSON
+			if strings.Contains(ctx.Header("Accept"), "application/json") {
+				return ctx.JSON(http.StatusOK, allResults)
+			}
+
+			// Otherwise render dropdown HTML
+			var sb strings.Builder
+			if len(allResults) == 0 {
+				sb.WriteString(`<div style="padding: 0.75rem 1rem; font-size: 0.8125rem; color: var(--gray-400);">No matching records found.</div>`)
+			} else {
+				for _, match := range allResults {
+					sb.WriteString(fmt.Sprintf(`
+<a href="%s" class="global-search-item" style="display: block; padding: 0.625rem 1rem; border-bottom: 1px solid var(--gray-100); text-decoration: none; color: inherit;">
+  <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--primary-600);">%s</span>
+  <div style="font-size: 0.875rem; font-weight: 500;">%s</div>
+</a>`, match.URL, match.Group, match.Title))
+				}
+			}
+			return ctx.HTML(http.StatusOK, sb.String())
+		})
+	}
+
+	// 2. Auth Routes (Login, Logout, Profile)
+	if p.hasLogin {
+		r.GET(p.path+"/login", func(c *gcontext.Context) error {
+			ctx := NewContext(c, p)
+			return p.renderLoginScreen(ctx)
+		})
+		r.POST(p.path+"/login", func(c *gcontext.Context) error {
+			// Redirect back to admin dashboard
+			return c.Redirect(http.StatusSeeOther, p.path)
+		})
+		r.GET(p.path+"/logout", func(c *gcontext.Context) error {
+			return c.Redirect(http.StatusSeeOther, p.path+"/login")
+		})
+	}
+
+	// 3. Dashboard Route
 	r.GET(p.path, func(c *gcontext.Context) error {
 		ctx := NewContext(c, p)
 		if p.dashboardRenderFunc != nil {
@@ -523,11 +575,41 @@ func (p *Panel) renderSidebarHTML(ctx *Context) string {
 func (p *Panel) renderTopbarHTML(ctx *Context) string {
 	var sb strings.Builder
 	sb.WriteString(`<header class="filament-topbar">`)
-	sb.WriteString(`<div style="display: flex; align-items: center; gap: 1rem;">`)
-	sb.WriteString(`<button class="btn btn-secondary btn-sm" onclick="Filament.theme.toggle()">🌓</button>`)
+
+	sb.WriteString(`<div style="display: flex; align-items: center; gap: 1rem; flex: 1;">`)
+	sb.WriteString(`<button class="btn btn-secondary btn-sm" onclick="Filament.theme.toggle()" title="Toggle Dark/Light Mode">🌓</button>`)
+
+	// Global Search bar
+	if p.hasGlobalSearch {
+		sb.WriteString(fmt.Sprintf(`
+<div style="position: relative; max-width: 24rem; width: 100%%;">
+  <input type="text" placeholder="Search across %s..." class="form-control" style="font-size: 0.8125rem; padding: 0.375rem 0.75rem;" 
+    oninput="
+      const q = this.value;
+      const dd = document.getElementById('global-search-results');
+      if (q.length < 2) { dd.style.display = 'none'; return; }
+      fetch('%s/global-search?query=' + encodeURIComponent(q))
+        .then(r => r.text())
+        .then(html => { dd.innerHTML = html; dd.style.display = 'block'; });
+    "
+    onblur="setTimeout(() => { document.getElementById('global-search-results').style.display = 'none'; }, 200);"
+  />
+  <div id="global-search-results" style="display: none; position: absolute; top: 100%%; left: 0; right: 0; background: #fff; border: 1px solid var(--gray-200); border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); margin-top: 0.25rem; z-index: 50; max-height: 18rem; overflow-y: auto;"></div>
+</div>`, p.brandName, p.path))
+	}
 	sb.WriteString(`</div>`)
 
 	sb.WriteString(`<div style="display: flex; align-items: center; gap: 1rem;">`)
+
+	// Notifications bell icon
+	if p.hasNotifications {
+		sb.WriteString(`
+<button type="button" class="btn btn-secondary btn-sm" style="position: relative;" onclick="Filament.notify({title:'Notifications', body:'You are all caught up!'})">
+  🔔
+  <span style="position: absolute; top: -0.25rem; right: -0.25rem; width: 0.625rem; height: 0.625rem; border-radius: 9999px; background-color: var(--primary-500);"></span>
+</button>`)
+	}
+
 	// User menu
 	sb.WriteString(`<div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 500;">`)
 	sb.WriteString(`<span>Administrator</span>`)
@@ -536,4 +618,43 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 
 	sb.WriteString(`</header>`)
 	return sb.String()
+}
+
+func (p *Panel) renderLoginScreen(ctx *Context) error {
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In - %s</title>
+  <link rel="stylesheet" href="%s/assets/filament.css">
+  <script src="%s/assets/filament.js"></script>
+</head>
+<body style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: var(--gray-50);">
+  <div class="filament-card" style="width: 100%%; max-width: 26rem; padding: 2rem;">
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+      <h2 style="font-size: 1.5rem; font-weight: 700; color: var(--primary-600);">%s</h2>
+      <p style="font-size: 0.875rem; color: var(--gray-500); margin-top: 0.25rem;">Sign in to your administration panel</p>
+    </div>
+    <form method="POST" action="%s/login">
+      <div class="form-group">
+        <label class="form-label" for="email">Email address</label>
+        <input type="email" id="email" name="email" required placeholder="admin@example.com" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input type="password" id="password" name="password" required placeholder="••••••••" class="form-control" />
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem;">
+        <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; cursor: pointer;">
+          <input type="checkbox" name="remember" value="1" /> Remember me
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width: 100%%;">Sign In</button>
+    </form>
+  </div>
+</body>
+</html>`, p.brandName, p.path, p.path, p.brandName, p.path)
+
+	return ctx.HTML(http.StatusOK, html)
 }

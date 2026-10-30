@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -53,17 +54,111 @@ type BaseResource[T any] struct {
 	onUpdate     UpdateHandlerFunc
 	onDelete     DeleteHandlerFunc
 	onDeleteBulk DeleteBulkHandlerFunc
+	// Authorization
+	canViewAny func(ctx *Context) bool
+	canCreate  func(ctx *Context) bool
+	canEdit    func(ctx *Context, record T) bool
+	canDelete  func(ctx *Context, record T) bool
+
+	// Global Search
+	globallySearchable bool
+	searchAttributes   []string
+	globalResultFunc   func(record T) GlobalSearchResult
 }
 
 // NewResource creates a new Resource with a URL slug.
 func NewResource[T any](slug string) *BaseResource[T] {
 	return &BaseResource[T]{
-		slug:            strings.Trim(slug, "/"),
-		modelName:       strings.Title(slug),
-		pluralModelName: strings.Title(slug),
-		navIcon:         "heroicon-rectangle-stack",
-		relations:       make([]RelationManager, 0),
+		slug:               strings.Trim(slug, "/"),
+		modelName:          strings.Title(slug),
+		pluralModelName:    strings.Title(slug),
+		navIcon:            "heroicon-rectangle-stack",
+		relations:          make([]RelationManager, 0),
+		globallySearchable: true,
 	}
+}
+
+func (r *BaseResource[T]) GloballySearchable(enabled ...bool) *BaseResource[T] {
+	if len(enabled) > 0 {
+		r.globallySearchable = enabled[0]
+	} else {
+		r.globallySearchable = true
+	}
+	return r
+}
+
+func (r *BaseResource[T]) IsGloballySearchable() bool {
+	return r.globallySearchable
+}
+
+func (r *BaseResource[T]) GlobalSearchAttributes(attrs ...string) *BaseResource[T] {
+	r.searchAttributes = attrs
+	return r
+}
+
+func (r *BaseResource[T]) GlobalSearchResult(fn func(record T) GlobalSearchResult) *BaseResource[T] {
+	r.globalResultFunc = fn
+	return r
+}
+
+func (r *BaseResource[T]) SearchGlobal(ctx *Context, query string) []GlobalSearchResult {
+	if !r.globallySearchable || r.onList == nil {
+		return nil
+	}
+
+	records, _, err := r.onList(ctx, query, "", "asc", 1, 5, nil)
+	if err != nil || len(records) == 0 {
+		return nil
+	}
+
+	var results []GlobalSearchResult
+	basePath := fmt.Sprintf("%s/%s", ctx.Panel().GetPath(), r.slug)
+
+	for _, rec := range records {
+		if r.globalResultFunc != nil {
+			res := r.globalResultFunc(rec)
+			if res.Group == "" {
+				res.Group = r.pluralModelName
+			}
+			results = append(results, res)
+			continue
+		}
+
+		recID := ""
+		if r.idExtractor != nil {
+			recID = r.idExtractor(rec)
+		}
+		title := fmt.Sprintf("%s #%s", r.modelName, recID)
+
+		results = append(results, GlobalSearchResult{
+			Title: title,
+			URL:   fmt.Sprintf("%s/%s", basePath, recID),
+			Group: r.pluralModelName,
+		})
+	}
+
+	return results
+}
+
+// Authorization methods
+func (r *BaseResource[T]) CanViewAny(fn func(ctx *Context) bool) *BaseResource[T] {
+	r.canViewAny = fn
+	return r
+}
+
+func (r *BaseResource[T]) CanCreate(fn func(ctx *Context) bool) *BaseResource[T] {
+	r.canCreate = fn
+	return r
+}
+
+func (r *BaseResource[T]) CanEdit(fn func(ctx *Context, record T) bool) *BaseResource[T] {
+	r.canEdit = fn
+	return r
+}
+
+func (r *BaseResource[T]) CanDelete(fn func(ctx *Context, record T) bool) *BaseResource[T] {
+	r.canDelete = fn
+	return r
 }
 
 func (r *BaseResource[T]) ID() string {
@@ -212,6 +307,16 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 	router.POST(basePath+"/bulk", func(c *gcontext.Context) error {
 		ctx := NewContext(c, p)
 		return r.handleBulk(ctx, basePath)
+	})
+
+	router.GET(basePath+"/export", func(c *gcontext.Context) error {
+		ctx := NewContext(c, p)
+		return r.handleExportCSV(ctx)
+	})
+
+	router.POST(basePath+"/live", func(c *gcontext.Context) error {
+		ctx := NewContext(c, p)
+		return r.handleLive(ctx)
 	})
 
 	// 3. Wildcard :id routes
@@ -464,9 +569,84 @@ func (r *BaseResource[T]) handleBulk(ctx *Context, basePath string) error {
 
 	if action == "delete_bulk" && r.onDeleteBulk != nil && len(selectedIDs) > 0 {
 		_ = r.onDeleteBulk(ctx, selectedIDs)
+	} else if action == "export_bulk" {
+		return r.handleExportCSV(ctx, selectedIDs...)
 	}
 
 	return ctx.Redirect(http.StatusSeeOther, basePath)
+}
+
+func (r *BaseResource[T]) handleExportCSV(ctx *Context, filterIDs ...string) error {
+	if r.onList == nil {
+		return ctx.String(http.StatusInternalServerError, "No list provider configured")
+	}
+
+	records, _, err := r.onList(ctx, "", "", "asc", 1, 10000, nil)
+	if err != nil {
+		return ctx.String(http.StatusInternalServerError, "Failed to load records for export: %v", err)
+	}
+
+	ctx.Response.Header().Set("Content-Type", "text/csv")
+	ctx.Response.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s-export.csv\"", r.slug))
+
+	writer := csv.NewWriter(&ctx.Response)
+	defer writer.Flush()
+
+	// Write Header
+	_ = writer.Write([]string{"ID", "Name", "Details"})
+
+	for _, rec := range records {
+		recID := ""
+		if r.idExtractor != nil {
+			recID = r.idExtractor(rec)
+		}
+		// If specific IDs selected, filter
+		if len(filterIDs) > 0 {
+			matched := false
+			for _, fid := range filterIDs {
+				if fid == recID {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+		_ = writer.Write([]string{recID, fmt.Sprintf("%v", rec), "Exported from GoFilament"})
+	}
+
+	return nil
+}
+
+func (r *BaseResource[T]) handleLive(ctx *Context) error {
+	_ = ctx.Request.ParseForm()
+	data := make(map[string]any)
+	for k, v := range ctx.Request.PostForm {
+		if len(v) == 1 {
+			data[k] = v[0]
+		} else {
+			data[k] = v
+		}
+	}
+
+	form := forms.New()
+	if r.formBuilder != nil {
+		form = r.formBuilder(form)
+	}
+	form.Fill(data)
+
+	// Trigger afterUpdated hook on the changed field if specified
+	liveField := ctx.FormValue("_live_field")
+	if liveField != "" {
+		if comp := form.GetField(liveField); comp != nil {
+			if hook, ok := comp.(interface{ TriggerAfterUpdated(state any, f *forms.Form) }); ok {
+				hook.TriggerAfterUpdated(data[liveField], form)
+			}
+		}
+	}
+
+	return ctx.HTML(http.StatusOK, form.Render(ctx.GoContext()))
 }
 
 func (r *BaseResource[T]) renderPage(ctx *Context, pageTitle, innerContent string) error {
