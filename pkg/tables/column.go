@@ -284,6 +284,11 @@ func (c *BadgeColumnDef[T]) Colors(colors map[string]string) *BadgeColumnDef[T] 
 	return c
 }
 
+func (c *BadgeColumnDef[T]) Value(fn func(record T) any) *BadgeColumnDef[T] {
+	c.BaseColumn.Value(fn)
+	return c
+}
+
 func (c *BadgeColumnDef[T]) RenderCell(record T, rawValue any) string {
 	val := ""
 	if c.valueFunc != nil {

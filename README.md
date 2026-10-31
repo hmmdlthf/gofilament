@@ -605,6 +605,68 @@ taskResource.AuthorizeWithGate("tasks")
 
 ---
 
+## 📜 Activity Log & Audit Trail Timeline (`pkg/activitylog`)
+
+GoFilament features a comprehensive, production-grade **Activity Log & Audit Trail** package for tracking entity history, user actions, system events, and changesets:
+
+### 1. Fluent Activity Logger
+
+```go
+// Log custom actions anywhere in your application
+activitylog.Log("Customer credit limit increased").
+    Subject("Customer", "42").
+    Causer("Admin", "1", "Alice Admin").
+    Event("updated").
+    WithDiff(
+        map[string]any{"credit_limit": 5000},
+        map[string]any{"credit_limit": 15000},
+    ).
+    Property("approved_by_finance", true).
+    IP(c.ClientIP()).
+    Save(c.Request.Context())
+```
+
+### 2. Automated Resource Auditing (Zero Boilerplate)
+
+Automatically track all Create, Update, and Delete actions with pre/post changeset diffs and authenticated causers:
+
+```go
+userResource := filament.NewResource[*ent.User]("users")
+
+// Automatically logs all CRUD actions on the resource
+activitylog.EnableAuditLog(userResource)
+// Or via the top-level helper:
+gofilament.EnableAuditLog(userResource)
+```
+
+### 3. Vertical Audit Timeline & Infolist Component
+
+Embed visual audit timelines with interactive diff inspectors directly inside resource View schemas:
+
+```go
+userResource.Infolist(func(infolist *infolists.Infolist) *infolists.Infolist {
+    return infolist.Schema(
+        infolists.Section("User Details").Schema(
+            infolists.TextEntry("name"),
+            infolists.TextEntry("email"),
+        ),
+        infolists.Section("Audit Trail & History").Schema(
+            activitylog.TimelineEntry("activities").
+                Title("Recent Activity").
+                Filterable(true).        // Live client-side event filtering and search
+                CollapsibleDiffs(true),  // Expandable changeset diff accordions
+        ),
+    )
+})
+```
+
+- **Interactive Changeset Diff Inspector**: Expands before/after comparison tables showing field changes with strikethrough red pills for previous values and green pills for updated values.
+- **Continuous Connected Timeline Spine**: Visual status node circles with event icons (plus for created, pencil for updated, trash for deleted, check for approved, etc.).
+- **Actor Badges & Fallbacks**: Renders actor avatars or automatic initials badges (`AA` for Alice Admin) with hoverable exact timestamps and relative time representation ("just now", "15 minutes ago", "yesterday").
+- **Standalone Audit Resource**: Mount `gofilament.NewActivityResource()` (or `activitylog.NewActivityResource()`) to provide administrators with a complete audit browsing and search interface in the panel navigation.
+
+---
+
 ## 📱 Flutter Multiplatform & Mobile-First Admin Engine
 
 GoFilament introduces **multi-engine admin panel support**. In addition to the default Templ SSR web engine, you can run your admin panel with **Flutter Multiplatform** (`filament.EngineFlutter`), turning your admin panel into a **native, responsive, mobile-first experience** across iOS, Android, macOS, Windows, Linux, and compiled Web SPA:

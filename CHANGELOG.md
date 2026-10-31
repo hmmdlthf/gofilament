@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.17.0] - 2026-10-31
+
+### Added
+- **Activity Log & Audit Trail Timeline (`pkg/activitylog`, `gofilament.LogActivity`, `gofilament.EnableAuditLog`, `gofilament.NewActivityResource`)**:
+  - **Core Activity & Changeset Diff Engine (`pkg/activitylog/activity.go`)**:
+    - Comprehensive `Activity` model capturing `Subject` (entity type & ID), `Causer` (actor ID, name, avatar, type), `Event` (`created`, `updated`, `deleted`, `restored`, `approved`, `rejected`, `login`, custom), `Description`, `OldValues`, `NewValues`, `Properties`, `IPAddress`, `UserAgent`, and timestamps.
+    - Field-level `Diff` engine with deterministic sorting, computing changed, added, and removed attributes with human-readable value representations.
+    - Helper formatters: `TimeAgo` relative time ("just now", "5 minutes ago", "yesterday"), `EventColor` palettes, and `GetInitials` avatar fallbacks.
+  - **Thread-Safe Storage Layer (`pkg/activitylog/store.go`)**:
+    - Pluggable `Store` interface supporting `Log`, `GetByID`, `GetBySubject`, `GetByCauser`, `Query` (with multi-criteria filtering, search, and pagination), and `Clear`.
+    - High-performance, concurrent-safe `MemoryStore` with atomic ID sequence generation.
+    - Global default store registry (`SetDefaultStore`, `GetDefaultStore`).
+  - **Fluent Activity Logger (`pkg/activitylog/logger.go`)**:
+    - Chainable builder API: `activitylog.Log("description").Subject(...).Causer(...).WithDiff(old, new).Property(...).IP(...).Save()`.
+  - **Vertical Audit Timeline & Infolist Component (`pkg/activitylog/timeline.go`)**:
+    - Modern vertical audit timeline with continuous spine line, event-specific node icons, and colored badge chips.
+    - Causer pill with circular initials badge or avatar image, display name, and causer type.
+    - Relative timestamp with RFC3339 tooltip and IP/UserAgent badges.
+    - **Interactive Alpine.js Diff Inspector**: Expandable changeset accordion toggle (`▾ Changes (N)`) displaying structured before/after comparison tables with red strikethrough for previous values and green pills for updated values.
+    - Live client-side search input and event filter dropdown (`All Events`, `created`, `updated`, etc.) via Alpine.js (`.Filterable(true)`).
+    - `infolists.Entry` integration via `activitylog.TimelineEntry("activities")` for seamless embedding inside Resource View and Edit schemas.
+  - **Automated Resource CRUD Auditing (`pkg/activitylog/observer.go`)**:
+    - `activitylog.EnableAuditLog(resource, store)` (or `gofilament.EnableAuditLog(res)`): Instruments any Filament Resource with zero boilerplate.
+    - Intercepts `OnCreate`, `OnUpdate`, and `OnDelete` handlers, automatically extracting authenticated causers from `ctx.User()`, client IP, user agent, and computing field-level diffs against pre-update records.
+  - **Pre-Configured Administrative Audit Resource (`pkg/activitylog/resource.go`)**:
+    - `activitylog.NewActivityResource()` (or `gofilament.NewActivityResource()`): Ready-to-mount Filament Resource in the "System" navigation group.
+    - Features event badge columns, subject/causer columns, description, IP, relative timestamps, event filters, and detailed view timeline.
+  - **Table Improvements (`pkg/tables/column.go`)**:
+    - Added fluent `.Value(fn)` method on `tables.BadgeColumnDef[T]`.
+
+---
+
 ## [v1.16.0] - 2026-10-31
 
 ### Added

@@ -3,12 +3,13 @@
 package gofilament
 
 import (
+	"github.com/golaravel/gofilament/pkg/activitylog"
 	"github.com/golaravel/gofilament/pkg/entdriver"
 	"github.com/golaravel/gofilament/pkg/filament"
 )
 
 // Version is the current GoFilament release version.
-const Version = "v1.16.0"
+const Version = "v1.17.0"
 
 // NewPanel creates a new admin panel instance.
 func NewPanel(id string) *filament.Panel {
@@ -23,4 +24,19 @@ func NewResource[T any](slug string) *filament.BaseResource[T] {
 // BindEntClient binds an Ent entity client (e.g. client.User, client.Invoice) to a resource with zero boilerplate.
 func BindEntClient[T any](res *filament.BaseResource[T], client any) *filament.BaseResource[T] {
 	return entdriver.BindClient(res, client)
+}
+
+// LogActivity initiates a new fluent audit trail activity log.
+func LogActivity(description ...string) *activitylog.Builder {
+	return activitylog.Log(description...)
+}
+
+// EnableAuditLog automatically captures create, update, and delete audit trails on a resource.
+func EnableAuditLog[T any](res *filament.BaseResource[T], store ...activitylog.Store) *filament.BaseResource[T] {
+	return activitylog.EnableAuditLog[T](res, store...)
+}
+
+// NewActivityResource returns a pre-configured audit trail administrative resource.
+func NewActivityResource(store ...activitylog.Store) *filament.BaseResource[*activitylog.Activity] {
+	return activitylog.NewActivityResource(store...)
 }
