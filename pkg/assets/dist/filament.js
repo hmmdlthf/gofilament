@@ -74,6 +74,73 @@
       }
     },
 
+    // Inline Cell Editing
+    updateCell: function(url, recordId, column, value, element) {
+      if (element) {
+        element.style.opacity = '0.6';
+      }
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          record_id: recordId,
+          column: column,
+          value: value
+        })
+      })
+      .then(r => {
+        if (!r.ok) throw new Error('Save failed');
+        return r.json().catch(() => ({ success: true }));
+      })
+      .then(data => {
+        if (element) {
+          element.style.opacity = '1';
+          element.classList.add('cell-saved');
+          setTimeout(() => element.classList.remove('cell-saved'), 1000);
+        }
+        this.notify({ type: 'success', title: 'Saved', body: 'Field value updated', duration: 2500 });
+      })
+      .catch(err => {
+        if (element) {
+          element.style.opacity = '1';
+          element.style.borderColor = '#ef4444';
+          setTimeout(() => element.style.borderColor = '', 2000);
+        }
+        this.notify({ type: 'danger', title: 'Error', body: 'Failed to update field', duration: 4000 });
+        console.error('Cell update failed:', err);
+      });
+    },
+
+    // Row Reordering
+    reorderRows: function(url, tableElement) {
+      if (!tableElement) return;
+      const rows = tableElement.querySelectorAll('tbody tr[data-id]');
+      const order = Array.from(rows).map(r => r.getAttribute('data-id'));
+      
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ order: order })
+      })
+      .then(r => {
+        if (!r.ok) throw new Error('Reorder failed');
+        return r.json().catch(() => ({ success: true }));
+      })
+      .then(() => {
+        this.notify({ type: 'success', title: 'Reordered', body: 'New row order saved', duration: 2500 });
+      })
+      .catch(err => {
+        this.notify({ type: 'danger', title: 'Error', body: 'Failed to save row order', duration: 4000 });
+        console.error('Row reorder failed:', err);
+      });
+    },
+
     // Live Field Debounce Update for Forms
     liveUpdate: function(formId, fieldName, triggerUrl) {
       const form = document.getElementById(formId);

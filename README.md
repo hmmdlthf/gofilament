@@ -302,11 +302,51 @@ forms.TextInput("title").
 
 ## 📊 Table Builder Features
 
-- **Typed Generics**: `tables.New[T]()` guarantees field accuracy and prevents runtime reflection overhead.
-- **Server-Side Pagination & Sorting**: Dynamic sorting links with directional indicators (`↑`, `↓`).
-- **Global & Column Search**: Filter thousands of records with server-side queries.
-- **Filters**: `SelectFilter`, `TernaryFilter` (soft-deletes / boolean flags), and custom predicate filters.
-- **Row & Bulk Actions**: In-line View/Edit/Delete actions and multi-record bulk operations.
+GoFilament's Table Builder (`pkg/tables`) provides a high-performance, type-safe data grid with server-side pagination, sorting, filtering, bulk actions, and advanced client interactivity:
+
+```go
+table := tables.New[*Customer]().
+    Toggleable(true).               // Enable Column Show/Hide dropdown
+    Reorderable("sort_order").      // Enable Drag-and-Drop row reordering
+    Columns(
+        tables.TextColumn[*Customer]("id").Sortable(),
+        tables.TextColumn[*Customer]("name").Editable(true).Sortable(), // Inline editable on click
+        tables.SelectColumn[*Customer]("status").Options(map[string]string{
+            "active":   "Active",
+            "inactive": "Inactive",
+            "pending":  "Pending Review",
+        }), // Inline select dropdown
+        tables.ToggleColumn[*Customer]("is_verified"),                 // Interactive toggle switch
+        tables.TextColumn[*Customer]("email").Copyable(),
+        tables.TextColumn[*Customer]("notes").ToggledHiddenByDefault(true), // Hidden until toggled
+    ).
+    Filters(
+        tables.SelectFilter("status").Options(map[string]string{
+            "active": "Active Only",
+        }),
+    ).
+    Actions(
+        tables.EditAction[*Customer](),
+        tables.DeleteAction[*Customer](),
+    ).
+    BulkActions(
+        tables.DeleteBulkAction(),
+        tables.ExportBulkAction(),
+    )
+```
+
+### ⚡ Advanced Table Capabilities:
+
+- **✏️ Inline Cell Editing**: Edit values directly in the table row without opening edit modals or full pages:
+  - `TextInputColumn[T](name)`: Direct inline text edits synced on blur or `Enter`.
+  - `SelectColumn[T](name)`: Immediate status/role updates via interactive dropdown.
+  - `ToggleColumn[T](name)`: Instant visual switch animation persisting state asynchronously.
+  - `TextColumn[T](name).Editable(true)`: Click-to-edit inline field with `Esc` revert and `Enter` save.
+  - Automatic backend integration: Routes `POST /admin/{resource}/cell` and `POST/PATCH /admin/api/resources/{slug}/:id/cell`, triggering `r.OnCellUpdate(func(ctx, id, column, value) error)` or model updates.
+- **👁️ Dynamic Column Toggling (Show/Hide)**: Operators can customize which columns are visible via a "Columns" dropdown menu. Preferences are automatically persisted to browser `localStorage` across page visits.
+- **↕️ Drag-and-Drop Row Reordering**: Reorder records with grip handles (`⋮⋮`). Dragging a row dispatches an asynchronous update to `POST /admin/{resource}/reorder` and `POST /admin/api/resources/{slug}/reorder`, calling `r.OnReorder(func(ctx, orderedIDs) error)`.
+- **🚀 Server-Side Sorting & Filtering**: Multi-column sorting (`↑`, `↓`), search bars, `SelectFilter`, and `TernaryFilter` (soft-deletes).
+- **📦 Streaming Bulk & Header Actions**: In-line View/Edit/Delete actions, multi-record delete, and streaming data export (`CSV`, `TSV`, `JSON`).
 
 ---
 

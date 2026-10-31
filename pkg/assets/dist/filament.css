@@ -1043,5 +1043,50 @@ body {
   color: #9ca3af;
 }
 
+/* ==========================================================================
+   Advanced Table Features: Drag & Drop Reordering, Inline Edit, Toggles
+   ========================================================================== */
+.table-row-draggable {
+  transition: background-color 0.15s ease;
+}
+
+.table-row-dragging {
+  opacity: 0.45;
+  background-color: var(--primary-50, #eef2ff) !important;
+}
+
+.dark .table-row-dragging {
+  background-color: #1e1b4b !important;
+}
+
+.drag-handle {
+  cursor: grab;
+  user-select: none;
+  font-size: 1.125rem;
+  letter-spacing: -2px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle:hover {
+  color: var(--primary-600) !important;
+}
+
+.inline-edit-text:hover {
+  color: var(--primary-600);
+}
+
+.cell-saved {
+  box-shadow: 0 0 0 2px #10b981 !important;
+  transition: box-shadow 0.2s ease;
+}
+
+.filament-toggle-switch:focus {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
+}
+
 
 

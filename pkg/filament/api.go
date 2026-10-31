@@ -618,6 +618,45 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		})
 	})
 
+	// POST /admin/api/resources/:slug/reorder - Row Reorder
+	r.POST(resPath+"/reorder", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		data := parseRequestData(c)
+		var order []string
+		if rawOrder, ok := data["order"]; ok {
+			if slice, ok := rawOrder.([]string); ok {
+				order = slice
+			} else if sliceAny, ok := rawOrder.([]any); ok {
+				for _, it := range sliceAny {
+					order = append(order, fmt.Sprintf("%v", it))
+				}
+			}
+		}
+
+		if len(order) == 0 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "No order array provided"})
+		}
+
+		if invoker, ok := res.(interface {
+			InvokeReorder(ctx *Context, orderedIDs []string) error
+		}); ok {
+			if err := invoker.InvokeReorder(ctx, order); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"success": true,
+				"order":   order,
+				"message": "Rows reordered successfully",
+			})
+		}
+
+		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Reorder not implemented"})
+	})
+
 	// GET /admin/api/resources/:slug/:id - Find
 	r.GET(resPath+"/:id", func(c *gcontext.Context) error {
 		ctx, err := p.AuthorizeAccess(c)
@@ -715,6 +754,41 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 	}
 	r.DELETE(resPath+"/:id", deleteHandler)
 	r.POST(resPath+"/:id/delete", deleteHandler)
+
+	// POST & PATCH /admin/api/resources/:slug/:id/cell - Inline Cell Edit
+	cellUpdateAPIHandler := func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		id := c.Param("id")
+		data := parseRequestData(c)
+		col := fmt.Sprintf("%v", data["column"])
+		val := data["value"]
+
+		if col == "" || col == "<nil>" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Column is required"})
+		}
+
+		if invoker, ok := res.(interface {
+			InvokeCellUpdate(ctx *Context, id, column string, value any) error
+		}); ok {
+			if err := invoker.InvokeCellUpdate(ctx, id, col, val); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"success": true,
+				"id":      id,
+				"column":  col,
+				"value":   val,
+				"message": "Cell updated successfully",
+			})
+		}
+
+		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Cell update not implemented"})
+	}
+	r.POST(resPath+"/:id/cell", cellUpdateAPIHandler)
+	r.PATCH(resPath+"/:id/cell", cellUpdateAPIHandler)
 
 	// ----------------------------------------------------
 	// Nested Relation Manager Endpoints

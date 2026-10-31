@@ -67,6 +67,12 @@ type DeleteHandlerFunc func(ctx *Context, id string) error
 // DeleteBulkHandlerFunc is the callback to delete multiple records.
 type DeleteBulkHandlerFunc func(ctx *Context, ids []string) error
 
+// ReorderHandlerFunc is the callback to persist a new order of record IDs.
+type ReorderHandlerFunc func(ctx *Context, orderedIDs []string) error
+
+// CellUpdateHandlerFunc is the callback to update a single cell on a record.
+type CellUpdateHandlerFunc func(ctx *Context, id, column string, value any) error
+
 // BaseResource implements ResourceInterface with generic Ent/model type T.
 type BaseResource[T any] struct {
 	slug            string
@@ -89,6 +95,8 @@ type BaseResource[T any] struct {
 	onUpdate     UpdateHandlerFunc
 	onDelete     DeleteHandlerFunc
 	onDeleteBulk DeleteBulkHandlerFunc
+	onReorder    ReorderHandlerFunc
+	onCellUpdate CellUpdateHandlerFunc
 	// Authorization
 	canViewAny   func(ctx *Context) bool
 	canView      func(ctx *Context, record T) bool
@@ -462,12 +470,30 @@ func (r *BaseResource[T]) GetOnUpdate() UpdateHandlerFunc {
 	return r.onUpdate
 }
 
+func (r *BaseResource[T]) OnReorder(fn ReorderHandlerFunc) *BaseResource[T] {
+	r.onReorder = fn
+	return r
+}
+
+func (r *BaseResource[T]) OnCellUpdate(fn CellUpdateHandlerFunc) *BaseResource[T] {
+	r.onCellUpdate = fn
+	return r
+}
+
 func (r *BaseResource[T]) GetOnDelete() DeleteHandlerFunc {
 	return r.onDelete
 }
 
 func (r *BaseResource[T]) GetOnDeleteBulk() DeleteBulkHandlerFunc {
 	return r.onDeleteBulk
+}
+
+func (r *BaseResource[T]) GetOnReorder() ReorderHandlerFunc {
+	return r.onReorder
+}
+
+func (r *BaseResource[T]) GetOnCellUpdate() CellUpdateHandlerFunc {
+	return r.onCellUpdate
 }
 
 func (r *BaseResource[T]) NavigationItem(ctx *Context) *NavigationItem {
@@ -556,6 +582,26 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 		}
 		return r.handleLive(ctx)
 	})
+
+	// Row Reorder endpoint
+	router.POST(basePath+"/reorder", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return r.handleReorder(ctx, basePath)
+	})
+
+	// Inline Cell Editing endpoint
+	cellHandler := func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return r.handleCellUpdate(ctx, basePath, "")
+	}
+	router.POST(basePath+"/cell", cellHandler)
+	router.PATCH(basePath+"/cell", cellHandler)
 
 	// 3. Wildcard :id routes
 	router.GET(basePath+"/:id", func(c *gcontext.Context) error {
@@ -1531,6 +1577,114 @@ func (r *BaseResource[T]) InvokeDelete(ctx *Context, id string) error {
 		return fmt.Errorf("delete not implemented")
 	}
 	return r.onDelete(ctx, id)
+}
+
+func (r *BaseResource[T]) handleReorder(ctx *Context, basePath string) error {
+	data := parseRequestData(ctx.Context)
+	var order []string
+	if rawOrder, ok := data["order"]; ok {
+		if slice, ok := rawOrder.([]string); ok {
+			order = slice
+		} else if sliceAny, ok := rawOrder.([]any); ok {
+			for _, it := range sliceAny {
+				order = append(order, fmt.Sprintf("%v", it))
+			}
+		}
+	} else if rawOrderSlice, ok := data["order[]"]; ok {
+		if slice, ok := rawOrderSlice.([]string); ok {
+			order = slice
+		} else if sliceAny, ok := rawOrderSlice.([]any); ok {
+			for _, it := range sliceAny {
+				order = append(order, fmt.Sprintf("%v", it))
+			}
+		}
+	}
+
+	if len(order) == 0 {
+		return ctx.JSON(http.StatusBadRequest, map[string]any{"error": "No order provided"})
+	}
+
+	if r.onReorder != nil {
+		if err := r.onReorder(ctx, order); err != nil {
+			return ctx.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		}
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]any{
+		"success": true,
+		"order":   order,
+	})
+}
+
+func (r *BaseResource[T]) handleCellUpdate(ctx *Context, basePath, id string) error {
+	data := parseRequestData(ctx.Context)
+	if id == "" {
+		if recID, ok := data["record_id"]; ok && recID != nil {
+			id = fmt.Sprintf("%v", recID)
+		} else if recID, ok := data["id"]; ok && recID != nil {
+			id = fmt.Sprintf("%v", recID)
+		}
+	}
+	if id == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]any{"error": "Record ID is required"})
+	}
+
+	col := ""
+	if c, ok := data["column"]; ok && c != nil {
+		col = fmt.Sprintf("%v", c)
+	}
+	val := data["value"]
+
+	if col == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]any{"error": "Column is required"})
+	}
+
+	if r.onFind != nil && r.canEdit != nil {
+		rec, err := r.onFind(ctx, id)
+		if err == nil && !r.canEdit(ctx, rec) {
+			return ctx.JSON(http.StatusForbidden, map[string]any{"error": "403 Forbidden: Access denied"})
+		}
+	}
+
+	if r.onCellUpdate != nil {
+		if err := r.onCellUpdate(ctx, id, col, val); err != nil {
+			return ctx.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		}
+	} else if r.onUpdate != nil {
+		if err := r.onUpdate(ctx, id, map[string]any{col: val}); err != nil {
+			return ctx.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		}
+	}
+
+	return ctx.JSON(http.StatusOK, map[string]any{
+		"success": true,
+		"id":      id,
+		"column":  col,
+		"value":   val,
+	})
+}
+
+func (r *BaseResource[T]) InvokeReorder(ctx *Context, orderedIDs []string) error {
+	if r.onReorder != nil {
+		return r.onReorder(ctx, orderedIDs)
+	}
+	return nil
+}
+
+func (r *BaseResource[T]) InvokeCellUpdate(ctx *Context, id, column string, value any) error {
+	if r.onFind != nil && r.canEdit != nil {
+		record, err := r.onFind(ctx, id)
+		if err == nil && !r.canEdit(ctx, record) {
+			return fmt.Errorf("403 Forbidden: Access denied")
+		}
+	}
+	if r.onCellUpdate != nil {
+		return r.onCellUpdate(ctx, id, column, value)
+	}
+	if r.onUpdate != nil {
+		return r.onUpdate(ctx, id, map[string]any{column: value})
+	}
+	return nil
 }
 
 func (r *BaseResource[T]) InvokeDeleteBulk(ctx *Context, ids []string) error {

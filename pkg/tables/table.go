@@ -14,6 +14,17 @@ type ColumnRenderer[T any] interface {
 	RenderCell(record T, rawValue any) string
 }
 
+// CellContextRenderer is an optional interface for columns requiring record ID and basePath context.
+type CellContextRenderer[T any] interface {
+	RenderCellWithContext(record T, recordID, basePath string, rawValue any) string
+}
+
+// ColumnToggleable is an optional interface for columns that can be shown or hidden.
+type ColumnToggleable interface {
+	IsToggleable() bool
+	IsToggledHiddenByDefault() bool
+}
+
 // Table represents a complete data table specification for model type T.
 type Table[T any] struct {
 	columns       []ColumnRenderer[T]
@@ -30,6 +41,9 @@ type Table[T any] struct {
 	sortDir       string
 	activeFilters map[string]string
 	idFunc        func(record T) string
+	toggleable    bool
+	reorderable   bool
+	reorderCol    string
 }
 
 // New creates an empty Table instance.
@@ -44,6 +58,38 @@ func New[T any]() *Table[T] {
 		perPage:       15,
 		activeFilters: make(map[string]string),
 	}
+}
+
+// Toggleable enables or disables the column show/hide toggler.
+func (t *Table[T]) Toggleable(enabled ...bool) *Table[T] {
+	t.toggleable = len(enabled) == 0 || enabled[0]
+	return t
+}
+
+// IsToggleable returns whether column toggling is enabled.
+func (t *Table[T]) IsToggleable() bool {
+	return t.toggleable
+}
+
+// Reorderable enables drag-and-drop row reordering.
+func (t *Table[T]) Reorderable(col ...string) *Table[T] {
+	t.reorderable = true
+	if len(col) > 0 {
+		t.reorderCol = col[0]
+	} else {
+		t.reorderCol = "sort_order"
+	}
+	return t
+}
+
+// IsReorderable returns whether row reordering is enabled.
+func (t *Table[T]) IsReorderable() bool {
+	return t.reorderable
+}
+
+// GetReorderColumn returns the sort order column name.
+func (t *Table[T]) GetReorderColumn() string {
+	return t.reorderCol
 }
 
 // Columns registers table columns.
@@ -186,7 +232,38 @@ func (t *Table[T]) extractFieldValue(record T, name string) any {
 func (t *Table[T]) Render(basePath string) string {
 	var sb strings.Builder
 
-	// Top controls: Search, Filters, Header Actions
+	storageKey := fmt.Sprintf("filament_cols_%s", strings.ReplaceAll(basePath, "/", "_"))
+
+	// Setup Alpine x-data for column toggling
+	alpineData := ""
+	if t.toggleable {
+		var colPairs []string
+		for _, col := range t.columns {
+			hidden := false
+			if ct, ok := col.(ColumnToggleable); ok && ct.IsToggledHiddenByDefault() {
+				hidden = true
+			}
+			colPairs = append(colPairs, fmt.Sprintf(`"%s": %t`, col.GetName(), !hidden))
+		}
+		initialJSON := fmt.Sprintf("{%s}", strings.Join(colPairs, ", "))
+		alpineData = fmt.Sprintf(`x-data="{
+  visibleCols: %s,
+  toggleCol(name) {
+    this.visibleCols[name] = !this.visibleCols[name];
+    try { localStorage.setItem('%s', JSON.stringify(this.visibleCols)); } catch(e){}
+  },
+  init() {
+    try {
+      const saved = localStorage.getItem('%s');
+      if (saved) { Object.assign(this.visibleCols, JSON.parse(saved)); }
+    } catch(e){}
+  }
+}"`, initialJSON, storageKey, storageKey)
+	}
+
+	sb.WriteString(fmt.Sprintf(`<div class="filament-table-root" %s>`, alpineData))
+
+	// Top controls: Search, Filters, Column Toggle, Header Actions
 	sb.WriteString(`<div class="filament-card" style="padding: 1rem 1.25rem; margin-bottom: 1rem;">`)
 	sb.WriteString(fmt.Sprintf(`<form method="GET" action="%s" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem;">`, basePath))
 
@@ -208,9 +285,35 @@ func (t *Table[T]) Render(basePath string) string {
 		sb.WriteString(`</div>`)
 	}
 
+	// Right toolbar controls: Column Toggler & Header Actions
+	sb.WriteString(`<div style="display: flex; gap: 0.5rem; align-items: center;">`)
+
+	// Column Toggler Popover
+	if t.toggleable {
+		sb.WriteString(`<div class="filament-dropdown-wrapper" style="position: relative;" x-data="{ open: false }">`)
+		sb.WriteString(`<button type="button" @click="open = !open" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.375rem;">`)
+		sb.WriteString(`<svg style="width: 1rem; height: 1rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>`)
+		sb.WriteString(`<span>Columns</span></button>`)
+		sb.WriteString(`<div x-show="open" @click.outside="open = false" style="display: none; position: absolute; right: 0; margin-top: 0.375rem; width: 14rem; background: white; border: 1px solid var(--gray-200); border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); padding: 0.5rem; z-index: 50;" :style="open ? 'display: block;' : 'display: none;'">`)
+		sb.WriteString(`<div style="font-size: 0.75rem; font-weight: 600; color: var(--gray-500); padding: 0.25rem 0.5rem; text-transform: uppercase;">Toggle Columns</div>`)
+		for _, col := range t.columns {
+			isTogg := true
+			if ct, ok := col.(ColumnToggleable); ok && !ct.IsToggleable() {
+				isTogg = false
+			}
+			if isTogg {
+				sb.WriteString(fmt.Sprintf(`
+<label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.5rem; font-size: 0.8125rem; cursor: pointer; border-radius: 0.25rem;" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='transparent'">
+  <input type="checkbox" :checked="visibleCols['%s']" @change="toggleCol('%s')" style="accent-color: var(--primary-600);" />
+  <span>%s</span>
+</label>`, col.GetName(), col.GetName(), html.EscapeString(col.FormatLabel())))
+			}
+		}
+		sb.WriteString(`</div></div>`)
+	}
+
 	// Header Actions
 	if len(t.headerActions) > 0 {
-		sb.WriteString(`<div style="display: flex; gap: 0.5rem; align-items: center;">`)
 		for _, ha := range t.headerActions {
 			btnClass := "btn-primary"
 			if ha.color == "secondary" {
@@ -220,8 +323,8 @@ func (t *Table[T]) Render(basePath string) string {
 			}
 			sb.WriteString(fmt.Sprintf(`<a href="%s/%s" class="btn %s">%s</a>`, basePath, ha.name, btnClass, html.EscapeString(ha.label)))
 		}
-		sb.WriteString(`</div>`)
 	}
+	sb.WriteString(`</div>`)
 
 	sb.WriteString(`</form></div>`)
 
@@ -244,6 +347,11 @@ func (t *Table[T]) Render(basePath string) string {
 	sb.WriteString(`<table class="filament-table">`)
 	sb.WriteString(`<thead><tr>`)
 
+	// Reorder grip header
+	if t.reorderable {
+		sb.WriteString(`<th style="width: 2.5rem; text-align: center;" title="Drag to reorder">&#8942;&#8942;</th>`)
+	}
+
 	// Bulk checkbox header
 	if len(t.bulkActions) > 0 {
 		sb.WriteString(`<th style="width: 2.5rem; text-align: center;"><input type="checkbox" onclick="document.querySelectorAll('.row-select-checkbox').forEach(c => c.checked = this.checked)" /></th>`)
@@ -263,8 +371,12 @@ func (t *Table[T]) Render(basePath string) string {
 				arrow = " ↓"
 			}
 		}
-		sb.WriteString(fmt.Sprintf(`<th><a href="%s" style="color: inherit; text-decoration: none;">%s%s</a></th>`,
-			sortLink, html.EscapeString(col.FormatLabel()), arrow))
+		colStyle := ""
+		if t.toggleable {
+			colStyle = fmt.Sprintf(`:style="!visibleCols['%s'] ? 'display: none;' : ''"`, col.GetName())
+		}
+		sb.WriteString(fmt.Sprintf(`<th data-col="%s" %s><a href="%s" style="color: inherit; text-decoration: none;">%s%s</a></th>`,
+			col.GetName(), colStyle, sortLink, html.EscapeString(col.FormatLabel()), arrow))
 	}
 
 	// Actions column header
@@ -278,6 +390,9 @@ func (t *Table[T]) Render(basePath string) string {
 		if len(t.bulkActions) > 0 {
 			colspan++
 		}
+		if t.reorderable {
+			colspan++
+		}
 		if len(t.actions) > 0 {
 			colspan++
 		}
@@ -285,14 +400,43 @@ func (t *Table[T]) Render(basePath string) string {
 	} else {
 		for _, rec := range t.records {
 			recID := t.extractRecordID(rec)
-			sb.WriteString(`<tr>`)
+			trAttrs := ""
+			if t.reorderable {
+				trAttrs = fmt.Sprintf(`data-id="%s" class="table-row-draggable" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', this.dataset.id); this.classList.add('table-row-dragging');" ondragend="this.classList.remove('table-row-dragging');" ondragover="event.preventDefault(); const dragging = document.querySelector('.table-row-draggable.table-row-dragging'); if (dragging && dragging !== this) { const rect = this.getBoundingClientRect(); const next = (event.clientY - rect.top)/(rect.bottom - rect.top) > 0.5; this.parentNode.insertBefore(dragging, next ? this.nextSibling : this); }" ondrop="event.preventDefault(); Filament.reorderRows('%s/reorder', this.closest('table'));"`, recID, basePath)
+			} else {
+				trAttrs = fmt.Sprintf(`data-id="%s"`, recID)
+			}
+
+			sb.WriteString(fmt.Sprintf(`<tr %s>`, trAttrs))
+
+			// Reorder handle cell
+			if t.reorderable {
+				sb.WriteString(`<td class="drag-handle" style="width: 2.5rem; text-align: center; cursor: grab; color: var(--gray-400); user-select: none;">&#8942;&#8942;</td>`)
+			}
+
+			// Bulk checkbox
 			if len(t.bulkActions) > 0 {
 				sb.WriteString(fmt.Sprintf(`<td style="text-align: center;"><input type="checkbox" name="selected_ids[]" value="%s" class="row-select-checkbox" /></td>`, recID))
 			}
+
+			// Render columns
 			for _, col := range t.columns {
 				raw := t.extractFieldValue(rec, col.GetName())
-				sb.WriteString(fmt.Sprintf(`<td>%s</td>`, col.RenderCell(rec, raw)))
+				colStyle := ""
+				if t.toggleable {
+					colStyle = fmt.Sprintf(`:style="!visibleCols['%s'] ? 'display: none;' : ''"`, col.GetName())
+				}
+
+				cellHTML := ""
+				if ccr, ok := col.(CellContextRenderer[T]); ok {
+					cellHTML = ccr.RenderCellWithContext(rec, recID, basePath, raw)
+				} else {
+					cellHTML = col.RenderCell(rec, raw)
+				}
+
+				sb.WriteString(fmt.Sprintf(`<td data-col="%s" %s>%s</td>`, col.GetName(), colStyle, cellHTML))
 			}
+
 			if len(t.actions) > 0 {
 				sb.WriteString(`<td style="text-align: right;"><div style="display: inline-flex; gap: 0.375rem;">`)
 				for _, act := range t.actions {
@@ -329,6 +473,8 @@ func (t *Table[T]) Render(basePath string) string {
 		sb.WriteString(`</div>`)
 	}
 	sb.WriteString(`</div>`)
+
+	sb.WriteString(`</div>`) // Close filament-table-root
 
 	return sb.String()
 }

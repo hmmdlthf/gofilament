@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.15.0] - 2026-10-31
+
+### Added
+- **Advanced Table Features: Inline Cell Editing, Column Toggling & Drag-and-Drop Row Reordering (`pkg/tables`, `pkg/filament/resource.go`, `pkg/filament/api.go`, `pkg/assets/dist`)**:
+  - **Inline Cell Editing (`pkg/tables/column.go`, `pkg/tables/advanced_columns.go`)**:
+    - `CellContextRenderer[T]`: Interface enabling columns to access record IDs, base paths, and contextual metadata.
+    - `TextInputColumn[T]`: Direct inline editing of text cells with real-time blur/enter synchronization to the backend.
+    - `SelectColumn[T]`: Inline dropdown selector updating model values immediately on option change.
+    - `ToggleColumn[T]`: Interactive toggle switch button with optimistic visual animation and server-side state persistence.
+    - `TextColumn[T].Editable()`: Click-to-edit inline text fields with quick cancel (`Esc`) and save (`Enter`/blur).
+    - Web & REST API: `POST /admin/{resource}/cell` and `POST/PATCH /admin/api/resources/{slug}/:id/cell` with custom handler support (`r.OnCellUpdate(func(ctx, id, column, value) error)`).
+  - **Dynamic Column Toggling (Show/Hide) (`pkg/tables/table.go`)**:
+    - `table.Toggleable(true)`: Adds a sleek "Columns" dropdown menu to table toolbars.
+    - Column control methods: `.Toggleable(bool)` and `.ToggledHiddenByDefault(bool)` to configure default visibility.
+    - Instant client-side show/hide via Alpine.js `:style="!visibleCols['name'] ? 'display: none;' : ''"` without full-page reloads.
+    - Persistent settings: Automatically caches column visibility choices in browser `localStorage` keyed per resource path.
+  - **Drag-and-Drop Row Reordering (`pkg/tables/table.go`, `pkg/filament/resource.go`, `pkg/assets/dist`)**:
+    - `table.Reorderable("sort_order")`: Adds grip handle headers (`⋮⋮`) and drag handle table cells.
+    - Drag & drop DOM interaction with visual drop indicator styling (`.table-row-dragging`).
+    - Asynchronous reorder dispatch: Sends new record ID sequences (`POST /admin/{resource}/reorder` and `POST /admin/api/resources/{slug}/reorder`).
+    - Custom callback integration: `r.OnReorder(func(ctx *filament.Context, orderedIDs []string) error)`.
+  - **Client Runtime & Styling Updates (`pkg/assets/dist/filament.js`, `pkg/assets/dist/filament.css`)**:
+    - Added `Filament.updateCell` and `Filament.reorderRows` helper functions with toast notifications and optimistic state indicators.
+    - Added CSS for drag-and-drop handles, dragging state elevation, toggle switches, and cell-saved animations.
+
+---
+
 ## [v1.14.0] - 2026-10-31
 
 ### Added
