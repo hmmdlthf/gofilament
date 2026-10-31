@@ -162,19 +162,66 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		if err != nil {
 			return err
 		}
-		_ = ctx
 
 		var widgetData []map[string]any
 		for _, w := range p.widgets {
-			widgetData = append(widgetData, map[string]any{
+			dto := map[string]any{
 				"id":          w.ID(),
 				"sort":        w.Sort(),
 				"column_span": w.ColumnSpan(),
-			})
+			}
+			if chart, ok := w.(interface {
+				GetHeading() string
+				GetChartTypeString() string
+				GetFilters() map[string]string
+				GetDefaultFilter() string
+				GetDrilldownPattern() string
+				GetPolling() string
+				EvaluateChartData(ctx *Context, filter string) any
+			}); ok {
+				dto["type"] = "chart"
+				dto["heading"] = chart.GetHeading()
+				dto["chart_type"] = chart.GetChartTypeString()
+				dto["filters"] = chart.GetFilters()
+				dto["default_filter"] = chart.GetDefaultFilter()
+				dto["drilldown_url"] = chart.GetDrilldownPattern()
+				dto["polling"] = chart.GetPolling()
+				dto["data"] = chart.EvaluateChartData(ctx, "")
+			} else if stats, ok := w.(interface {
+				EvaluateStatsMap(ctx *Context) []map[string]any
+			}); ok {
+				dto["type"] = "stats_overview"
+				dto["stats"] = stats.EvaluateStatsMap(ctx)
+			}
+			widgetData = append(widgetData, dto)
 		}
 		return c.JSON(http.StatusOK, map[string]any{
 			"widgets": widgetData,
 		})
+	})
+
+	r.GET(apiPrefix+"/widgets/:id/data", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		widgetID := c.Param("id")
+		filter := ctx.Query("filter")
+		if filter == "" {
+			filter = ctx.DefaultQuery("period", "")
+		}
+
+		for _, w := range p.widgets {
+			if w.ID() == widgetID {
+				if chartWidget, ok := w.(interface {
+					EvaluateChartData(ctx *Context, filter string) any
+				}); ok {
+					data := chartWidget.EvaluateChartData(ctx, filter)
+					return c.JSON(http.StatusOK, data)
+				}
+			}
+		}
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Widget not found"})
 	})
 
 	// 4. Notifications REST API

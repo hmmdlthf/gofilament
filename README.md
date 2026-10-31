@@ -482,6 +482,40 @@ table.HeaderActions(
 
 ---
 
+## 📊 Dynamic Chart Drilldowns & Live Metric Dashboards
+
+Build reactive, real-time KPI and graphical dashboards with zero JavaScript build steps:
+
+### 📈 Interactive Chart Widgets:
+- **Filters & Preset Ranges**: Select from filter presets (`today`, `7d`, `30d`, `quarter`, `year`) or native date range pickers (`DateRangePicker(true)`).
+- **Asynchronous In-Place Updates**: Changing a filter triggers a background fetch to `/admin/widgets/:id/data?filter=...` that updates chart datasets smoothly using Chart.js animations without reloading the page.
+- **Click-Through Drilldowns**: Click on any bar, line point, or pie segment to navigate directly to filtered resource tables with token replacement:
+  ```go
+  chart := widgets.NewChartWidget("Revenue Analytics", widgets.ChartTypeBar).
+      WidgetID("revenue_analytics").
+      Filters(map[string]string{
+          "7d":  "Last 7 Days",
+          "30d": "Last 30 Days",
+      }).
+      DefaultFilter("7d").
+      Drilldown("/admin/orders?status={label}&source=chart").
+      DateRangePicker(true).
+      Polling("15s").
+      FilterData(func(ctx *filament.Context, filter string) widgets.ChartData {
+          return widgets.ChartData{
+              Labels: []string{"Completed", "Pending", "Failed"},
+              Datasets: []widgets.ChartDataset{
+                  {Label: "Orders", Data: []float64{120, 45, 8}},
+              },
+          }
+      })
+  ```
+- **Live Metric Polling**: Configure `Polling("10s")` for continuous background telemetry updates.
+- **Clickable Stat Overview Cards**: Wrap KPI cards in drilldown links (`Stat.URL("/admin/invoices?status=pending")`) with animated hover elevation.
+- **Automatic Grid Placement**: The panel automatically arranges registered widgets in responsive 3-column CSS grids respecting `.SetColumnSpan()` and `.SetSort()`.
+
+---
+
 ---
 
 ## 💻 Artisan CLI Generators

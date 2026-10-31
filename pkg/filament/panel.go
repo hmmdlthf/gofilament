@@ -610,7 +610,32 @@ func (p *Panel) Mount(r *router.Router) {
 		return c.Redirect(http.StatusMovedPermanently, p.path)
 	})
 
-	// 5. Database Notifications Routes
+	// 5. Dynamic Widget Data Endpoint (AJAX filter updates & live metric polling)
+	r.GET(p.path+"/widgets/:id/data", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		widgetID := c.Param("id")
+		filter := ctx.Query("filter")
+		if filter == "" {
+			filter = ctx.DefaultQuery("period", "")
+		}
+
+		for _, w := range p.widgets {
+			if w.ID() == widgetID {
+				if chartWidget, ok := w.(interface {
+					EvaluateChartData(ctx *Context, filter string) any
+				}); ok {
+					data := chartWidget.EvaluateChartData(ctx, filter)
+					return c.JSON(http.StatusOK, data)
+				}
+			}
+		}
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Widget not found"})
+	})
+
+	// 6. Database Notifications Routes
 	if p.hasNotifications {
 		r.GET(p.path+"/notifications", func(c *gcontext.Context) error {
 			ctx, err := p.AuthorizeAccess(c)
@@ -712,6 +737,51 @@ func (p *Panel) Register(app *golaravel.Engine) error {
 // Default Dashboard fallback
 func (p *Panel) renderDefaultDashboard(ctx *Context) error {
 	title := "Dashboard"
+
+	var dashboardContent string
+	if len(p.widgets) > 0 {
+		sortedWidgets := make([]WidgetInterface, len(p.widgets))
+		copy(sortedWidgets, p.widgets)
+		sort.Slice(sortedWidgets, func(i, j int) bool {
+			return sortedWidgets[i].Sort() < sortedWidgets[j].Sort()
+		})
+
+		var sb strings.Builder
+		sb.WriteString(`<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">`)
+		for _, w := range sortedWidgets {
+			spanClass := "col-span-1"
+			if w.ColumnSpan() >= 3 {
+				spanClass = "col-span-1 md:col-span-3"
+			} else if w.ColumnSpan() == 2 {
+				spanClass = "col-span-1 md:col-span-2"
+			}
+			if renderer, ok := w.(interface{ Render(ctx *Context) string }); ok {
+				sb.WriteString(fmt.Sprintf(`<div class="%s">%s</div>`, spanClass, renderer.Render(ctx)))
+			}
+		}
+		sb.WriteString(`</div>`)
+		dashboardContent = sb.String()
+	} else {
+		dashboardContent = fmt.Sprintf(`
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="stat-card filament-card">
+            <span class="text-sm font-medium text-gray-500">System Status</span>
+            <span class="stat-value text-emerald-600 mt-2">Operational</span>
+            <span class="text-xs text-gray-400 mt-1">GoLaravel Kernel Active</span>
+          </div>
+          <div class="stat-card filament-card">
+            <span class="text-sm font-medium text-gray-500">Active Resources</span>
+            <span class="stat-value mt-2">%d</span>
+            <span class="text-xs text-gray-400 mt-1">Configured Ent entities</span>
+          </div>
+          <div class="stat-card filament-card">
+            <span class="text-sm font-medium text-gray-500">Panel Architecture</span>
+            <span class="stat-value mt-2">Compiled SSR</span>
+            <span class="text-xs text-gray-400 mt-1">Zero-allocation Radix Router</span>
+          </div>
+        </div>`, len(p.resources))
+	}
+
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -733,23 +803,7 @@ func (p *Panel) renderDefaultDashboard(ctx *Context) error {
             <p class="filament-description">Welcome to your %s administration workspace.</p>
           </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div class="stat-card filament-card">
-            <span class="text-sm font-medium text-gray-500">System Status</span>
-            <span class="stat-value text-emerald-600 mt-2">Operational</span>
-            <span class="text-xs text-gray-400 mt-1">GoLaravel Kernel Active</span>
-          </div>
-          <div class="stat-card filament-card">
-            <span class="text-sm font-medium text-gray-500">Active Resources</span>
-            <span class="stat-value mt-2">%d</span>
-            <span class="text-xs text-gray-400 mt-1">Configured Ent entities</span>
-          </div>
-          <div class="stat-card filament-card">
-            <span class="text-sm font-medium text-gray-500">Panel Architecture</span>
-            <span class="stat-value mt-2">Compiled SSR</span>
-            <span class="text-xs text-gray-400 mt-1">Zero-allocation Radix Router</span>
-          </div>
-        </div>
+        %s
       </main>
     </div>
   </div>
@@ -761,7 +815,7 @@ func (p *Panel) renderDefaultDashboard(ctx *Context) error {
 		p.renderTopbarHTML(ctx),
 		p.maxContentWidth,
 		title, p.brandName,
-		len(p.resources),
+		dashboardContent,
 	)
 	return ctx.HTML(http.StatusOK, html)
 }

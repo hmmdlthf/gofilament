@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.10.0] - 2026-10-31
+
+### Added
+- **Dynamic Chart Drilldowns & Interactive Metric Dashboards (`pkg/widgets/chart.go`, `pkg/widgets/stats.go`, `pkg/filament/panel.go`, `pkg/filament/api.go`)**:
+  - **Dynamic Chart Filters & Presets**:
+    - Filter dropdown selector (`w.Filters(map[string]string{...})`) with default filter support (`w.DefaultFilter("7d")`).
+    - Dynamic data provider `w.FilterData(func(ctx *filament.Context, filter string) ChartData)` evaluated on-demand.
+    - Interactive Date-Range Picker (`w.DateRangePicker(true)`): native From/Until date inputs firing live client-side dataset updates.
+  - **Click-Through Chart Drilldowns**:
+    - `w.Drilldown("/admin/orders?status={label}&dataset={dataset}&value={value}")`: Segment click interception on bars, lines, and slices with automatic parameter interpolation and resource navigation.
+    - Visual feedback with pointer cursor on hoverable chart elements.
+  - **Live Metric Polling & Asynchronous Refresh**:
+    - Configurable polling intervals (`w.Polling("10s")` / `w.Polling("1m")`).
+    - Client-side chart controller (`window.FilamentCharts.update(id, filter)` & `dateRangeChange(id)`) updating datasets in place without full page reloads.
+  - **Clickable Stat Cards**:
+    - `Stat.URL(targetUrl)`: Wraps KPI stat overview cards in interactive links with hover shadows for instant drilldowns to filtered resource tables.
+  - **Dynamic Dashboard Grid Layout**:
+    - `renderDefaultDashboard` automatically arranges registered panel widgets in a responsive CSS grid respecting `Sort()` and `ColumnSpan()`.
+  - **Widget Dynamic Data Endpoints & REST API**:
+    - Web AJAX endpoint: `GET /admin/widgets/:id/data?filter=...&from=...&until=...`
+    - REST API single widget data: `GET /admin/api/widgets/:id/data?filter=...`
+    - REST API metadata & evaluation: `GET /admin/api/widgets` with rich metadata, chart types, active filters, and evaluated datasets.
+
+---
+
 ## [v1.9.0] - 2026-10-31
 
 ### Added

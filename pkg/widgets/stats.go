@@ -16,6 +16,7 @@ type Stat struct {
 	descriptionIcon string
 	color           string // success, danger, warning, primary, gray
 	chart           []int
+	url             string // click-through drilldown URL
 }
 
 // NewStat creates a new KPI stat metric.
@@ -45,6 +46,23 @@ func (s *Stat) Color(color string) *Stat {
 func (s *Stat) Chart(data []int) *Stat {
 	s.chart = data
 	return s
+}
+
+func (s *Stat) URL(u string) *Stat {
+	s.url = u
+	return s
+}
+
+func (s *Stat) GetLabel() string {
+	return s.label
+}
+
+func (s *Stat) GetValue() string {
+	return s.value
+}
+
+func (s *Stat) GetURL() string {
+	return s.url
 }
 
 func (s *Stat) renderSparkline() string {
@@ -109,6 +127,30 @@ func NewStatsOverviewWidget(provider func(ctx *filament.Context) []Stat) *StatsO
 	return w
 }
 
+func (w *StatsOverviewWidget) EvaluateStats(ctx *filament.Context) []Stat {
+	if w.statsProvider == nil {
+		return nil
+	}
+	return w.statsProvider(ctx)
+}
+
+func (w *StatsOverviewWidget) EvaluateStatsMap(ctx *filament.Context) []map[string]any {
+	stats := w.EvaluateStats(ctx)
+	var result []map[string]any
+	for _, s := range stats {
+		result = append(result, map[string]any{
+			"label":            s.label,
+			"value":            s.value,
+			"description":      s.description,
+			"description_icon": s.descriptionIcon,
+			"color":            s.color,
+			"chart":            s.chart,
+			"url":              s.url,
+		})
+	}
+	return result
+}
+
 func (w *StatsOverviewWidget) Render(ctx *filament.Context) string {
 	if w.statsProvider == nil {
 		return ""
@@ -132,8 +174,15 @@ func (w *StatsOverviewWidget) Render(ctx *filament.Context) string {
 				colorClass, html.EscapeString(s.description))
 		}
 
+		cardWrapperOpen := `<div class="stat-card filament-card">`
+		cardWrapperClose := `</div>`
+		if s.url != "" {
+			cardWrapperOpen = fmt.Sprintf(`<a href="%s" class="stat-card filament-card" style="text-decoration: none; color: inherit; display: block; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease;">`, html.EscapeString(s.url))
+			cardWrapperClose = `</a>`
+		}
+
 		sb.WriteString(fmt.Sprintf(`
-<div class="stat-card filament-card">
+%s
   <div style="display: flex; justify-content: space-between; align-items: flex-start;">
     <div>
       <span style="font-size: 0.875rem; font-weight: 500; color: var(--gray-500);">%s</span>
@@ -144,11 +193,13 @@ func (w *StatsOverviewWidget) Render(ctx *filament.Context) string {
       %s
     </div>
   </div>
-</div>`,
+%s`,
+			cardWrapperOpen,
 			html.EscapeString(s.label),
 			html.EscapeString(s.value),
 			descHTML,
 			s.renderSparkline(),
+			cardWrapperClose,
 		))
 	}
 

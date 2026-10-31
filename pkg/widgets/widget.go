@@ -16,6 +16,11 @@ func (w *BaseWidget) ID() string {
 	return w.id
 }
 
+func (w *BaseWidget) SetID(id string) *BaseWidget {
+	w.id = id
+	return w
+}
+
 func (w *BaseWidget) Sort() int {
 	return w.sort
 }
@@ -40,6 +45,10 @@ func (w *BaseWidget) SetColumnSpan(span int) *BaseWidget {
 func (w *BaseWidget) PollingInterval(interval string) *BaseWidget {
 	w.polling = interval
 	return w
+}
+
+func (w *BaseWidget) GetPolling() string {
+	return w.polling
 }
 
 // WidgetRenderer is an interface for widgets that can render to HTML.
