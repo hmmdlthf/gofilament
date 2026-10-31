@@ -581,6 +581,63 @@ Build reactive, real-time KPI and graphical dashboards with zero JavaScript buil
 
 ---
 
+## 🔍 Advanced Global Search & Spotlight Command Palette (⌘K / Ctrl+K)
+
+GoFilament features a macOS Spotlight / Raycast-inspired **Command Palette & Global Search Modal** powered by a zero-dependency, typo-tolerant **Fuzzy Search Algorithm** (`pkg/globalsearch`):
+
+```go
+panel := filament.NewPanel("admin").
+    Path("/admin").
+    GlobalSearch(true).                     // Enable or disable global search (default: true)
+    GlobalSearchKeyBinding("k").            // Shortcut key: Cmd+K / Ctrl+K
+    GlobalSearchResultsLimit(10).           // Maximum results per group/panel
+    GlobalSearchFuzzy(true)                 // Typo tolerance and subsequence matching
+```
+
+### 🎯 Customizing Resource Global Search:
+
+Equip any Ent resource with rich global search capabilities, secondary badge tags, quick action shortcuts, and custom URLs:
+
+```go
+customerResource := filament.NewResource[*Customer]("customers").
+    ModelName("Customer").
+    PluralModelName("Customers").
+    GloballySearchable(true).
+    GlobalSearchColumns("name", "email", "company").
+    GlobalSearchResultsLimit(5).
+    GlobalSearchResultTitle(func(record *Customer) string {
+        return record.Name
+    }).
+    GlobalSearchResultDetails(func(record *Customer) map[string]string {
+        return map[string]string{
+            "Email":   record.Email,
+            "Company": record.Company,
+        }
+    }).
+    GlobalSearchResultActions(func(record *Customer) []filament.GlobalSearchAction {
+        return []filament.GlobalSearchAction{
+            {
+                Label: "View Orders",
+                URL:   fmt.Sprintf("/admin/orders?customer_id=%d", record.ID),
+                Icon:  "heroicon-shopping-cart",
+            },
+        }
+    }).
+    GlobalSearchResultURL(func(record *Customer) string {
+        return fmt.Sprintf("/admin/customers/%d/edit", record.ID)
+    })
+```
+
+### ⚡ Key Spotlight & Fuzzy Search Features:
+- **Keyboard-Driven Navigation**: Tap `⌘K` or `Ctrl+K` from any screen to summon the backdrop-blurred Spotlight modal. Navigate through categorized results with `ArrowUp` / `ArrowDown`, jump directly with `Enter`, or dismiss with `Escape`.
+- **Typo-Tolerant Fuzzy Scoring (`pkg/globalsearch`)**: Evaluates exact matches (`1.0`), prefix matches (`0.95`), substring matches (`0.85`), word-boundary acronym subsequences (`0.70-0.84`), and Levenshtein distance edits ($\le 2$ typos) with automatic `<mark class="spotlight-highlight">` matched term highlighting.
+- **Cross-Domain Discovery**: Searches across registered Ent database resources, custom panel pages (`p.pages`), and sidebar navigation menu items (`BuildNavigation`) in a unified, grouped view.
+- **Rich Metadata & Inline Actions**: Results display categorized badges (`NAVIGATION`, `CUSTOMERS`), detail tag pills, and clickable action buttons alongside the primary record link.
+- **Dual Web & REST API Architecture**:
+  - Web: `/admin/global-search?query=...` serves instant rendered HTML spotlight items or direct JSON when `Accept: application/json` is sent.
+  - Dedicated REST API: `GET /admin/api/global-search?query=...` returns structured JSON `{query, total, groups, results}` with pre-calculated relevance scores for Flutter, mobile, and external integrations.
+  - Schema Metadata: `GET /admin/api/schema` exposes `global_search: {enabled, key_binding, results_limit, fuzzy}`.
+
 ---
 
 ## 💻 Artisan CLI Generators

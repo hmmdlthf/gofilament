@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/forms"
+	"github.com/golaravel/gofilament/pkg/globalsearch"
 	"github.com/golaravel/gofilament/pkg/infolists"
 	"github.com/golaravel/gofilament/pkg/notifications"
 	"github.com/golaravel/gofilament/pkg/tables"
@@ -97,9 +98,14 @@ type BaseResource[T any] struct {
 	canDeleteAny func(ctx *Context) bool
 
 	// Global Search
-	globallySearchable bool
-	searchAttributes   []string
-	globalResultFunc   func(record T) GlobalSearchResult
+	globallySearchable  bool
+	searchAttributes    []string
+	globalResultFunc    func(record T) GlobalSearchResult
+	globalResultTitle   func(record T) string
+	globalResultDetails func(record T) map[string]string
+	globalResultActions func(record T) []GlobalSearchAction
+	globalResultURL     func(record T) string
+	globalSearchLimit   int
 }
 
 // NewResource creates a new Resource with a URL slug.
@@ -137,24 +143,65 @@ func (r *BaseResource[T]) GlobalSearchResult(fn func(record T) GlobalSearchResul
 	return r
 }
 
+func (r *BaseResource[T]) GlobalSearchResultTitle(fn func(record T) string) *BaseResource[T] {
+	r.globalResultTitle = fn
+	return r
+}
+
+func (r *BaseResource[T]) GlobalSearchResultDetails(fn func(record T) map[string]string) *BaseResource[T] {
+	r.globalResultDetails = fn
+	return r
+}
+
+func (r *BaseResource[T]) GlobalSearchResultActions(fn func(record T) []GlobalSearchAction) *BaseResource[T] {
+	r.globalResultActions = fn
+	return r
+}
+
+func (r *BaseResource[T]) GlobalSearchResultURL(fn func(record T) string) *BaseResource[T] {
+	r.globalResultURL = fn
+	return r
+}
+
+func (r *BaseResource[T]) GlobalSearchResultsLimit(limit int) *BaseResource[T] {
+	r.globalSearchLimit = limit
+	return r
+}
+
 func (r *BaseResource[T]) SearchGlobal(ctx *Context, query string) []GlobalSearchResult {
 	if !r.globallySearchable || r.onList == nil {
 		return nil
 	}
 
-	records, _, err := r.onList(ctx, query, "", "asc", 1, 5, nil)
+	limit := 10
+	if r.globalSearchLimit > 0 {
+		limit = r.globalSearchLimit
+	} else if ctx != nil && ctx.Panel() != nil && ctx.Panel().GetGlobalSearchResultsLimit() > 0 {
+		limit = ctx.Panel().GetGlobalSearchResultsLimit()
+	}
+
+	records, _, err := r.onList(ctx, query, "", "asc", 1, limit, nil)
 	if err != nil || len(records) == 0 {
 		return nil
 	}
 
 	var results []GlobalSearchResult
-	basePath := fmt.Sprintf("%s/%s", ctx.Panel().GetPath(), r.slug)
+	basePath := ""
+	if ctx != nil && ctx.Panel() != nil {
+		basePath = fmt.Sprintf("%s/%s", ctx.Panel().GetPath(), r.slug)
+	} else {
+		basePath = "/" + r.slug
+	}
 
 	for _, rec := range records {
 		if r.globalResultFunc != nil {
 			res := r.globalResultFunc(rec)
 			if res.Group == "" {
 				res.Group = r.pluralModelName
+			}
+			if res.Score == 0 {
+				score, _ := globalsearch.Score(query, res.Title)
+				res.Score = score
 			}
 			results = append(results, res)
 			continue
@@ -164,12 +211,44 @@ func (r *BaseResource[T]) SearchGlobal(ctx *Context, query string) []GlobalSearc
 		if r.idExtractor != nil {
 			recID = r.idExtractor(rec)
 		}
+
 		title := fmt.Sprintf("%s #%s", r.modelName, recID)
+		if r.globalResultTitle != nil {
+			title = r.globalResultTitle(rec)
+		}
+
+		targetURL := fmt.Sprintf("%s/%s", basePath, recID)
+		if r.globalResultURL != nil {
+			targetURL = r.globalResultURL(rec)
+		}
+
+		var details map[string]string
+		if r.globalResultDetails != nil {
+			details = r.globalResultDetails(rec)
+		}
+
+		var actions []GlobalSearchAction
+		if r.globalResultActions != nil {
+			actions = r.globalResultActions(rec)
+		}
+
+		score, _ := globalsearch.Score(query, title)
+		if len(details) > 0 {
+			for _, v := range details {
+				if ds, dMatch := globalsearch.Score(query, v); dMatch && ds > score {
+					score = ds
+				}
+			}
+		}
 
 		results = append(results, GlobalSearchResult{
-			Title: title,
-			URL:   fmt.Sprintf("%s/%s", basePath, recID),
-			Group: r.pluralModelName,
+			Title:   title,
+			URL:     targetURL,
+			Details: details,
+			Group:   r.pluralModelName,
+			Icon:    r.navIcon,
+			Actions: actions,
+			Score:   score,
 		})
 	}
 

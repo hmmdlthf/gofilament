@@ -122,6 +122,12 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"engine":            string(p.GetEngine()),
 			"dark_mode":         p.darkMode,
 			"theme":             themeDTO,
+			"global_search": map[string]any{
+				"enabled":     p.hasGlobalSearch,
+				"key_binding": p.GetGlobalSearchKeyBinding(),
+				"limit":       p.GetGlobalSearchResultsLimit(),
+				"fuzzy":       p.GetGlobalSearchFuzzy(),
+			},
 			"locale":            ctx.Locale(),
 			"direction":         ctx.Direction(),
 			"is_rtl":            ctx.IsRTL(),
@@ -136,6 +142,33 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		}
 
 		return c.JSON(http.StatusOK, schema)
+	})
+
+	// Global Search REST API Endpoint
+	r.GET(apiPrefix+"/global-search", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		query := c.Query("query")
+		if query == "" {
+			query = c.Query("q")
+		}
+
+		groups, allResults := p.searchAll(ctx, query)
+		if groups == nil {
+			groups = []GlobalSearchGroup{}
+		}
+		if allResults == nil {
+			allResults = []GlobalSearchResult{}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"query":   query,
+			"total":   len(allResults),
+			"groups":  groups,
+			"results": allResults,
+		})
 	})
 
 	// Locale switch REST endpoint

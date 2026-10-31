@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.13.0] - 2026-10-31
+
+### Added
+- **Advanced Global Search with Typo-Tolerant Fuzzy Search & Spotlight Modal (`pkg/globalsearch`, `pkg/filament/panel.go`, `pkg/filament/resource.go`, `pkg/filament/api.go`, `pkg/assets/dist`)**:
+  - **Spotlight Command Palette Modal (`⌘K` / `Ctrl+K`)**:
+    - Keyboard-first command palette opening with `Cmd+K` / `Ctrl+K` or clicking the topbar command trigger.
+    - Smooth backdrop blur (`backdrop-filter: blur(4px)`), centered animated modal container, and autofocus search input.
+    - Full keyboard navigation: `↑` / `↓` cycle through matches with auto-scrolling highlight, `↵` navigates to the active record, `ESC` dismisses the modal.
+    - Clear query button and shortcut hints in the spotlight footer.
+  - **High-Performance Typo-Tolerant Fuzzy Search Engine (`pkg/globalsearch/fuzzy.go`)**:
+    - Multi-tiered scoring algorithm evaluating exact matches, prefix matches, word-boundary/acronym subsequences, and Levenshtein edit distance for typo tolerance (e.g. searching "custmer" matches "Customer", "ordr" matches "Order").
+    - Search highlight formatting (`globalsearch.Highlight`) wrapping matched query letters with `<mark class="spotlight-highlight">`.
+  - **Cross-Resource & Navigation Search**:
+    - Searches all panel navigation items and custom pages alongside database records.
+    - Categorized group headers with record count indicators (e.g. `NAVIGATION (2)`, `CUSTOMERS (4)`, `ORDERS (3)`).
+    - Rich record display with key-value metadata tags (`GlobalSearchResultDetails`), direct record action buttons (`GlobalSearchResultActions`), and custom URLs (`GlobalSearchResultURL`).
+  - **Panel Configuration**:
+    - `panel.GlobalSearch(true)`: Enables global search and spotlight modal.
+    - `panel.GlobalSearchKeyBinding("k")`: Configurable keyboard shortcut trigger.
+    - `panel.GlobalSearchResultsLimit(15)`: Configurable result limit per resource.
+    - `panel.GlobalSearchFuzzy(true)`: Toggles typo-tolerant fuzzy ranking.
+  - **Standardized REST API Endpoint**:
+    - `GET /admin/api/global-search?query=...`: Returns JSON with total count, categorized groups, items, details, and actions for headless, Flutter, and mobile integrations.
+    - `GET /admin/api/schema`: Includes `global_search` metadata (enabled, key binding, limit, fuzzy).
+
+---
+
 ## [v1.12.0] - 2026-10-31
 
 ### Added

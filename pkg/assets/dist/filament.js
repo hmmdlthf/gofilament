@@ -211,8 +211,90 @@
         <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">Just now</div>
       `;
       list.prepend(item);
+    },
+
+    // Spotlight Command Palette
+    spotlight: {
+      activeIndex: -1,
+      debounceTimer: null,
+      open: function() {
+        const modal = document.getElementById('filament-spotlight-modal');
+        if (!modal) return;
+        modal.style.display = 'flex';
+        const input = document.getElementById('filament-spotlight-input');
+        if (input) {
+          input.value = '';
+          input.focus();
+        }
+        this.activeIndex = -1;
+        this.fetch('');
+      },
+      close: function() {
+        const modal = document.getElementById('filament-spotlight-modal');
+        if (modal) modal.style.display = 'none';
+      },
+      fetch: function(query) {
+        clearTimeout(this.debounceTimer);
+        const container = document.getElementById('filament-spotlight-results');
+        if (!container) return;
+        const panelPath = container.getAttribute('data-panel-path') || '';
+        this.debounceTimer = setTimeout(() => {
+          fetch(panelPath + '/global-search?query=' + encodeURIComponent(query))
+            .then(r => r.text())
+            .then(html => {
+              container.innerHTML = html;
+              Filament.spotlight.activeIndex = -1;
+              Filament.spotlight.highlight();
+            });
+        }, 150);
+      },
+      navigate: function(dir) {
+        const items = document.querySelectorAll('.spotlight-result-item');
+        if (!items || items.length === 0) return;
+        this.activeIndex += dir;
+        if (this.activeIndex < 0) this.activeIndex = items.length - 1;
+        if (this.activeIndex >= items.length) this.activeIndex = 0;
+        this.highlight();
+      },
+      highlight: function() {
+        const items = document.querySelectorAll('.spotlight-result-item');
+        items.forEach((el, idx) => {
+          if (idx === this.activeIndex) {
+            el.classList.add('active');
+            el.scrollIntoView({ block: 'nearest' });
+          } else {
+            el.classList.remove('active');
+          }
+        });
+      },
+      select: function() {
+        const items = document.querySelectorAll('.spotlight-result-item');
+        if (this.activeIndex >= 0 && this.activeIndex < items.length) {
+          const href = items[this.activeIndex].getAttribute('href');
+          if (href) window.location.href = href;
+        } else if (items.length > 0) {
+          const href = items[0].getAttribute('href');
+          if (href) window.location.href = href;
+        }
+      }
     }
   };
+
+  // Global Keyboard Shortcuts (Cmd+K / Ctrl+K and ESC)
+  window.addEventListener('keydown', function(e) {
+    if ((e.metaKey || e.ctrlKey) && e.key && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const modal = document.getElementById('filament-spotlight-modal');
+      if (modal && modal.style.display !== 'none' && modal.style.display !== '') {
+        Filament.spotlight.close();
+      } else {
+        Filament.spotlight.open();
+      }
+    }
+    if (e.key === 'Escape') {
+      Filament.spotlight.close();
+    }
+  });
 
   // Initialize theme on load
   document.addEventListener('DOMContentLoaded', () => {

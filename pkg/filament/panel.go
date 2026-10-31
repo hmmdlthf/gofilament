@@ -12,6 +12,7 @@ import (
 
 	"github.com/golaravel/gofilament/pkg/assets"
 	"github.com/golaravel/gofilament/pkg/colors"
+	"github.com/golaravel/gofilament/pkg/globalsearch"
 	"github.com/golaravel/gofilament/pkg/notifications"
 	"github.com/golaravel/golaravel/pkg/broadcast"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
@@ -64,9 +65,12 @@ type Panel struct {
 	maxContentWidth     ContentWidth
 	navigationGroups    []string
 	userMenu            *UserMenu
-	hasNotifications    bool
-	hasGlobalSearch     bool
-	hasTenantScoping    bool
+	hasNotifications         bool
+	hasGlobalSearch          bool
+	globalSearchKeyBinding   string
+	globalSearchResultsLimit int
+	globalSearchFuzzy        bool
+	hasTenantScoping         bool
 	tenantConfig        *TenantConfig
 	hasLogin            bool
 	hasRegistration     bool
@@ -114,9 +118,12 @@ func NewPanel(id string) *Panel {
 		pages:               make([]PageInterface, 0),
 		widgets:             make([]WidgetInterface, 0),
 		locales:             make([]string, 0),
-		defaultLocale:       "en",
-		localeLabels:        make(map[string]string),
-		localeFlags:         make(map[string]string),
+		defaultLocale:            "en",
+		localeLabels:             make(map[string]string),
+		localeFlags:              make(map[string]string),
+		globalSearchKeyBinding:   "k",
+		globalSearchResultsLimit: 10,
+		globalSearchFuzzy:        true,
 	}
 
 	// Default user menu
@@ -287,6 +294,45 @@ func (p *Panel) GlobalSearch(enabled ...bool) *Panel {
 		p.hasGlobalSearch = true
 	}
 	return p
+}
+
+// GlobalSearchKeyBinding sets the keyboard shortcut trigger (defaults to "k", meaning ⌘K / Ctrl+K).
+func (p *Panel) GlobalSearchKeyBinding(key string) *Panel {
+	p.globalSearchKeyBinding = key
+	return p
+}
+
+// GlobalSearchResultsLimit sets the maximum number of results to fetch per resource.
+func (p *Panel) GlobalSearchResultsLimit(limit int) *Panel {
+	p.globalSearchResultsLimit = limit
+	return p
+}
+
+// GlobalSearchFuzzy enables or disables typo-tolerant fuzzy matching.
+func (p *Panel) GlobalSearchFuzzy(enabled ...bool) *Panel {
+	p.globalSearchFuzzy = len(enabled) == 0 || enabled[0]
+	return p
+}
+
+// GetGlobalSearchKeyBinding returns the configured keyboard shortcut key.
+func (p *Panel) GetGlobalSearchKeyBinding() string {
+	if p.globalSearchKeyBinding != "" {
+		return p.globalSearchKeyBinding
+	}
+	return "k"
+}
+
+// GetGlobalSearchResultsLimit returns the results limit per resource.
+func (p *Panel) GetGlobalSearchResultsLimit() int {
+	if p.globalSearchResultsLimit > 0 {
+		return p.globalSearchResultsLimit
+	}
+	return 10
+}
+
+// GetGlobalSearchFuzzy returns whether fuzzy matching is active.
+func (p *Panel) GetGlobalSearchFuzzy() bool {
+	return p.globalSearchFuzzy
 }
 
 // TenantScoping enables multi-tenant scoping.
@@ -514,35 +560,48 @@ func (p *Panel) Mount(r *router.Router) {
 				return err
 			}
 			query := ctx.Query("query")
-			var allResults []GlobalSearchResult
-			if len(query) >= 2 {
-				for _, res := range p.resources {
-					if res.IsGloballySearchable() {
-						matches := res.SearchGlobal(ctx, query)
-						allResults = append(allResults, matches...)
-					}
-				}
+			if query == "" {
+				query = ctx.Query("q")
 			}
+
+			groups, allResults := p.searchAll(ctx, query)
 
 			// If client accepts JSON
 			if strings.Contains(ctx.Header("Accept"), "application/json") {
 				return ctx.JSON(http.StatusOK, allResults)
 			}
 
-			// Otherwise render dropdown HTML
-			var sb strings.Builder
-			if len(allResults) == 0 {
-				sb.WriteString(`<div style="padding: 0.75rem 1rem; font-size: 0.8125rem; color: var(--gray-400);">No matching records found.</div>`)
-			} else {
-				for _, match := range allResults {
-					sb.WriteString(fmt.Sprintf(`
-<a href="%s" class="global-search-item" style="display: block; padding: 0.625rem 1rem; border-bottom: 1px solid var(--gray-100); text-decoration: none; color: inherit;">
-  <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--primary-600);">%s</span>
-  <div style="font-size: 0.875rem; font-weight: 500;">%s</div>
-</a>`, match.URL, match.Group, match.Title))
+			// Render Spotlight HTML
+			var dtos []globalsearch.GroupDTO
+			for _, g := range groups {
+				var items []globalsearch.ItemDTO
+				for _, it := range g.Items {
+					var actions []globalsearch.ActionDTO
+					for _, a := range it.Actions {
+						actions = append(actions, globalsearch.ActionDTO{
+							Label: a.Label,
+							URL:   a.URL,
+							Icon:  a.Icon,
+						})
+					}
+					items = append(items, globalsearch.ItemDTO{
+						Title:   it.Title,
+						URL:     it.URL,
+						Details: it.Details,
+						Group:   it.Group,
+						Icon:    it.Icon,
+						Badge:   it.Badge,
+						Actions: actions,
+					})
 				}
+				dtos = append(dtos, globalsearch.GroupDTO{
+					Name:  g.Name,
+					Count: g.Count,
+					Items: items,
+				})
 			}
-			return ctx.HTML(http.StatusOK, sb.String())
+
+			return ctx.HTML(http.StatusOK, globalsearch.RenderResultsHTML(dtos, query))
 		})
 	}
 
@@ -958,23 +1017,9 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 		sb.WriteString(p.renderTenantSwitcherHTML(ctx))
 	}
 
-	// Global Search bar
+	// Global Search Command Bar Trigger
 	if p.hasGlobalSearch {
-		sb.WriteString(fmt.Sprintf(`
-<div style="position: relative; max-width: 24rem; width: 100%%;">
-  <input type="text" placeholder="Search across %s..." class="form-control" style="font-size: 0.8125rem; padding: 0.375rem 0.75rem;" 
-    oninput="
-      const q = this.value;
-      const dd = document.getElementById('global-search-results');
-      if (q.length < 2) { dd.style.display = 'none'; return; }
-      fetch('%s/global-search?query=' + encodeURIComponent(q))
-        .then(r => r.text())
-        .then(html => { dd.innerHTML = html; dd.style.display = 'block'; });
-    "
-    onblur="setTimeout(() => { document.getElementById('global-search-results').style.display = 'none'; }, 200);"
-  />
-  <div id="global-search-results" style="display: none; position: absolute; top: 100%%; left: 0; right: 0; background: #fff; border: 1px solid var(--gray-200); border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); margin-top: 0.25rem; z-index: 50; max-height: 18rem; overflow-y: auto;"></div>
-</div>`, p.brandName, p.path))
+		sb.WriteString(globalsearch.RenderTriggerHTML(p.brandName, p.path, p.GetGlobalSearchKeyBinding()))
 	}
 	sb.WriteString(`</div>`)
 
@@ -1021,6 +1066,96 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 	}
 
 	return sb.String()
+}
+
+// searchAll executes cross-resource and navigation fuzzy global search.
+func (p *Panel) searchAll(ctx *Context, query string) ([]GlobalSearchGroup, []GlobalSearchResult) {
+	query = strings.TrimSpace(query)
+	if len(query) < 2 {
+		return nil, nil
+	}
+
+	var allResults []GlobalSearchResult
+	var navResults []GlobalSearchResult
+
+	// 1. Search Navigation items
+	navGroups := p.BuildNavigation(ctx)
+	for _, grp := range navGroups {
+		for _, item := range grp.Items {
+			score, matched := globalsearch.Score(query, item.Label)
+			if !matched && p.globalSearchFuzzy {
+				if gScore, gMatched := globalsearch.Score(query, grp.Name); gMatched {
+					score = gScore * 0.8
+					matched = true
+				}
+			}
+			if matched {
+				res := GlobalSearchResult{
+					Title: item.Label,
+					URL:   item.URL,
+					Group: "Navigation",
+					Icon:  item.Icon,
+					Badge: item.Badge,
+					Score: score,
+				}
+				navResults = append(navResults, res)
+			}
+		}
+	}
+
+	// Also search Custom Pages
+	for _, page := range p.pages {
+		score, matched := globalsearch.Score(query, page.Title())
+		if matched {
+			res := GlobalSearchResult{
+				Title: page.Title(),
+				URL:   p.path + "/" + page.Slug(),
+				Group: "Navigation",
+				Score: score,
+			}
+			navResults = append(navResults, res)
+		}
+	}
+
+	if len(navResults) > 0 {
+		sort.SliceStable(navResults, func(i, j int) bool {
+			return navResults[i].Score > navResults[j].Score
+		})
+		allResults = append(allResults, navResults...)
+	}
+
+	// 2. Search Resources
+	var resourceGroups []GlobalSearchGroup
+	for _, res := range p.resources {
+		if res.IsGloballySearchable() {
+			matches := res.SearchGlobal(ctx, query)
+			if len(matches) > 0 {
+				if p.globalSearchFuzzy {
+					sort.SliceStable(matches, func(i, j int) bool {
+						return matches[i].Score > matches[j].Score
+					})
+				}
+				allResults = append(allResults, matches...)
+				resourceGroups = append(resourceGroups, GlobalSearchGroup{
+					Name:  res.GetPluralModelName(),
+					Count: len(matches),
+					Items: matches,
+				})
+			}
+		}
+	}
+
+	var groups []GlobalSearchGroup
+	if len(navResults) > 0 {
+		groups = append(groups, GlobalSearchGroup{
+			Name:  "Navigation",
+			Count: len(navResults),
+			Items: navResults,
+		})
+	}
+	groups = append(groups, resourceGroups...)
+
+	return groups, allResults
 }
 
 func (p *Panel) renderNotificationsDrawerHTML(ctx *Context) string {

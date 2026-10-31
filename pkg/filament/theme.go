@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/colors"
+	"github.com/golaravel/gofilament/pkg/globalsearch"
 )
 
 var presetPalettes = map[string]colors.Palette{
@@ -308,5 +309,11 @@ func (p *Panel) RenderHeadHTML(ctx *Context) string {
 
 // RenderBodyEndHTML generates elements for injection right before </body>.
 func (p *Panel) RenderBodyEndHTML(ctx *Context) string {
-	return p.renderHook(PanelsRenderHookBodyEnd, ctx)
+	var sb strings.Builder
+	if p.hasGlobalSearch {
+		sb.WriteString(globalsearch.RenderModalHTML(p.brandName, p.path, p.GetGlobalSearchKeyBinding()))
+		sb.WriteString("\n")
+	}
+	sb.WriteString(p.renderHook(PanelsRenderHookBodyEnd, ctx))
+	return sb.String()
 }
