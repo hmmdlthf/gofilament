@@ -495,32 +495,96 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   }
 
   void showCreateSheet(BuildContext context) {
-    final titleCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    final subCtrl = TextEditingController(text: widget.slug == 'devices' ? 'SN-${DateTime.now().millisecondsSinceEpoch % 10000}-X' : '');
+    final locCtrl = TextEditingController(text: widget.slug == 'devices' ? 'US-East-1' : 'Core Ops');
+    String status = 'online';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Create ${widget.slug}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            const SizedBox(height: 12),
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Name / Title', border: OutlineInputBorder())),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () async {
-                if (titleCtrl.text.isNotEmpty) {
-                  await widget.api.createRecord(widget.slug, {'name': titleCtrl.text, 'title': titleCtrl.text});
-                  if (!mounted) return;
-                  Navigator.pop(ctx);
-                  loadRecords();
-                }
-              },
-              child: const Text('Save Record'),
-            ),
-          ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Add New ${widget.slug == "devices" ? "IoT Device Node" : "Team Operator"}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameCtrl,
+                decoration: InputDecoration(
+                  labelText: widget.slug == 'devices' ? 'Device Name' : 'Full Name',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: subCtrl,
+                decoration: InputDecoration(
+                  labelText: widget.slug == 'devices' ? 'Serial Number' : 'Email Address',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: locCtrl,
+                decoration: InputDecoration(
+                  labelText: widget.slug == 'devices' ? 'Deployment Location' : 'Department',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              if (widget.slug == 'devices') ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: status,
+                  decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder(), isDense: true),
+                  items: const [
+                    DropdownMenuItem(value: 'online', child: Text('Online (Active)')),
+                    DropdownMenuItem(value: 'offline', child: Text('Offline')),
+                    DropdownMenuItem(value: 'maintenance', child: Text('Under Maintenance')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setSheetState(() => status = val);
+                  },
+                ),
+              ],
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.check),
+                label: const Text('Save Record'),
+                onPressed: () async {
+                  if (nameCtrl.text.isNotEmpty) {
+                    final data = <String, dynamic>{
+                      'name': nameCtrl.text,
+                      'title': nameCtrl.text,
+                      if (widget.slug == 'devices') ...{
+                        'serial_no': subCtrl.text,
+                        'location': locCtrl.text,
+                        'status': status,
+                        'battery_level': 100,
+                      } else ...{
+                        'email': subCtrl.text,
+                        'department': locCtrl.text,
+                        'role': 'Operations Lead',
+                      },
+                    };
+                    await widget.api.createRecord(widget.slug, data);
+                    if (!mounted) return;
+                    Navigator.pop(ctx);
+                    loadRecords();
+                  }
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -528,29 +592,71 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
   void showEditSheet(BuildContext context, String id, dynamic item) {
     final titleCtrl = TextEditingController(text: item['Name'] ?? item['Title'] ?? item['name'] ?? '');
+    final locCtrl = TextEditingController(text: item['Location'] ?? item['location'] ?? item['Department'] ?? item['department'] ?? '');
+    String status = item['Status'] ?? item['status'] ?? 'online';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('Edit ${widget.slug} #$id', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            const SizedBox(height: 12),
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Name / Title', border: OutlineInputBorder())),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () async {
-                await widget.api.updateRecord(widget.slug, id, {'name': titleCtrl.text, 'title': titleCtrl.text});
-                if (!mounted) return;
-                Navigator.pop(ctx);
-                loadRecords();
-              },
-              child: const Text('Update Changes'),
-            ),
-          ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Edit ${widget.slug} #$id', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: titleCtrl,
+                decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder(), isDense: true),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: locCtrl,
+                decoration: InputDecoration(
+                  labelText: widget.slug == 'devices' ? 'Location' : 'Department',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              if (widget.slug == 'devices') ...[
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: ['online', 'offline', 'maintenance'].contains(status) ? status : 'online',
+                  decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder(), isDense: true),
+                  items: const [
+                    DropdownMenuItem(value: 'online', child: Text('Online (Active)')),
+                    DropdownMenuItem(value: 'offline', child: Text('Offline')),
+                    DropdownMenuItem(value: 'maintenance', child: Text('Under Maintenance')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setSheetState(() => status = val);
+                  },
+                ),
+              ],
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.save),
+                label: const Text('Update Changes'),
+                onPressed: () async {
+                  final data = <String, dynamic>{
+                    'name': titleCtrl.text,
+                    if (widget.slug == 'devices') ...{
+                      'location': locCtrl.text,
+                      'status': status,
+                    } else ...{
+                      'department': locCtrl.text,
+                    },
+                  };
+                  await widget.api.updateRecord(widget.slug, id, data);
+                  if (!mounted) return;
+                  Navigator.pop(ctx);
+                  loadRecords();
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

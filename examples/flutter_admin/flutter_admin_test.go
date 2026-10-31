@@ -139,4 +139,31 @@ func TestFlutterAdmin_ResourcesJSONAPI(t *testing.T) {
 	if len(userItems) == 0 {
 		t.Errorf("expected fleet users in data array")
 	}
+
+	// 5. POST /admin/api/resources/devices - Create Device
+	newDevPayload := `{"name":"Edge-Unit-99","serial_no":"SN-9999-X","model":"EdgeCore-Pro","location":"Paris DC","status":"online","battery_level":95}`
+	reqCreate := httptest.NewRequest("POST", "/admin/api/resources/devices", strings.NewReader(newDevPayload))
+	reqCreate.Header.Set("Content-Type", "application/json")
+	wCreate := httptest.NewRecorder()
+	app.ServeHTTP(wCreate, reqCreate)
+
+	if wCreate.Code != http.StatusCreated && wCreate.Code != http.StatusOK {
+		t.Fatalf("expected status 201/200 on device create, got %d: %s", wCreate.Code, wCreate.Body.String())
+	}
+
+	// Verify newly created device exists in list
+	reqCheck := httptest.NewRequest("GET", "/admin/api/resources/devices?search=Edge-Unit-99", nil)
+	wCheck := httptest.NewRecorder()
+	app.ServeHTTP(wCheck, reqCheck)
+	if !strings.Contains(wCheck.Body.String(), "Edge-Unit-99") {
+		t.Errorf("expected created device in search response: %s", wCheck.Body.String())
+	}
+
+	// 6. DELETE /admin/api/resources/devices/1 - Delete Device
+	reqDel := httptest.NewRequest("DELETE", "/admin/api/resources/devices/1", nil)
+	wDel := httptest.NewRecorder()
+	app.ServeHTTP(wDel, reqDel)
+	if wDel.Code != http.StatusOK {
+		t.Fatalf("expected status 200 on delete, got %d", wDel.Code)
+	}
 }

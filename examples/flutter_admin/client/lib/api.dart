@@ -1,11 +1,20 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class FilamentApiClient {
   final String baseUrl;
   String? activeTenant;
 
-  FilamentApiClient({this.baseUrl = 'http://localhost:8081/admin'});
+  FilamentApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl();
+
+  static String _defaultBaseUrl() {
+    if (kIsWeb) {
+      final origin = Uri.base.origin;
+      return '$origin/admin';
+    }
+    return 'http://localhost:8081/admin';
+  }
 
   Map<String, String> get _headers {
     final h = <String, String>{
