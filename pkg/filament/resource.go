@@ -760,13 +760,34 @@ func (r *BaseResource[T]) handleStore(ctx *Context, basePath string) error {
 		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
 	}
 
-	_ = ctx.Request.ParseForm()
-	data := make(map[string]any)
-	for k, v := range ctx.Request.PostForm {
-		if len(v) == 1 {
-			data[k] = v[0]
-		} else {
-			data[k] = v
+	_ = ctx.Request.ParseMultipartForm(32 << 20)
+	if ctx.Request.PostForm == nil {
+		_ = ctx.Request.ParseForm()
+	}
+	data := forms.ParseFormData(ctx.Request.PostForm)
+
+	// Attach uploaded multipart filenames to data
+	if ctx.Request.MultipartForm != nil && ctx.Request.MultipartForm.File != nil {
+		for fileKey, fileHeaders := range ctx.Request.MultipartForm.File {
+			if len(fileHeaders) == 1 {
+				data[fileKey] = fileHeaders[0].Filename
+			} else if len(fileHeaders) > 1 {
+				names := make([]string, len(fileHeaders))
+				for i, fh := range fileHeaders {
+					names[i] = fh.Filename
+				}
+				data[fileKey] = names
+			}
+		}
+	}
+
+	// Fallback to existing file if no new file uploaded
+	for k := range data {
+		if strings.HasSuffix(k, "_existing") {
+			baseKey := strings.TrimSuffix(k, "_existing")
+			if cur, exists := data[baseKey]; !exists || cur == "" {
+				data[baseKey] = data[k]
+			}
 		}
 	}
 
@@ -938,13 +959,34 @@ func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error 
 		}
 	}
 
-	_ = ctx.Request.ParseForm()
-	data := make(map[string]any)
-	for k, v := range ctx.Request.PostForm {
-		if len(v) == 1 {
-			data[k] = v[0]
-		} else {
-			data[k] = v
+	_ = ctx.Request.ParseMultipartForm(32 << 20)
+	if ctx.Request.PostForm == nil {
+		_ = ctx.Request.ParseForm()
+	}
+	data := forms.ParseFormData(ctx.Request.PostForm)
+
+	// Attach uploaded multipart filenames to data
+	if ctx.Request.MultipartForm != nil && ctx.Request.MultipartForm.File != nil {
+		for fileKey, fileHeaders := range ctx.Request.MultipartForm.File {
+			if len(fileHeaders) == 1 {
+				data[fileKey] = fileHeaders[0].Filename
+			} else if len(fileHeaders) > 1 {
+				names := make([]string, len(fileHeaders))
+				for i, fh := range fileHeaders {
+					names[i] = fh.Filename
+				}
+				data[fileKey] = names
+			}
+		}
+	}
+
+	// Fallback to existing file if no new file uploaded
+	for k := range data {
+		if strings.HasSuffix(k, "_existing") {
+			baseKey := strings.TrimSuffix(k, "_existing")
+			if cur, exists := data[baseKey]; !exists || cur == "" {
+				data[baseKey] = data[k]
+			}
 		}
 	}
 

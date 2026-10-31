@@ -259,18 +259,26 @@ func (w *WizardComponent) Render(ctx context.Context, state map[string]any, erro
 
 type RepeaterComponent struct {
 	BaseField
-	schema         []Component
-	minItems       int
-	maxItems       int
-	collapsible    bool
-	addActionLabel string
-	itemLabel      string
+	schema          []Component
+	minItems        int
+	maxItems        int
+	collapsible     bool
+	collapsed       bool
+	reorderable     bool
+	addable         bool
+	deletable       bool
+	gridColumns     int
+	addActionLabel  string
+	itemLabel       string
+	itemLabelFunc   func(item map[string]any, index int) string
 }
 
 func Repeater(name string) *RepeaterComponent {
 	return &RepeaterComponent{
 		BaseField: BaseField{name: name},
 		schema:    make([]Component, 0),
+		addable:   true,
+		deletable: true,
 	}
 }
 
@@ -303,6 +311,50 @@ func (r *RepeaterComponent) Collapsible(enabled ...bool) *RepeaterComponent {
 	return r
 }
 
+func (r *RepeaterComponent) Collapsed(enabled ...bool) *RepeaterComponent {
+	if len(enabled) > 0 {
+		r.collapsed = enabled[0]
+	} else {
+		r.collapsed = true
+	}
+	if r.collapsed {
+		r.collapsible = true
+	}
+	return r
+}
+
+func (r *RepeaterComponent) Reorderable(enabled ...bool) *RepeaterComponent {
+	if len(enabled) > 0 {
+		r.reorderable = enabled[0]
+	} else {
+		r.reorderable = true
+	}
+	return r
+}
+
+func (r *RepeaterComponent) Addable(enabled ...bool) *RepeaterComponent {
+	if len(enabled) > 0 {
+		r.addable = enabled[0]
+	} else {
+		r.addable = true
+	}
+	return r
+}
+
+func (r *RepeaterComponent) Deletable(enabled ...bool) *RepeaterComponent {
+	if len(enabled) > 0 {
+		r.deletable = enabled[0]
+	} else {
+		r.deletable = true
+	}
+	return r
+}
+
+func (r *RepeaterComponent) Grid(columns int) *RepeaterComponent {
+	r.gridColumns = columns
+	return r
+}
+
 func (r *RepeaterComponent) AddActionLabel(label string) *RepeaterComponent {
 	r.addActionLabel = label
 	return r
@@ -310,6 +362,11 @@ func (r *RepeaterComponent) AddActionLabel(label string) *RepeaterComponent {
 
 func (r *RepeaterComponent) ItemLabel(label string) *RepeaterComponent {
 	r.itemLabel = label
+	return r
+}
+
+func (r *RepeaterComponent) ItemLabelCallback(fn func(item map[string]any, index int) string) *RepeaterComponent {
+	r.itemLabelFunc = fn
 	return r
 }
 
@@ -356,6 +413,11 @@ func (r *RepeaterComponent) Render(ctx context.Context, state map[string]any, er
 		addLabel = "+ Add Item"
 	}
 
+	gridStyle := ""
+	if r.gridColumns > 1 {
+		gridStyle = fmt.Sprintf(`style="display: grid; grid-template-columns: repeat(%d, minmax(0, 1fr)); gap: 1rem;"`, r.gridColumns)
+	}
+
 	// Render existing items
 	var rowsHTML strings.Builder
 	for i, itemData := range items {
@@ -366,18 +428,51 @@ func (r *RepeaterComponent) Render(ctx context.Context, state map[string]any, er
 
 		scopedBody := scopeFieldNames(rowBody.String(), r.name, fmt.Sprintf("%d", i))
 		itemTitle := fmt.Sprintf("#%d", i+1)
-		if r.itemLabel != "" {
+		if r.itemLabelFunc != nil {
+			itemTitle = r.itemLabelFunc(itemData, i)
+		} else if r.itemLabel != "" {
 			itemTitle = fmt.Sprintf("%s #%d", r.itemLabel, i+1)
 		}
 
+		reorderControls := ""
+		if r.reorderable {
+			reorderControls = `
+<div style="display: flex; gap: 0.25rem; margin-right: 0.5rem;">
+  <button type="button" title="Move Up" style="background: none; border: 1px solid var(--gray-300); border-radius: 0.25rem; padding: 0.125rem 0.375rem; font-size: 0.75rem; cursor: pointer; color: var(--gray-600);"
+          onclick="const row = this.closest('.repeater-item-row'); const prev = row.previousElementSibling; if (prev && prev.classList.contains('repeater-item-row')) { row.parentNode.insertBefore(row, prev); }">&uarr;</button>
+  <button type="button" title="Move Down" style="background: none; border: 1px solid var(--gray-300); border-radius: 0.25rem; padding: 0.125rem 0.375rem; font-size: 0.75rem; cursor: pointer; color: var(--gray-600);"
+          onclick="const row = this.closest('.repeater-item-row'); const next = row.nextElementSibling; if (next && next.classList.contains('repeater-item-row')) { row.parentNode.insertBefore(next, row); }">&darr;</button>
+</div>`
+		}
+
+		deleteButton := ""
+		if r.deletable {
+			deleteButton = `<button type="button" class="repeater-btn-remove" onclick="this.closest('.repeater-item-row').remove();" style="background: none; border: none; color: #ef4444; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;">&times; Remove</button>`
+		}
+
+		collapseButton := ""
+		collapseDirective := ""
+		if r.collapsible {
+			collapseButton = `<button type="button" @click="collapsed = !collapsed" style="background: none; border: none; font-size: 0.75rem; cursor: pointer; color: var(--gray-500); margin-right: 0.375rem;" x-text="collapsed ? '▶' : '▼'"></button>`
+			collapseDirective = `x-show="!collapsed"`
+		}
+
 		rowsHTML.WriteString(fmt.Sprintf(`
-<div class="repeater-item-row" style="border: 1px solid var(--gray-200); border-radius: 0.5rem; padding: 1.25rem; background-color: var(--gray-50); margin-bottom: 0.75rem; position: relative;">
+<div class="repeater-item-row" x-data="{ collapsed: %v }" style="border: 1px solid var(--gray-200); border-radius: 0.5rem; padding: 1.25rem; background-color: var(--gray-50); margin-bottom: 0.75rem; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; border-bottom: 1px solid var(--gray-200); padding-bottom: 0.5rem;">
-    <span style="font-weight: 600; font-size: 0.8125rem; color: var(--gray-700);">%s</span>
-    <button type="button" class="repeater-btn-remove" onclick="this.closest('.repeater-item-row').remove();" style="background: none; border: none; color: #ef4444; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Remove</button>
+    <div style="display: flex; align-items: center;">
+      %s
+      <span style="font-weight: 600; font-size: 0.8125rem; color: var(--gray-700);">%s</span>
+    </div>
+    <div style="display: flex; align-items: center;">
+      %s
+      %s
+    </div>
   </div>
-  %s
-</div>`, html.EscapeString(itemTitle), scopedBody))
+  <div class="repeater-item-body" %s %s>
+    %s
+  </div>
+</div>`, r.collapsed, collapseButton, html.EscapeString(itemTitle), reorderControls, deleteButton, collapseDirective, gridStyle, scopedBody))
 	}
 
 	// Build template for dynamically added rows
@@ -391,23 +486,53 @@ func (r *RepeaterComponent) Render(ctx context.Context, state map[string]any, er
 		tmplTitle = fmt.Sprintf("%s #__DISPLAY_INDEX__", r.itemLabel)
 	}
 
+	reorderTmpl := ""
+	if r.reorderable {
+		reorderTmpl = `
+<div style="display: flex; gap: 0.25rem; margin-right: 0.5rem;">
+  <button type="button" title="Move Up" style="background: none; border: 1px solid var(--gray-300); border-radius: 0.25rem; padding: 0.125rem 0.375rem; font-size: 0.75rem; cursor: pointer; color: var(--gray-600);"
+          onclick="const row = this.closest('.repeater-item-row'); const prev = row.previousElementSibling; if (prev && prev.classList.contains('repeater-item-row')) { row.parentNode.insertBefore(row, prev); }">&uarr;</button>
+  <button type="button" title="Move Down" style="background: none; border: 1px solid var(--gray-300); border-radius: 0.25rem; padding: 0.125rem 0.375rem; font-size: 0.75rem; cursor: pointer; color: var(--gray-600);"
+          onclick="const row = this.closest('.repeater-item-row'); const next = row.nextElementSibling; if (next && next.classList.contains('repeater-item-row')) { row.parentNode.insertBefore(next, row); }">&darr;</button>
+</div>`
+	}
+
+	deleteTmpl := ""
+	if r.deletable {
+		deleteTmpl = `<button type="button" class="repeater-btn-remove" onclick="this.closest('.repeater-item-row').remove();" style="background: none; border: none; color: #ef4444; font-size: 0.75rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;">&times; Remove</button>`
+	}
+
+	collapseTmplButton := ""
+	collapseTmplDirective := ""
+	if r.collapsible {
+		collapseTmplButton = `<button type="button" @click="collapsed = !collapsed" style="background: none; border: none; font-size: 0.75rem; cursor: pointer; color: var(--gray-500); margin-right: 0.375rem;" x-text="collapsed ? '▶' : '▼'"></button>`
+		collapseTmplDirective = `x-show="!collapsed"`
+	}
+
 	tmplRow := fmt.Sprintf(`
-<div class="repeater-item-row" style="border: 1px solid var(--gray-200); border-radius: 0.5rem; padding: 1.25rem; background-color: var(--gray-50); margin-bottom: 0.75rem; position: relative;">
+<div class="repeater-item-row" x-data="{ collapsed: false }" style="border: 1px solid var(--gray-200); border-radius: 0.5rem; padding: 1.25rem; background-color: var(--gray-50); margin-bottom: 0.75rem; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; border-bottom: 1px solid var(--gray-200); padding-bottom: 0.5rem;">
-    <span style="font-weight: 600; font-size: 0.8125rem; color: var(--gray-700);">%s</span>
-    <button type="button" class="repeater-btn-remove" onclick="this.closest('.repeater-item-row').remove();" style="background: none; border: none; color: #ef4444; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Remove</button>
+    <div style="display: flex; align-items: center;">
+      %s
+      <span style="font-weight: 600; font-size: 0.8125rem; color: var(--gray-700);">%s</span>
+    </div>
+    <div style="display: flex; align-items: center;">
+      %s
+      %s
+    </div>
   </div>
-  %s
-</div>`, tmplTitle, scopedTmpl)
+  <div class="repeater-item-body" %s %s>
+    %s
+  </div>
+</div>`, collapseTmplButton, tmplTitle, reorderTmpl, deleteTmpl, collapseTmplDirective, gridStyle, scopedTmpl)
 
 	repeaterID := fmt.Sprintf("repeater_%s", r.name)
 	tmplID := fmt.Sprintf("tmpl_%s", r.name)
 	listID := fmt.Sprintf("list_%s", r.name)
 
-	return fmt.Sprintf(`
-<div id="%s" class="form-group repeater-wrapper" x-data="{ count: %d, min: %d, max: %d }">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-    <label class="form-label" style="margin-bottom: 0; font-weight: 600;">%s</label>
+	addButtonHTML := ""
+	if r.addable {
+		addButtonHTML = fmt.Sprintf(`
     <button type="button" class="btn btn-secondary btn-sm repeater-btn-add"
       @click="
         if (max > 0 && count >= max) return;
@@ -418,7 +543,14 @@ func (r *RepeaterComponent) Render(ctx context.Context, state map[string]any, er
         document.getElementById('%s').insertAdjacentHTML('beforeend', row);
         count++;
       "
-      :style="max > 0 && count >= max ? 'display: none;' : ''">%s</button>
+      :style="max > 0 && count >= max ? 'display: none;' : ''">%s</button>`, tmplID, listID, html.EscapeString(addLabel))
+	}
+
+	return fmt.Sprintf(`
+<div id="%s" class="form-group repeater-wrapper" x-data="{ count: %d, min: %d, max: %d }">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+    <label class="form-label" style="margin-bottom: 0; font-weight: 600;">%s</label>
+    %s
   </div>
   <div id="%s" class="repeater-list">
     %s
@@ -427,9 +559,7 @@ func (r *RepeaterComponent) Render(ctx context.Context, state map[string]any, er
 </div>`,
 		repeaterID, initialCount, r.minItems, r.maxItems,
 		html.EscapeString(r.formatLabel()),
-		tmplID,
-		listID,
-		html.EscapeString(addLabel),
+		addButtonHTML,
 		listID,
 		rowsHTML.String(),
 		tmplID, tmplRow,

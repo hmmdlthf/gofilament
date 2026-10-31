@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.14.0] - 2026-10-31
+
+### Added
+- **Advanced Form Fields: Rich Text Editor, File & Image Upload, Dynamic Repeater, TagsInput & ColorPicker (`pkg/forms`, `pkg/filament/resource.go`)**:
+  - **Interactive File & Image Upload Field (`forms.FileUpload` & `forms.ImageUpload`)**:
+    - Modern drag-and-drop dropzone with drop target highlights, upload icons, and file type/size constraint indicators.
+    - Avatar circular layout mode (`avatar.Avatar()`) with hover camera action, circular preview, and custom sizing.
+    - Live image preview cards for newly selected files via instant client data URLs.
+    - Existing file preservation (`_existing`) with filename display, download/replace controls, and remove button.
+    - Multi-file upload support (`.Multiple()`, `.MaxFiles(n)`), accepted MIME types (`.AcceptedFileTypes(...)`), and max size validation (`.MaxSize(kb)`).
+    - Automatic multipart detection: forms containing `FileUpload` automatically render with `enctype="multipart/form-data"`.
+  - **Full-Featured Rich Text WYSIWYG & Markdown Editor (`forms.RichEditor` & `forms.MarkdownEditor`)**:
+    - **`RichEditor`**: Full WYSIWYG editing toolbar supporting Bold, Italic, Underline, Strikethrough, Headings (H1/H2/H3/P), Unordered/Ordered lists, Blockquotes, Code blocks, Hyperlinks with dialog prompt, Clear formatting, and Undo/Redo. Real-time content synchronization into hidden form inputs.
+    - **`MarkdownEditor`**: Dual-mode Write and Preview tabs. Write mode offers quick markdown token insertion buttons; Preview mode renders formatted HTML in real-time.
+  - **Production-Grade Dynamic Repeater Component (`forms.Repeater`)**:
+    - Addable and deletable array items with unique client-side index tracking and field name scoping (`items[0][field]`).
+    - Reorderable items with Move Up (`↑`) and Move Down (`↓`) controls.
+    - Collapsible item cards with collapse/expand toggle (`▼` / `►`), dynamic item titles, and badge indicators.
+    - Multi-column grid support inside each repeater item (`.Grid(columns)`).
+    - Server-side bracket notation parser (`forms.ParseFormData`) converting incoming POST form data into structured `[]map[string]any` slices automatically in `BaseResource` handlers.
+  - **Interactive `TagsInput` & `ColorPicker`**:
+    - **`TagsInput`**: Interactive pill tags with remove (`×`) buttons, keyboard triggers (Enter, Comma, Backspace), autocomplete suggestions popover (`.Suggestions(...)`), and max tags enforcement.
+    - **`ColorPicker`**: Brand color swatches row for quick 1-click preset selection, native HTML5 color wheel input, and hex text input with bidirectional synchronization.
+
+---
+
 ## [v1.13.0] - 2026-10-31
 
 ### Added

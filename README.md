@@ -182,61 +182,107 @@ func NewUserResource() *UserResource {
 |---|---|
 | `forms.TextInput(name)` | Text, email, password, tel, numeric with live debouncing and validation |
 | `forms.Textarea(name)` | Multi-line text with configurable rows and character count |
+| `forms.RichEditor(name)` | Full WYSIWYG rich text editor with toolbar (bold, lists, headings, links, code) |
+| `forms.MarkdownEditor(name)` | Markdown editor with toolbar and real-time Write / Preview tabbed interface |
 | `forms.Select(name)` | Dropdown options with searchability and multi-select |
 | `forms.Toggle(name)` | Boolean toggle switch |
 | `forms.DatePicker(name)` | Date and datetime-local picker |
-| `forms.FileUpload(name)` | Local disk or S3/MinIO file and image upload |
-| `forms.ColorPicker(name)` | Visual color picker with hex swatches |
-| `forms.TagsInput(name)` | Chip and tag management |
+| `forms.FileUpload(name)` | Drag-and-drop file upload with live previews, multi-file and size limits |
+| `forms.ImageUpload(name)` | Specialized image uploader with avatar circular mode and live preview cards |
+| `forms.ColorPicker(name)` | Visual color picker with palette presets, native wheel, and hex sync |
+| `forms.TagsInput(name)` | Interactive tag pills with autocomplete suggestions and key triggers |
 | `forms.Grid(cols)` | Responsive multi-column layout grid |
 | `forms.Section(title)` | Bordered card section with collapsible support |
 | `forms.Tabs(...)` | Tabbed form schemas |
 | `forms.Wizard(...)` | Sequential step-by-step form wizard with progress indicators |
-| `forms.Repeater(name)` | Dynamic nested line-item arrays (add/remove rows) |
+| `forms.Repeater(name)` | Dynamic nested arrays with reordering (`↑`/`↓`), collapsing, and grid support |
 
-### 🧙 Multi-Step Wizard (`forms.Wizard`)
+### 📁 File & Image Uploads (`forms.FileUpload` & `forms.ImageUpload`)
 
-Break complex forms into manageable sequential steps with Alpine.js step indicators, error auto-activation, and custom submit actions:
+Support for drag-and-drop file handling with instant client-side image preview and circular avatar mode:
 
 ```go
-forms.Wizard(
-    forms.WizardStep("Account").
-        Description("Login credentials").
-        Schema(
-            forms.TextInput("username").Required(),
-            forms.TextInput("email").Email().Required(),
-        ),
-    forms.WizardStep("Shipping").
-        Description("Delivery destination").
-        Schema(
-            forms.TextInput("address").Required(),
-            forms.TextInput("postal_code").Required(),
-        ),
-    forms.WizardStep("Payment").
-        Description("Billing information").
-        Schema(
-            forms.TextInput("card_number").Required(),
-        ),
-).SubmitAction("Place Order Now")
+// 1. Standard Drag & Drop File Upload
+forms.FileUpload("attachment").
+    Label("Contract Document").
+    AcceptedFileTypes("application/pdf", "image/png", "image/jpeg").
+    MaxSize(10240). // 10 MB
+    Required()
+
+// 2. Mobile-First Circular Avatar Mode
+forms.ImageUpload("avatar").
+    Label("Profile Photo").
+    Avatar().
+    HelperText("Recommended: 400x400 square photo").
+    Required()
 ```
+- **Automatic Multipart Encoding**: Forms containing upload fields automatically render with `enctype="multipart/form-data"`.
+- **Existing File Retention**: Retains existing file paths (`name_existing`) if no replacement file is chosen.
+- **Client Previews**: Generates instant `URL.createObjectURL` thumbnail previews upon file selection without waiting for server roundtrips.
 
-### 🔁 Dynamic Line-Item Repeater (`forms.Repeater`)
+---
 
-Allow operators to dynamically add, remove, and manage sub-record arrays with automatic input name scoping (`items[0][sku]`, `items[1][sku]`):
+### 📝 Rich Text & Markdown Editors (`forms.RichEditor` & `forms.MarkdownEditor`)
+
+```go
+// 1. WYSIWYG Rich Text Editor
+forms.RichEditor("content").
+    Label("Article Body").
+    MinHeight("280px").
+    Required()
+
+// 2. Dual-Mode Markdown Editor with Write / Preview Tabs
+forms.MarkdownEditor("documentation").
+    Label("API Documentation").
+    Rows(12).
+    Previewable(true)
+```
+- **RichEditor**: Full formatting suite: Bold (`B`), Italic (`I`), Underline (`U`), Strikethrough (`S`), Headings (`H1`, `H2`, `H3`, `P`), Bullet Lists, Numbered Lists, Blockquotes, Code blocks, Hyperlinks with modal prompts, Clear format, and Undo/Redo.
+- **MarkdownEditor**: Real-time Write / Preview tab switching with instant client-side markdown parsing and token insertion toolbar.
+
+---
+
+### 🔁 Dynamic Reorderable Repeater (`forms.Repeater`)
+
+Allow operators to dynamically add, remove, collapse, and reorder sub-record arrays with automatic input name scoping (`items[0][sku]`, `items[1][sku]`):
 
 ```go
 forms.Repeater("line_items").
     Label("Order Items").
     ItemLabel("Item").
+    Collapsible(true).
+    Reorderable(true). // Enables Move Up (↑) and Move Down (↓) buttons
+    Grid(3).           // 3-column responsive layout per repeater item
     MinItems(1).
-    MaxItems(10).
+    MaxItems(15).
     AddActionLabel("+ Add Line Item").
     Schema(
-        forms.TextInput("sku").Required(),
-        forms.TextInput("quantity").Numeric().Required(),
-        forms.TextInput("price").Numeric().Required(),
+        forms.TextInput("sku").Label("SKU").Required(),
+        forms.TextInput("quantity").Numeric().Label("Qty").Required(),
+        forms.TextInput("price").Numeric().Label("Price ($)").Required(),
     )
 ```
+- **Automatic Bracket Notation Parsing**: Server-side `forms.ParseFormData` automatically converts `line_items[0][sku]` into structured `[]map[string]any` slices inside resource create and update handlers.
+- **Reorderable & Collapsible**: Move items up and down with instant DOM reordering controls; collapse completed cards to save screen space.
+
+---
+
+### 🏷️ TagsInput & ColorPicker
+
+```go
+// Interactive tag chips with autocomplete suggestions
+forms.TagsInput("technologies").
+    Label("Tech Stack").
+    Suggestions("Go", "Ent ORM", "Laravel", "Flutter", "Tailwind", "Alpine.js").
+    MaxTags(8)
+
+// Color picker with palette swatches and 2-way hex synchronization
+forms.ColorPicker("primary_color").
+    Label("Brand Primary Color").
+    Presets("#6366f1", "#10b981", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6")
+```
+
+---
 
 ### Live Reactive Fields (`.Live()`)
 
