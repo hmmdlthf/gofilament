@@ -1,0 +1,142 @@
+package main
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/golaravel/gofilament/pkg/colors"
+	"github.com/golaravel/gofilament/pkg/filament"
+	"github.com/golaravel/golaravel/pkg/golaravel"
+)
+
+func createTestFlutterAdminApp(t *testing.T) *golaravel.Engine {
+	seedDatabase()
+
+	app := golaravel.Default()
+
+	tmpDir, err := os.MkdirTemp("", "test_flutter_admin_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+
+	webDist := filepath.Join(tmpDir, "build", "web")
+	_ = os.MkdirAll(webDist, 0755)
+	_ = os.WriteFile(filepath.Join(webDist, "index.html"), []byte(`<!DOCTYPE html><html><head><base href="/admin/"></head><body><h1>Pulse Fleet - Flutter Multiplatform Admin</h1></body></html>`), 0644)
+
+	adminPanel := filament.NewPanel("admin").
+		Path("/admin").
+		BrandName("Pulse Fleet").
+		Engine(filament.EngineFlutter).
+		Flutter(webDist).
+		Colors(map[string]any{
+			colors.RolePrimary: colors.Amber,
+			colors.RoleGray:    colors.Slate,
+		})
+
+	adminPanel.Resource(buildDeviceResource())
+	adminPanel.Resource(buildFleetUserResource())
+
+	if err := adminPanel.Register(app); err != nil {
+		t.Fatalf("Failed to mount flutter panel: %v", err)
+	}
+
+	return app
+}
+
+func TestFlutterAdmin_EngineAndWebServing(t *testing.T) {
+	app := createTestFlutterAdminApp(t)
+
+	// 1. Root /admin/ serves Flutter Web SPA
+	req := httptest.NewRequest("GET", "/admin/", nil)
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "Pulse Fleet - Flutter Multiplatform Admin") {
+		t.Errorf("expected Flutter SPA title in served index.html")
+	}
+}
+
+func TestFlutterAdmin_JSONAPISchema(t *testing.T) {
+	app := createTestFlutterAdminApp(t)
+
+	// 2. GET /admin/api/schema serves dynamic metadata for Flutter client
+	req := httptest.NewRequest("GET", "/admin/api/schema", nil)
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &schema); err != nil {
+		t.Fatalf("invalid json schema: %v", err)
+	}
+
+	if schema["brand_name"] != "Pulse Fleet" {
+		t.Errorf("expected brand_name 'Pulse Fleet', got %v", schema["brand_name"])
+	}
+	if schema["engine"] != "flutter" {
+		t.Errorf("expected engine 'flutter', got %v", schema["engine"])
+	}
+
+	resources, ok := schema["resources"].([]any)
+	if !ok || len(resources) < 2 {
+		t.Fatalf("expected at least 2 resources in schema, got %v", schema["resources"])
+	}
+}
+
+func TestFlutterAdmin_ResourcesJSONAPI(t *testing.T) {
+	app := createTestFlutterAdminApp(t)
+
+	// 3. GET /admin/api/resources/devices
+	req := httptest.NewRequest("GET", "/admin/api/resources/devices", nil)
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var resData map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resData); err != nil {
+		t.Fatalf("invalid json response: %v", err)
+	}
+
+	items, ok := resData["data"].([]any)
+	if !ok || len(items) == 0 {
+		t.Fatalf("expected devices in data array, got %v", resData)
+	}
+
+	// Verify device fields
+	firstDev := items[0].(map[string]any)
+	if firstDev["name"] == "" || firstDev["status"] == "" {
+		t.Errorf("expected device to have name and status: %v", firstDev)
+	}
+
+	// 4. GET /admin/api/resources/users
+	reqUsers := httptest.NewRequest("GET", "/admin/api/resources/users", nil)
+	wUsers := httptest.NewRecorder()
+	app.ServeHTTP(wUsers, reqUsers)
+
+	if wUsers.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for users, got %d", wUsers.Code)
+	}
+
+	var usersData map[string]any
+	_ = json.Unmarshal(wUsers.Body.Bytes(), &usersData)
+	userItems := usersData["data"].([]any)
+	if len(userItems) == 0 {
+		t.Errorf("expected fleet users in data array")
+	}
+}

@@ -396,7 +396,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
               children: [
                 _kpiCard('Active Entities', '${schema?['resources']?.length ?? 0}', Colors.indigo, Icons.layers),
                 const SizedBox(width: 12),
-                _kpiCard('System Status', 'Operational', Colors.emerald, Icons.check_circle),
+                _kpiCard('System Status', 'Operational', const Color(0xFF10B981), Icons.check_circle),
                 const SizedBox(width: 12),
                 _kpiCard('Multi-Tenancy', schema?['active_tenant'] ?? 'Global', Colors.amber, Icons.business),
               ],
@@ -476,7 +476,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
             children: [
               Expanded(child: _kpiCard('Entities', '${schema?['resources']?.length ?? 0}', Colors.indigo, Icons.layers)),
               const SizedBox(width: 16),
-              Expanded(child: _kpiCard('Kernel Engine', 'GoLaravel', Colors.emerald, Icons.check_circle)),
+              Expanded(child: _kpiCard('Kernel Engine', 'GoLaravel', const Color(0xFF10B981), Icons.check_circle)),
               const SizedBox(width: 16),
               Expanded(child: _kpiCard('UI Mode', 'Mobile-First Flutter', Colors.amber, Icons.devices)),
             ],

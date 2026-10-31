@@ -892,6 +892,33 @@ go run ./examples/ecommerce
 
 ---
 
+## 📱 Multiplatform Example: Pulse Fleet (Flutter Engine)
+
+GoFilament supports delivering panels as **Flutter Multiplatform Applications** (`EngineFlutter`), targeting Mobile (iOS, Android), Desktop (macOS, Linux, Windows), and Web through a single codebase driven by GoFilament's JSON REST API:
+
+```bash
+# 1. Run the Go backend server (port :8081)
+go run ./examples/flutter_admin
+
+# Open browser at http://localhost:8081/admin (serves the Flutter Web shell)
+# Or inspect dynamic metadata at http://localhost:8081/admin/api/schema
+
+# 2. (Optional) Run natively on mobile simulator or desktop via Flutter SDK
+cd examples/flutter_admin/client
+flutter run
+```
+
+### ⚡ Flutter Engine Features:
+- **Dynamic Schema Hydration**: The Flutter client queries `GET /admin/api/schema` on launch to dynamically configure brand titles, theme colors, navigation destinations, and active tenant contexts.
+- **Mobile-First Responsive Shell**: Uses `ResponsiveLayout` to swap seamlessly between Material 3 Bottom Navigation on phones and a Desktop Navigation Rail on larger screens.
+- **Native Touch Interactions**: Haptic feedback on tap, pull-to-refresh on entity feeds, swipe-to-delete, and fluid modal dialogs.
+- **Artisan Scaffolding**: Generate customized mobile-first Flutter admin clients anytime using:
+  ```bash
+  artisan make:filament-flutter MobileAdmin
+  ```
+
+---
+
 ## 💻 Artisan CLI Generators
 
 Integrated directly with GoLaravel's Artisan CLI:
