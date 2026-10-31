@@ -319,6 +319,37 @@ panel := filament.NewPanel("admin").
 
 ---
 
+## 🌐 Multi-Language Localization & Right-to-Left (RTL)
+
+GoFilament integrates natively with GoLaravel v1.1.0's translation architecture (`pkg/translation`), offering seamless multi-language administration with automatic Right-to-Left (RTL) layout switching:
+
+```go
+panel := filament.NewPanel("admin").
+    Path("/admin").
+    Locales("en", "ar", "es", "fr"). // Supported languages
+    DefaultLocale("en").
+    LocaleLabels(map[string]string{
+        "en": "English (US)",
+        "ar": "العربية الفصحى",
+    }).
+    LocaleFlags(map[string]string{
+        "en": "🇺🇸",
+        "ar": "🇸🇦",
+    })
+```
+
+### 🌍 Key Localization Features:
+- **Automatic Topbar Language Switcher**: An interactive Alpine.js dropdown pill in the Topbar displays current flags, localized names, and active checkmarks when more than one locale is configured.
+- **Direction-Aware (RTL/LTR)**: Evaluates `ctx.IsRTL()` and `ctx.Direction()`, automatically rendering `<html lang="%s" dir="%s">` across dashboards, resource CRUD views, and login screens.
+- **Dedicated RTL Stylesheet**: Reverses sidebar borders, mirrors notification drawers to slide in from the left, flips unread indicators, and aligns text appropriately.
+- **Flexible Resolution**: Automatically resolves language from URL query parameters (`?lang=ar`), persistent cookies (`locale=ar`), context defaults, or panel configuration with fallback validation.
+- **Web & REST Endpoints**:
+  - Web: `GET /admin/locale/switch?lang={code}` & `POST /admin/locale/switch` (sets persistent cookie, redirects back to Referer).
+  - REST API: `POST /admin/api/locale/switch` (JSON body `{"locale": "ar"}` returning `{success, locale, direction, is_rtl}`).
+  - REST API Schema: `GET /admin/api/schema` includes `locale`, `direction`, `is_rtl`, and `supported_locales`.
+
+---
+
 ## 🔗 Interactive In-Place Relation Managers
 
 Relation Managers allow you to embed related child models (e.g. `OrdersRelationManager`, `AddressesRelationManager`, or `LineItemsRelationManager`) directly inside a parent resource's View and Edit screens:

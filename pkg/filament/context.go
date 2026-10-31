@@ -2,10 +2,12 @@ package filament
 
 import (
 	"context"
+	"strings"
 
 	"github.com/golaravel/golaravel/pkg/auth"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/privacy"
+	_ "github.com/golaravel/golaravel/pkg/translation"
 )
 
 // Context wraps GoLaravel request context with Filament-specific metadata and helpers.
@@ -21,8 +23,11 @@ func NewContext(gc *gcontext.Context, p *Panel) *Context {
 		Context: gc,
 		panel:   p,
 	}
-	if p != nil && p.tenantConfig != nil && p.tenantConfig.Enabled {
-		p.ResolveTenant(ctx)
+	if p != nil {
+		p.resolveLocale(ctx)
+		if p.tenantConfig != nil && p.tenantConfig.Enabled {
+			p.ResolveTenant(ctx)
+		}
 	}
 	return ctx
 }
@@ -102,4 +107,60 @@ func (c *Context) GoContext() context.Context {
 		return context.Background()
 	}
 	return c.Request.Context()
+}
+
+// Locale returns the active language code for this request (e.g. "en", "ar", "es").
+func (c *Context) Locale() string {
+	if c == nil || c.Context == nil {
+		return "en"
+	}
+	return c.GetLocale()
+}
+
+// Direction returns "rtl" or "ltr" based on the active locale.
+func (c *Context) Direction() string {
+	if c == nil || c.Context == nil {
+		return "ltr"
+	}
+	if c.IsRTL() {
+		return "rtl"
+	}
+	return "ltr"
+}
+
+// IsRTL returns true if the active request locale is Right-to-Left (e.g. Arabic, Persian, Urdu, Hebrew).
+func (c *Context) IsRTL() bool {
+	if c == nil || c.Context == nil {
+		return false
+	}
+	if c.Context.IsRTL() {
+		return true
+	}
+	loc := strings.ToLower(strings.TrimSpace(c.Locale()))
+	prefix := loc
+	if idx := strings.IndexAny(loc, "-_"); idx != -1 {
+		prefix = loc[:idx]
+	}
+	switch prefix {
+	case "ar", "fa", "he", "ur", "yi", "ps", "sd", "ug", "ckb", "syr", "dv":
+		return true
+	default:
+		return false
+	}
+}
+
+// Trans translates the given translation key for the active request locale.
+func (c *Context) Trans(key string, replace ...map[string]any) string {
+	if c == nil || c.Context == nil {
+		return key
+	}
+	return c.Context.Trans(key, replace...)
+}
+
+// TransChoice translates with pluralization for the active request locale.
+func (c *Context) TransChoice(key string, number int, replace ...map[string]any) string {
+	if c == nil || c.Context == nil {
+		return key
+	}
+	return c.Context.TransChoice(key, number, replace...)
 }

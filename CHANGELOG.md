@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.11.0] - 2026-10-31
+
+### Added
+- **Multi-Language Localization & Right-to-Left (RTL) Support (`pkg/filament/locale.go`, `pkg/filament/context.go`, `pkg/filament/panel.go`, `pkg/filament/api.go`, `pkg/assets/dist/filament.css`)**:
+  - **GoLaravel v1.1.0 Integration**:
+    - Direct dependency upgrade to GoLaravel v1.1.0 translation architecture (`pkg/translation`, `pkg/context`).
+    - Context helper methods: `c.Locale()`, `c.Direction()`, `c.IsRTL()`, `c.Trans(key, replace...)`, `c.TransChoice(key, number, replace...)`.
+  - **Panel Locale Configuration**:
+    - `p.Locales("en", "ar", "es", ...)`: Configures supported admin panel languages.
+    - `p.DefaultLocale("en")`: Configures fallback locale.
+    - `p.LocaleLabels(map[string]string{...})`: Configures custom display names for language selectors.
+    - `p.LocaleFlags(map[string]string{...})`: Configures custom emoji/icon flags.
+    - Built-in default dictionary supporting 19+ languages with native labels and national flag emojis.
+  - **Automated Locale Resolution**:
+    - Multi-tiered resolution: URL query params (`?lang=` / `?locale=`) > Session cookie (`locale`) > GoLaravel Context locale > Configured panel defaults.
+    - Strict validation fallback to default locale if an unsupported code is requested.
+    - Automatically sets `Content-Language` header on HTTP responses.
+  - **Interactive Topbar Language Switcher**:
+    - Accessible Alpine.js dropdown pill rendered automatically in the panel topbar whenever `len(locales) > 1`.
+    - Active language highlight with checkmark, flag icons, and native display labels.
+    - Direction-aware popup positioning (left-aligned for LTR, right-aligned for RTL).
+  - **Language Switch Endpoints**:
+    - Web: `GET /admin/locale/switch?lang={code}` & `POST /admin/locale/switch` (sets persistent 1-year cookie and redirects back to `Referer` or panel base).
+    - REST API: `POST /admin/api/locale/switch` (supports JSON body `{"locale": "ar"}` or query params, returns `{success, locale, direction, is_rtl, label, flag}`).
+    - Schema Metadata: `GET /admin/api/schema` exposes `locale`, `direction`, `is_rtl`, `supported_locales`, `default_locale`, and `locale_labels`.
+  - **RTL Layout & CSS Styling**:
+    - Layout templates render dynamic `<html lang="%s" dir="%s">` across dashboard, resource CRUD pages, and login screen.
+    - Comprehensive RTL CSS rules: reversed sidebar borders, notifications drawer sliding in from the left, mirrored unread notification markers, and right-aligned tables.
+
+---
+
 ## [v1.10.0] - 2026-10-31
 
 ### Added

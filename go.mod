@@ -6,7 +6,7 @@ replace github.com/golaravel/golaravel => ../golaravel
 
 require (
 	github.com/a-h/templ v0.3.1100
-	github.com/golaravel/golaravel v1.0.3
+	github.com/golaravel/golaravel v1.1.0
 )
 
 require (

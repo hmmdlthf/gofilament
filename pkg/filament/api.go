@@ -97,19 +97,95 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		}
 
 		schema := map[string]any{
-			"id":            p.id,
-			"brand_name":    p.brandName,
-			"path":          p.path,
-			"engine":        string(p.GetEngine()),
-			"dark_mode":     p.darkMode,
-			"active_tenant": activeTenantKey,
-			"tenants":       tenantsDTO,
-			"navigation":    navDTOs,
-			"resources":     resourceDTOs,
-			"widgets_count": len(p.widgets),
+			"id":                p.id,
+			"brand_name":        p.brandName,
+			"path":              p.path,
+			"engine":            string(p.GetEngine()),
+			"dark_mode":         p.darkMode,
+			"locale":            ctx.Locale(),
+			"direction":         ctx.Direction(),
+			"is_rtl":            ctx.IsRTL(),
+			"supported_locales": p.locales,
+			"default_locale":    p.GetDefaultLocale(),
+			"locale_labels":     p.localeLabels,
+			"active_tenant":     activeTenantKey,
+			"tenants":           tenantsDTO,
+			"navigation":        navDTOs,
+			"resources":         resourceDTOs,
+			"widgets_count":     len(p.widgets),
 		}
 
 		return c.JSON(http.StatusOK, schema)
+	})
+
+	// Locale switch REST endpoint
+	r.POST(apiPrefix+"/locale/switch", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+
+		targetLocale := c.Query("locale")
+		if targetLocale == "" {
+			targetLocale = c.Query("lang")
+		}
+		if targetLocale == "" {
+			targetLocale = c.FormValue("locale")
+		}
+		if targetLocale == "" {
+			targetLocale = c.FormValue("lang")
+		}
+
+		// Also support JSON body: {"locale": "ar"} or {"lang": "ar"}
+		if targetLocale == "" && strings.Contains(c.Header("Content-Type"), "application/json") {
+			var body struct {
+				Locale string `json:"locale"`
+				Lang   string `json:"lang"`
+			}
+			if err := json.NewDecoder(c.Request.Body).Decode(&body); err == nil {
+				if body.Locale != "" {
+					targetLocale = body.Locale
+				} else if body.Lang != "" {
+					targetLocale = body.Lang
+				}
+			}
+		}
+
+		if targetLocale == "" {
+			return c.JSON(http.StatusBadRequest, map[string]any{
+				"error": "Locale code is required (param 'locale' or 'lang')",
+			})
+		}
+
+		// Validate against supported locales if configured
+		if len(p.locales) > 0 {
+			matched := false
+			for _, loc := range p.locales {
+				if strings.EqualFold(loc, targetLocale) {
+					targetLocale = loc
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return c.JSON(http.StatusBadRequest, map[string]any{
+					"error":             fmt.Sprintf("Locale '%s' is not supported", targetLocale),
+					"supported_locales": p.locales,
+				})
+			}
+		}
+
+		c.SetCookie("locale", targetLocale, 86400*365, "/", "", false, false)
+		ctx.SetLocale(targetLocale)
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"success":   true,
+			"locale":    ctx.Locale(),
+			"direction": ctx.Direction(),
+			"is_rtl":    ctx.IsRTL(),
+			"label":     p.GetLocaleLabel(ctx.Locale()),
+			"flag":      p.GetLocaleFlag(ctx.Locale()),
+		})
 	})
 
 	// 2. Multi-Tenant API Endpoints

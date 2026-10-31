@@ -1314,7 +1314,7 @@ func (r *BaseResource[T]) handleLive(ctx *Context) error {
 func (r *BaseResource[T]) renderPage(ctx *Context, pageTitle, innerContent string) error {
 	p := ctx.Panel()
 	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
+<html lang="%s" dir="%s">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1334,6 +1334,7 @@ func (r *BaseResource[T]) renderPage(ctx *Context, pageTitle, innerContent strin
   </div>
 </body>
 </html>`,
+		ctx.Locale(), ctx.Direction(),
 		pageTitle, p.GetBrandName(),
 		p.GetPath(), p.GetPath(),
 		p.RenderSidebar(ctx),

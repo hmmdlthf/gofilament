@@ -73,6 +73,10 @@ type Panel struct {
 	pages               []PageInterface
 	widgets             []WidgetInterface
 	dashboardRenderFunc func(ctx *Context) error
+	locales             []string
+	defaultLocale       string
+	localeLabels        map[string]string
+	localeFlags         map[string]string
 }
 
 // NewPanel creates a new Panel with sensible defaults.
@@ -93,6 +97,10 @@ func NewPanel(id string) *Panel {
 		resources:           make([]ResourceInterface, 0),
 		pages:               make([]PageInterface, 0),
 		widgets:             make([]WidgetInterface, 0),
+		locales:             make([]string, 0),
+		defaultLocale:       "en",
+		localeLabels:        make(map[string]string),
+		localeFlags:         make(map[string]string),
 	}
 
 	// Default user menu
@@ -578,6 +586,53 @@ func (p *Panel) Mount(r *router.Router) {
 		r.POST(p.path+"/tenant/switch", tenantSwitchHandler)
 	}
 
+	// 2b. Locale Switch Routes
+	localeSwitchHandler := func(c *gcontext.Context) error {
+		targetLang := c.Query("lang")
+		if targetLang == "" {
+			targetLang = c.Query("locale")
+		}
+		if targetLang == "" {
+			targetLang = c.FormValue("lang")
+		}
+		if targetLang == "" {
+			targetLang = c.FormValue("locale")
+		}
+
+		if targetLang != "" {
+			// Validate if configured locales are defined
+			if len(p.locales) > 0 {
+				matched := false
+				for _, loc := range p.locales {
+					if strings.EqualFold(loc, targetLang) {
+						targetLang = loc
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					if p.defaultLocale != "" {
+						targetLang = p.defaultLocale
+					} else {
+						targetLang = p.locales[0]
+					}
+				}
+			}
+
+			c.SetCookie("locale", targetLang, 86400*365, "/", "", false, false)
+			c.SetLocale(targetLang)
+		}
+
+		redirectURL := p.path
+		if ref := c.Header("Referer"); ref != "" {
+			redirectURL = ref
+		}
+		return c.Redirect(http.StatusSeeOther, redirectURL)
+	}
+
+	r.GET(p.path+"/locale/switch", localeSwitchHandler)
+	r.POST(p.path+"/locale/switch", localeSwitchHandler)
+
 	// 3. Auth Routes (Login, Logout, Profile)
 	if p.hasLogin {
 		r.GET(p.path+"/login", func(c *gcontext.Context) error {
@@ -783,7 +838,7 @@ func (p *Panel) renderDefaultDashboard(ctx *Context) error {
 	}
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
+<html lang="%s" dir="%s">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -809,6 +864,7 @@ func (p *Panel) renderDefaultDashboard(ctx *Context) error {
   </div>
 </body>
 </html>`,
+		ctx.Locale(), ctx.Direction(),
 		title, p.brandName,
 		p.path, p.path,
 		p.renderSidebarHTML(ctx),
@@ -914,6 +970,11 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
   🔔
   <span id="notif-unread-badge" class="badge-count" style="%s">%d</span>
 </button>`, badgeDisplay, unreadCount))
+	}
+
+	// Language / Locale switcher dropdown
+	if len(p.locales) > 1 {
+		sb.WriteString(p.renderLocaleSwitcherHTML(ctx))
 	}
 
 	// User menu
@@ -1026,7 +1087,7 @@ func (p *Panel) renderNotificationsDrawerHTML(ctx *Context) string {
 
 func (p *Panel) renderLoginScreen(ctx *Context) error {
 	html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
+<html lang="%s" dir="%s">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1058,7 +1119,7 @@ func (p *Panel) renderLoginScreen(ctx *Context) error {
     </form>
   </div>
 </body>
-</html>`, p.brandName, p.path, p.path, p.brandName, p.path)
+</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.brandName, p.path)
 
 	return ctx.HTML(http.StatusOK, html)
 }
@@ -1079,12 +1140,13 @@ func (p *Panel) mountFlutter(r *router.Router) {
 
 	// If Flutter Web hasn't been built yet, show guidance page
 	r.GET(p.path, func(c *gcontext.Context) error {
+		ctx := NewContext(c, p)
 		clientDir := filepath.Dir(distDir)
 		if strings.HasSuffix(distDir, "web") {
 			clientDir = filepath.Dir(clientDir)
 		}
 		html := fmt.Sprintf(`<!DOCTYPE html>
-<html lang="en">
+<html lang="%s" dir="%s">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1109,7 +1171,7 @@ func (p *Panel) mountFlutter(r *router.Router) {
     </div>
   </div>
 </body>
-</html>`, p.brandName, p.path, p.brandName, clientDir, clientDir, p.path)
+</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.brandName, clientDir, clientDir, p.path)
 		return c.HTML(http.StatusOK, html)
 	})
 
