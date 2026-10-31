@@ -29,6 +29,31 @@ func (c *IconColumnDef[T]) Icons(m map[any]string) *IconColumnDef[T] {
 	return c
 }
 
+func (c *IconColumnDef[T]) Label(l string) *IconColumnDef[T] {
+	c.BaseColumn.Label(l)
+	return c
+}
+
+func (c *IconColumnDef[T]) Sortable(s ...bool) *IconColumnDef[T] {
+	c.BaseColumn.Sortable(s...)
+	return c
+}
+
+func (c *IconColumnDef[T]) Searchable(s ...bool) *IconColumnDef[T] {
+	c.BaseColumn.Searchable(s...)
+	return c
+}
+
+func (c *IconColumnDef[T]) Toggleable(t ...bool) *IconColumnDef[T] {
+	c.BaseColumn.Toggleable(t...)
+	return c
+}
+
+func (c *IconColumnDef[T]) ToggledHiddenByDefault(h ...bool) *IconColumnDef[T] {
+	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
 func (c *IconColumnDef[T]) Colors(m map[any]string) *IconColumnDef[T] {
 	c.colors = m
 	return c
@@ -80,6 +105,40 @@ func ColorColumn[T any](name string) *ColorColumnDef[T] {
 	}
 }
 
+func (c *ColorColumnDef[T]) Label(l string) *ColorColumnDef[T] {
+	c.BaseColumn.Label(l)
+	return c
+}
+
+func (c *ColorColumnDef[T]) Sortable(s ...bool) *ColorColumnDef[T] {
+	c.BaseColumn.Sortable(s...)
+	return c
+}
+
+func (c *ColorColumnDef[T]) Searchable(s ...bool) *ColorColumnDef[T] {
+	c.BaseColumn.Searchable(s...)
+	return c
+}
+
+func (c *ColorColumnDef[T]) Toggleable(t ...bool) *ColorColumnDef[T] {
+	c.BaseColumn.Toggleable(t...)
+	return c
+}
+
+func (c *ColorColumnDef[T]) ToggledHiddenByDefault(h ...bool) *ColorColumnDef[T] {
+	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
+func (c *ColorColumnDef[T]) Copyable(cp ...bool) *ColorColumnDef[T] {
+	if len(cp) > 0 {
+		c.copyable = cp[0]
+	} else {
+		c.copyable = true
+	}
+	return c
+}
+
 func (c *ColorColumnDef[T]) RenderCell(record T, rawValue any) string {
 	if c.valueFunc != nil {
 		rawValue = c.valueFunc(record)
@@ -114,6 +173,36 @@ func SelectColumn[T any](name string) *SelectColumnDef[T] {
 
 func (c *SelectColumnDef[T]) Options(opts map[string]string) *SelectColumnDef[T] {
 	c.options = opts
+	return c
+}
+
+func (c *SelectColumnDef[T]) Label(l string) *SelectColumnDef[T] {
+	c.BaseColumn.Label(l)
+	return c
+}
+
+func (c *SelectColumnDef[T]) Sortable(s ...bool) *SelectColumnDef[T] {
+	c.BaseColumn.Sortable(s...)
+	return c
+}
+
+func (c *SelectColumnDef[T]) Searchable(s ...bool) *SelectColumnDef[T] {
+	c.BaseColumn.Searchable(s...)
+	return c
+}
+
+func (c *SelectColumnDef[T]) Toggleable(t ...bool) *SelectColumnDef[T] {
+	c.BaseColumn.Toggleable(t...)
+	return c
+}
+
+func (c *SelectColumnDef[T]) ToggledHiddenByDefault(h ...bool) *SelectColumnDef[T] {
+	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
+func (c *SelectColumnDef[T]) Value(fn func(record T) any) *SelectColumnDef[T] {
+	c.BaseColumn.Value(fn)
 	return c
 }
 
@@ -172,6 +261,36 @@ func TextInputColumn[T any](name string) *TextInputColumnDef[T] {
 	return &TextInputColumnDef[T]{
 		BaseColumn: BaseColumn[T]{name: name},
 	}
+}
+
+func (c *TextInputColumnDef[T]) Label(l string) *TextInputColumnDef[T] {
+	c.BaseColumn.Label(l)
+	return c
+}
+
+func (c *TextInputColumnDef[T]) Sortable(s ...bool) *TextInputColumnDef[T] {
+	c.BaseColumn.Sortable(s...)
+	return c
+}
+
+func (c *TextInputColumnDef[T]) Searchable(s ...bool) *TextInputColumnDef[T] {
+	c.BaseColumn.Searchable(s...)
+	return c
+}
+
+func (c *TextInputColumnDef[T]) Toggleable(t ...bool) *TextInputColumnDef[T] {
+	c.BaseColumn.Toggleable(t...)
+	return c
+}
+
+func (c *TextInputColumnDef[T]) ToggledHiddenByDefault(h ...bool) *TextInputColumnDef[T] {
+	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
+func (c *TextInputColumnDef[T]) Value(fn func(record T) any) *TextInputColumnDef[T] {
+	c.BaseColumn.Value(fn)
+	return c
 }
 
 func (c *TextInputColumnDef[T]) RenderCell(record T, rawValue any) string {

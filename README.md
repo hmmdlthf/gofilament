@@ -862,6 +862,36 @@ customerResource := filament.NewResource[*Customer]("customers").
 
 ---
 
+## 🛒 Complete Example Application: Apex eCommerce Store
+
+GoFilament ships with a complete, production-grade eCommerce store admin panel example located in [`examples/ecommerce`](./examples/ecommerce). It serves as a real-world reference implementation demonstrating all of GoFilament's major capabilities working in unison:
+
+```bash
+# Run the eCommerce demo application
+go run ./examples/ecommerce
+
+# Open your browser at
+# http://localhost:8080/admin
+```
+
+### ✨ Features Showcased:
+1. **Executive KPI Dashboard (`widgets.NewStatsOverviewWidget`)**:
+   - Total Revenue (`$124,580.00`), Orders Fulfilled (`1,482`), Average Order Value (`$84.07`), and Active Customers (`3,890`).
+   - SVG sparklines, trend comparisons (`+18.4% vs last month`), and one-click drilldown URLs into resource tables.
+2. **Product Catalog (`ProductResource`)**:
+   - **Multi-Step Form Wizard (`forms.Wizard`)**: Multi-step creation flow spanning *Basic Info*, *Pricing & Stock*, and *Media & Description* with dynamic progress indicators and validation autofocus.
+   - **Interactive Table**: Inline cell editing (`TextInputColumn("price")`, `SelectColumn("inventory_status")`, `ToggleColumn("is_published")`), drag-and-drop row reordering (`Reorderable("sort_order")`), column toggling modal (`Toggleable(true)`), and soft-deletes Trash Recovery Bin (`SoftDeletes(true)`).
+3. **Orders & Logistics (`OrderResource`)**:
+   - **Dynamic Line Items**: Multi-item invoice repeater (`forms.Repeater("items")`) with automatic line item total calculations.
+   - **Audit Trail & Changeset Timeline**: Infolist detail view featuring `activitylog.TimelineEntry` displaying real-time before/after diffs, fulfillment milestones, and webhook event logs.
+4. **Customer CRM (`CustomerResource`)**:
+   - Tag management (`forms.TagsInput("tags")`), VIP membership toggle, customer spending tracking, and soft-delete recovery.
+5. **Automated Audit Logging & Standalone Audit Resource**:
+   - Zero-boilerplate audit trail recording via `activitylog.EnableAuditLog(resource)`.
+   - Dedicated `activitylog.NewActivityResource()` management screen with filterable event tags (`created`, `updated`, `deleted`, `restored`).
+
+---
+
 ## 💻 Artisan CLI Generators
 
 Integrated directly with GoLaravel's Artisan CLI:

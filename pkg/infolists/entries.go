@@ -3,9 +3,43 @@ package infolists
 import (
 	"fmt"
 	"html"
+	"reflect"
 	"strings"
 	"time"
 )
+
+// extractValue fetches a property from a map or struct/pointer to struct.
+func extractValue(record any, name string) any {
+	if record == nil {
+		return nil
+	}
+	if m, ok := record.(map[string]any); ok {
+		return m[name]
+	}
+	val := reflect.ValueOf(record)
+	if val.Kind() == reflect.Pointer {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Struct {
+		return nil
+	}
+	field := val.FieldByName(name)
+	if !field.IsValid() {
+		// Try TitleCase: "created_at" -> "CreatedAt", "order_no" -> "OrderNo", "customer_name" -> "CustomerName"
+		parts := strings.Split(name, "_")
+		for i, p := range parts {
+			if len(p) > 0 {
+				parts[i] = strings.ToUpper(p[:1]) + p[1:]
+			}
+		}
+		titleName := strings.Join(parts, "")
+		field = val.FieldByName(titleName)
+	}
+	if field.IsValid() && field.CanInterface() {
+		return field.Interface()
+	}
+	return nil
+}
 
 // Entry defines the contract for infolist entries and containers.
 type Entry interface {
@@ -106,14 +140,14 @@ func (e *TextEntryDef) Money(currency string) *TextEntryDef {
 
 func (e *TextEntryDef) Render(record any) string {
 	val := ""
-	if m, ok := record.(map[string]any); ok {
-		if raw, exists := m[e.name]; exists {
-			if t, ok := raw.(time.Time); ok && e.isDateTime {
-				val = t.Format(e.dateTimeFmt)
-			} else if raw != nil {
-				val = fmt.Sprintf("%v", raw)
-			}
-		}
+	raw := extractValue(record, e.name)
+	if e.valueFunc != nil {
+		raw = e.valueFunc(record)
+	}
+	if t, ok := raw.(time.Time); ok && e.isDateTime {
+		val = t.Format(e.dateTimeFmt)
+	} else if raw != nil {
+		val = fmt.Sprintf("%v", raw)
 	}
 
 	if e.currency != "" && val != "" {
@@ -162,10 +196,12 @@ func (e *BadgeEntryDef) Colors(c map[string]string) *BadgeEntryDef {
 
 func (e *BadgeEntryDef) Render(record any) string {
 	val := ""
-	if m, ok := record.(map[string]any); ok {
-		if raw, exists := m[e.name]; exists && raw != nil {
-			val = fmt.Sprintf("%v", raw)
-		}
+	raw := extractValue(record, e.name)
+	if e.valueFunc != nil {
+		raw = e.valueFunc(record)
+	}
+	if raw != nil {
+		val = fmt.Sprintf("%v", raw)
 	}
 	colorName := "gray"
 	if col, ok := e.colors[val]; ok {

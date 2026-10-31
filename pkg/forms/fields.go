@@ -501,6 +501,21 @@ func (f *ToggleField) Label(l string) *ToggleField {
 	return f
 }
 
+func (f *ToggleField) HelperText(h string) *ToggleField {
+	f.BaseField.HelperText(h)
+	return f
+}
+
+func (f *ToggleField) Required(r ...bool) *ToggleField {
+	f.BaseField.Required(r...)
+	return f
+}
+
+func (f *ToggleField) Disabled(d ...bool) *ToggleField {
+	f.BaseField.Disabled(d...)
+	return f
+}
+
 func (f *ToggleField) Render(ctx context.Context, state map[string]any, errors map[string]string) string {
 	checked := ""
 	if v, ok := state[f.name]; ok {
@@ -510,12 +525,19 @@ func (f *ToggleField) Render(ctx context.Context, state map[string]any, errors m
 			checked = "checked"
 		}
 	}
+	helper := ""
+	if f.helperText != "" {
+		helper = fmt.Sprintf(`<p class="form-helper" style="font-size: 0.75rem; color: var(--gray-500); margin-top: 0.25rem; margin-left: 2rem;">%s</p>`, html.EscapeString(f.helperText))
+	}
 	return fmt.Sprintf(`
-<div class="form-group" style="display: flex; align-items: center; gap: 0.75rem; margin-top: 1rem;">
-  <input type="checkbox" id="%s" name="%s" value="1" %s style="width: 1.25rem; height: 1.25rem; accent-color: var(--primary-600); cursor: pointer;" />
-  <label for="%s" style="font-size: 0.875rem; font-weight: 500; cursor: pointer;">%s</label>
+<div class="form-group" style="margin-top: 1rem;">
+  <div style="display: flex; align-items: center; gap: 0.75rem;">
+    <input type="checkbox" id="%s" name="%s" value="1" %s style="width: 1.25rem; height: 1.25rem; accent-color: var(--primary-600); cursor: pointer;" />
+    <label for="%s" style="font-size: 0.875rem; font-weight: 500; cursor: pointer; margin-bottom: 0;">%s</label>
+  </div>
+  %s
 </div>`,
-		f.name, f.name, checked, f.name, html.EscapeString(f.formatLabel()),
+		f.name, f.name, checked, f.name, html.EscapeString(f.formatLabel()), helper,
 	)
 }
 

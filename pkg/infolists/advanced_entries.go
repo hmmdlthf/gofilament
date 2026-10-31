@@ -3,6 +3,7 @@ package infolists
 import (
 	"fmt"
 	"html"
+	"reflect"
 	"strings"
 )
 
@@ -31,10 +32,12 @@ func (e *IconEntryDef) Label(l string) *IconEntryDef {
 
 func (e *IconEntryDef) Render(record any) string {
 	val := ""
-	if m, ok := record.(map[string]any); ok {
-		if raw, exists := m[e.name]; exists && raw != nil {
-			val = fmt.Sprintf("%v", raw)
-		}
+	raw := extractValue(record, e.name)
+	if e.valueFunc != nil {
+		raw = e.valueFunc(record)
+	}
+	if raw != nil {
+		val = fmt.Sprintf("%v", raw)
 	}
 
 	icon := "✓"
@@ -75,10 +78,12 @@ func (e *ImageEntryDef) Circular(circ ...bool) *ImageEntryDef {
 
 func (e *ImageEntryDef) Render(record any) string {
 	url := ""
-	if m, ok := record.(map[string]any); ok {
-		if raw, exists := m[e.name]; exists && raw != nil {
-			url = fmt.Sprintf("%v", raw)
-		}
+	raw := extractValue(record, e.name)
+	if e.valueFunc != nil {
+		raw = e.valueFunc(record)
+	}
+	if raw != nil {
+		url = fmt.Sprintf("%v", raw)
 	}
 
 	radius := "0.375rem"
@@ -124,25 +129,27 @@ func (e *RepeatableEntryDef) Schema(entries ...Entry) *RepeatableEntryDef {
 }
 
 func (e *RepeatableEntryDef) Render(record any) string {
-	var items []map[string]any
-	if m, ok := record.(map[string]any); ok {
-		if raw, exists := m[e.name]; exists {
-			if slice, ok := raw.([]map[string]any); ok {
-				items = slice
-			}
-		}
+	raw := extractValue(record, e.name)
+	if e.valueFunc != nil {
+		raw = e.valueFunc(record)
 	}
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf(`<div style="margin-bottom: 1.5rem;"><div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--gray-500); margin-bottom: 0.5rem;">%s</div>`, html.EscapeString(e.FormatLabel())))
 
-	for _, item := range items {
-		colClass := fmt.Sprintf("grid-cols-%d", e.columns)
-		sb.WriteString(fmt.Sprintf(`<div class="grid %s" style="border: 1px solid var(--gray-200); border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 0.5rem; background-color: var(--gray-50);">`, colClass))
-		for _, sub := range e.schema {
-			sb.WriteString(sub.Render(item))
+	if raw != nil {
+		v := reflect.ValueOf(raw)
+		if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
+			for i := 0; i < v.Len(); i++ {
+				item := v.Index(i).Interface()
+				colClass := fmt.Sprintf("grid-cols-%d", e.columns)
+				sb.WriteString(fmt.Sprintf(`<div class="grid %s" style="border: 1px solid var(--gray-200); border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 0.5rem; background-color: var(--gray-50);">`, colClass))
+				for _, sub := range e.schema {
+					sb.WriteString(sub.Render(item))
+				}
+				sb.WriteString(`</div>`)
+			}
 		}
-		sb.WriteString(`</div>`)
 	}
 
 	sb.WriteString(`</div>`)
