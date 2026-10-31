@@ -310,6 +310,8 @@ func (p *Panel) RenderHeadHTML(ctx *Context) string {
 // RenderBodyEndHTML generates elements for injection right before </body>.
 func (p *Panel) RenderBodyEndHTML(ctx *Context) string {
 	var sb strings.Builder
+	sb.WriteString(`<div id="filament-sidebar-backdrop" class="filament-sidebar-backdrop" onclick="Filament.sidebar.close()"></div>`)
+	sb.WriteString("\n")
 	if p.hasGlobalSearch {
 		sb.WriteString(globalsearch.RenderModalHTML(p.brandName, p.path, p.GetGlobalSearchKeyBinding()))
 		sb.WriteString("\n")

@@ -964,9 +964,10 @@ func (p *Panel) RenderTopbar(ctx *Context) string {
 
 func (p *Panel) renderSidebarHTML(ctx *Context) string {
 	var sb strings.Builder
-	sb.WriteString(`<aside class="filament-sidebar">`)
-	sb.WriteString(fmt.Sprintf(`<div style="padding: 1.25rem 1.5rem; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid var(--gray-200);">
+	sb.WriteString(`<aside class="filament-sidebar" id="filament-sidebar">`)
+	sb.WriteString(fmt.Sprintf(`<div style="padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--gray-200);">
 		<span style="font-weight: 700; font-size: 1.125rem; color: var(--primary-600);">%s</span>
+		<button type="button" class="filament-sidebar-close-btn" onclick="Filament.sidebar.close()" aria-label="Close Sidebar">&times;</button>
 	</div>`, p.brandName))
 	sb.WriteString(`<nav style="padding: 1rem 0; flex: 1; overflow-y: auto;">`)
 
@@ -1009,7 +1010,8 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 		sb.WriteString(hook)
 	}
 
-	sb.WriteString(`<div style="display: flex; align-items: center; gap: 1rem; flex: 1;">`)
+	sb.WriteString(`<div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">`)
+	sb.WriteString(`<button type="button" class="btn btn-secondary btn-sm filament-mobile-menu-btn" onclick="Filament.sidebar.toggle()" title="Toggle Navigation Menu" aria-label="Toggle Navigation"><svg style="width: 1.25rem; height: 1.25rem;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg></button>`)
 	sb.WriteString(`<button class="btn btn-secondary btn-sm" onclick="Filament.theme.toggle()" title="Toggle Dark/Light Mode">🌓</button>`)
 
 	// Tenant Switcher dropdown

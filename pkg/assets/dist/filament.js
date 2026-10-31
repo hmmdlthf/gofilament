@@ -25,6 +25,33 @@
       }
     },
 
+    // Mobile Responsive Sidebar Controller
+    sidebar: {
+      toggle: function() {
+        const sidebar = document.getElementById('filament-sidebar');
+        if (!sidebar) return;
+        if (sidebar.classList.contains('open')) {
+          this.close();
+        } else {
+          this.open();
+        }
+      },
+      open: function() {
+        const sidebar = document.getElementById('filament-sidebar');
+        const backdrop = document.getElementById('filament-sidebar-backdrop');
+        if (sidebar) sidebar.classList.add('open');
+        if (backdrop) backdrop.classList.add('open');
+        document.body.classList.add('sidebar-mobile-open');
+      },
+      close: function() {
+        const sidebar = document.getElementById('filament-sidebar');
+        const backdrop = document.getElementById('filament-sidebar-backdrop');
+        if (sidebar) sidebar.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('open');
+        document.body.classList.remove('sidebar-mobile-open');
+      }
+    },
+
     // Notification System
     notify: function(options) {
       const container = document.getElementById('filament-notifications') || this.createNotificationContainer();
@@ -360,6 +387,13 @@
     }
     if (e.key === 'Escape') {
       Filament.spotlight.close();
+      if (Filament.sidebar) Filament.sidebar.close();
+    }
+  });
+
+  window.addEventListener('resize', function() {
+    if (window.innerWidth > 1024 && Filament.sidebar) {
+      Filament.sidebar.close();
     }
   });
 
