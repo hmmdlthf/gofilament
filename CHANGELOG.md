@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.18.0] - 2026-10-31
+
+### Added
+- **Soft Deletes & Trash Recovery Bin (`res.SoftDeletes()`, `pkg/tables.TrashedFilter`, `pkg/tables.RestoreAction`, `pkg/tables.ForceDeleteAction`)**:
+  - **Resource Configuration (`res.SoftDeletes()`, `res.SoftDeleteColumn()`, `res.IsTrashed()`)**:
+    - `.SoftDeletes(true)`: Enables soft-delete awareness across the entire resource with automatic trash scoping.
+    - Automatic reflection and dynamic discovery of `DeletedAt` / `deleted_at` fields on models and maps.
+    - Lifecycle hooks: `OnRestore(fn)`, `OnForceDelete(fn)`, `OnRestoreBulk(fn)`, `OnForceDeleteBulk(fn)`, and authorization checks `CanRestore(fn)`, `CanForceDelete(fn)`.
+  - **Automatic Trashed Filter Scoping (`tables.TrashedFilter()`)**:
+    - Pre-configured 3-state filter automatically injected into resource table toolbars:
+      - `without_trashed` (default): Only active records (`deleted_at == nil`).
+      - `with_trashed`: Shows both active and soft-deleted records.
+      - `only_trashed`: Isolates soft-deleted items in the Trash Recovery Bin.
+  - **Dynamic Action Swapping & Visual Styling (`pkg/tables/table.go`, `pkg/tables/action.go`)**:
+    - Trashed records automatically display `[Trashed]` badge and `.table-row-trashed` highlight styling.
+    - Row-level actions automatically swap: active records show `Edit` and `Delete`, while trashed records display `Restore` (`⟲`) and `Force Delete` (`🗑`) with confirmation prompts.
+    - Bulk operations: Added `tables.RestoreBulkAction()` and `tables.ForceDeleteBulkAction()` with confirmation prompts.
+  - **Web Endpoints & JSON REST API (`pkg/filament/resource.go`, `pkg/filament/api.go`)**:
+    - Collision-free static endpoints: `GET/POST /admin/{slug}/restore` and `GET/POST /admin/{slug}/force-delete` supporting both form POSTs and query params.
+    - REST API endpoints: `POST /admin/api/resources/{slug}/restore` and `POST /admin/api/resources/{slug}/force-delete`.
+    - Bulk endpoints: `bulk_action=restore_bulk` and `bulk_action=force_delete_bulk` via `/admin/{slug}/bulk` and API.
+  - **Activity Log Audit Trail Integration (`pkg/activitylog/observer.go`)**:
+    - When `activitylog.EnableAuditLog` is attached to a soft-deletable resource, restoring automatically records `restored` events, and force-deleting records `deleted` events with `force_deleted: true`.
+
+---
+
 ## [v1.17.0] - 2026-10-31
 
 ### Added

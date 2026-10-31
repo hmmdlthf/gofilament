@@ -657,6 +657,33 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Reorder not implemented"})
 	})
 
+	// Soft Delete REST API endpoints
+	type softDeletableAPI interface {
+		HandleRestore(ctx *Context, basePath string, idParam ...string) error
+		HandleForceDelete(ctx *Context, basePath string, idParam ...string) error
+	}
+
+	if sdr, ok := res.(softDeletableAPI); ok {
+		restoreAPIHandler := func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			return sdr.HandleRestore(ctx, resPath)
+		}
+		r.POST(resPath+"/restore", restoreAPIHandler)
+
+		forceDeleteAPIHandler := func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			return sdr.HandleForceDelete(ctx, resPath)
+		}
+		r.POST(resPath+"/force-delete", forceDeleteAPIHandler)
+		r.DELETE(resPath+"/force-delete", forceDeleteAPIHandler)
+	}
+
 	// GET /admin/api/resources/:slug/:id - Find
 	r.GET(resPath+"/:id", func(c *gcontext.Context) error {
 		ctx, err := p.AuthorizeAccess(c)

@@ -44,6 +44,8 @@ type Table[T any] struct {
 	toggleable    bool
 	reorderable   bool
 	reorderCol    string
+	softDeletes   bool
+	isTrashed     func(record T) bool
 }
 
 // New creates an empty Table instance.
@@ -90,6 +92,38 @@ func (t *Table[T]) IsReorderable() bool {
 // GetReorderColumn returns the sort order column name.
 func (t *Table[T]) GetReorderColumn() string {
 	return t.reorderCol
+}
+
+// SoftDeletes enables soft-delete awareness and trashed row presentation.
+func (t *Table[T]) SoftDeletes(enabled ...bool) *Table[T] {
+	t.softDeletes = len(enabled) == 0 || enabled[0]
+	return t
+}
+
+// IsTrashed sets the closure to identify if a record is soft-deleted.
+func (t *Table[T]) IsTrashed(fn func(record T) bool) *Table[T] {
+	t.isTrashed = fn
+	return t
+}
+
+// IsSoftDeletesEnabled returns true if soft-deletes are active on this table.
+func (t *Table[T]) IsSoftDeletesEnabled() bool {
+	return t.softDeletes
+}
+
+// HasFilter checks if a filter with the given name is registered.
+func (t *Table[T]) HasFilter(name string) bool {
+	for _, f := range t.filters {
+		if f.GetName() == name {
+			return true
+		}
+	}
+	return false
+}
+
+// GetFilters returns registered filters.
+func (t *Table[T]) GetFilters() []FilterInterface {
+	return t.filters
 }
 
 // Columns registers table columns.
@@ -380,7 +414,7 @@ func (t *Table[T]) Render(basePath string) string {
 	}
 
 	// Actions column header
-	if len(t.actions) > 0 {
+	if len(t.actions) > 0 || t.softDeletes {
 		sb.WriteString(`<th style="text-align: right;">Actions</th>`)
 	}
 	sb.WriteString(`</tr></thead><tbody>`)
@@ -393,18 +427,19 @@ func (t *Table[T]) Render(basePath string) string {
 		if t.reorderable {
 			colspan++
 		}
-		if len(t.actions) > 0 {
+		if len(t.actions) > 0 || t.softDeletes {
 			colspan++
 		}
 		sb.WriteString(fmt.Sprintf(`<tr><td colspan="%d" style="text-align: center; padding: 3rem 1rem; color: var(--gray-400);">No records found.</td></tr>`, colspan))
 	} else {
 		for _, rec := range t.records {
 			recID := t.extractRecordID(rec)
+			isRecTrashed := t.softDeletes && t.isTrashed != nil && t.isTrashed(rec)
 			trAttrs := ""
 			if t.reorderable {
-				trAttrs = fmt.Sprintf(`data-id="%s" class="table-row-draggable" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', this.dataset.id); this.classList.add('table-row-dragging');" ondragend="this.classList.remove('table-row-dragging');" ondragover="event.preventDefault(); const dragging = document.querySelector('.table-row-draggable.table-row-dragging'); if (dragging && dragging !== this) { const rect = this.getBoundingClientRect(); const next = (event.clientY - rect.top)/(rect.bottom - rect.top) > 0.5; this.parentNode.insertBefore(dragging, next ? this.nextSibling : this); }" ondrop="event.preventDefault(); Filament.reorderRows('%s/reorder', this.closest('table'));"`, recID, basePath)
+				trAttrs = fmt.Sprintf(`data-id="%s" class="table-row-draggable%s" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', this.dataset.id); this.classList.add('table-row-dragging');" ondragend="this.classList.remove('table-row-dragging');" ondragover="event.preventDefault(); const dragging = document.querySelector('.table-row-draggable.table-row-dragging'); if (dragging && dragging !== this) { const rect = this.getBoundingClientRect(); const next = (event.clientY - rect.top)/(rect.bottom - rect.top) > 0.5; this.parentNode.insertBefore(dragging, next ? this.nextSibling : this); }" ondrop="event.preventDefault(); Filament.reorderRows('%s/reorder', this.closest('table'));"`, recID, func() string { if isRecTrashed { return " table-row-trashed" }; return "" }(), basePath)
 			} else {
-				trAttrs = fmt.Sprintf(`data-id="%s"`, recID)
+				trAttrs = fmt.Sprintf(`data-id="%s"%s`, recID, func() string { if isRecTrashed { return ` class="table-row-trashed" style="background-color: rgba(254, 242, 242, 0.4);"` }; return "" }())
 			}
 
 			sb.WriteString(fmt.Sprintf(`<tr %s>`, trAttrs))
@@ -437,11 +472,19 @@ func (t *Table[T]) Render(basePath string) string {
 				sb.WriteString(fmt.Sprintf(`<td data-col="%s" %s>%s</td>`, col.GetName(), colStyle, cellHTML))
 			}
 
-			if len(t.actions) > 0 {
-				sb.WriteString(`<td style="text-align: right;"><div style="display: inline-flex; gap: 0.375rem;">`)
-				for _, act := range t.actions {
-					if act.IsVisible(rec) {
-						sb.WriteString(act.Render(rec, recID, basePath))
+			if len(t.actions) > 0 || isRecTrashed {
+				sb.WriteString(`<td style="text-align: right;"><div style="display: inline-flex; gap: 0.375rem; align-items: center;">`)
+				if isRecTrashed {
+					sb.WriteString(`<span class="badge badge-danger" style="font-size: 0.6875rem; margin-right: 0.25rem;">Trashed</span>`)
+					restoreAct := RestoreAction[T]()
+					forceDelAct := ForceDeleteAction[T]()
+					sb.WriteString(restoreAct.Render(rec, recID, basePath))
+					sb.WriteString(forceDelAct.Render(rec, recID, basePath))
+				} else {
+					for _, act := range t.actions {
+						if act.IsVisible(rec) {
+							sb.WriteString(act.Render(rec, recID, basePath))
+						}
 					}
 				}
 				sb.WriteString(`</div></td>`)

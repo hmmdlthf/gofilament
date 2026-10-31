@@ -7,9 +7,11 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/golaravel/gofilament/pkg/forms"
 	"github.com/golaravel/gofilament/pkg/globalsearch"
@@ -67,6 +69,18 @@ type DeleteHandlerFunc func(ctx *Context, id string) error
 // DeleteBulkHandlerFunc is the callback to delete multiple records.
 type DeleteBulkHandlerFunc func(ctx *Context, ids []string) error
 
+// RestoreHandlerFunc is the callback to restore a soft-deleted record.
+type RestoreHandlerFunc func(ctx *Context, id string) error
+
+// ForceDeleteHandlerFunc is the callback to permanently purge a soft-deleted record.
+type ForceDeleteHandlerFunc func(ctx *Context, id string) error
+
+// RestoreBulkHandlerFunc is the callback to restore multiple soft-deleted records.
+type RestoreBulkHandlerFunc func(ctx *Context, ids []string) error
+
+// ForceDeleteBulkHandlerFunc is the callback to permanently purge multiple soft-deleted records.
+type ForceDeleteBulkHandlerFunc func(ctx *Context, ids []string) error
+
 // ReorderHandlerFunc is the callback to persist a new order of record IDs.
 type ReorderHandlerFunc func(ctx *Context, orderedIDs []string) error
 
@@ -89,21 +103,33 @@ type BaseResource[T any] struct {
 	relations       []RelationManager
 
 	// Handlers
-	onList       ListHandlerFunc[T]
-	onFind       FindHandlerFunc[T]
-	onCreate     CreateHandlerFunc
-	onUpdate     UpdateHandlerFunc
-	onDelete     DeleteHandlerFunc
-	onDeleteBulk DeleteBulkHandlerFunc
-	onReorder    ReorderHandlerFunc
-	onCellUpdate CellUpdateHandlerFunc
+	onList            ListHandlerFunc[T]
+	onFind            FindHandlerFunc[T]
+	onCreate          CreateHandlerFunc
+	onUpdate          UpdateHandlerFunc
+	onDelete          DeleteHandlerFunc
+	onDeleteBulk      DeleteBulkHandlerFunc
+	onRestore         RestoreHandlerFunc
+	onForceDelete     ForceDeleteHandlerFunc
+	onRestoreBulk     RestoreBulkHandlerFunc
+	onForceDeleteBulk ForceDeleteBulkHandlerFunc
+	onReorder         ReorderHandlerFunc
+	onCellUpdate      CellUpdateHandlerFunc
+
+	// Soft Deletes
+	softDeletes      bool
+	softDeleteColumn string
+	isRecordTrashed  func(record T) bool
+
 	// Authorization
-	canViewAny   func(ctx *Context) bool
-	canView      func(ctx *Context, record T) bool
-	canCreate    func(ctx *Context) bool
-	canEdit      func(ctx *Context, record T) bool
-	canDelete    func(ctx *Context, record T) bool
-	canDeleteAny func(ctx *Context) bool
+	canViewAny     func(ctx *Context) bool
+	canView        func(ctx *Context, record T) bool
+	canCreate      func(ctx *Context) bool
+	canEdit        func(ctx *Context, record T) bool
+	canDelete      func(ctx *Context, record T) bool
+	canDeleteAny   func(ctx *Context) bool
+	canRestore     func(ctx *Context, id string) bool
+	canForceDelete func(ctx *Context, id string) bool
 
 	// Global Search
 	globallySearchable  bool
@@ -496,6 +522,129 @@ func (r *BaseResource[T]) GetOnCellUpdate() CellUpdateHandlerFunc {
 	return r.onCellUpdate
 }
 
+// SoftDeletes enables or disables soft-delete handling on this resource.
+func (r *BaseResource[T]) SoftDeletes(enabled ...bool) *BaseResource[T] {
+	r.softDeletes = len(enabled) == 0 || enabled[0]
+	return r
+}
+
+// SoftDeleteColumn configures the timestamp or boolean column name for soft deletes (defaults to "deleted_at").
+func (r *BaseResource[T]) SoftDeleteColumn(col string) *BaseResource[T] {
+	r.softDeleteColumn = col
+	return r
+}
+
+// IsTrashed sets the closure to identify if a record is currently soft-deleted.
+func (r *BaseResource[T]) IsTrashed(fn func(record T) bool) *BaseResource[T] {
+	r.isRecordTrashed = fn
+	return r
+}
+
+// OnRestore registers the callback to restore a soft-deleted record.
+func (r *BaseResource[T]) OnRestore(fn RestoreHandlerFunc) *BaseResource[T] {
+	r.onRestore = fn
+	return r
+}
+
+// OnForceDelete registers the callback to permanently purge a record.
+func (r *BaseResource[T]) OnForceDelete(fn ForceDeleteHandlerFunc) *BaseResource[T] {
+	r.onForceDelete = fn
+	return r
+}
+
+// OnRestoreBulk registers the callback to restore multiple soft-deleted records.
+func (r *BaseResource[T]) OnRestoreBulk(fn RestoreBulkHandlerFunc) *BaseResource[T] {
+	r.onRestoreBulk = fn
+	return r
+}
+
+// OnForceDeleteBulk registers the callback to permanently purge multiple records.
+func (r *BaseResource[T]) OnForceDeleteBulk(fn ForceDeleteBulkHandlerFunc) *BaseResource[T] {
+	r.onForceDeleteBulk = fn
+	return r
+}
+
+// CanRestore sets authorization rule for restoring records.
+func (r *BaseResource[T]) CanRestore(fn func(ctx *Context, id string) bool) *BaseResource[T] {
+	r.canRestore = fn
+	return r
+}
+
+// CanForceDelete sets authorization rule for permanently purging records.
+func (r *BaseResource[T]) CanForceDelete(fn func(ctx *Context, id string) bool) *BaseResource[T] {
+	r.canForceDelete = fn
+	return r
+}
+
+// IsSoftDeletesEnabled returns true if soft-deletes are active on this resource.
+func (r *BaseResource[T]) IsSoftDeletesEnabled() bool {
+	return r.softDeletes
+}
+
+// GetSoftDeleteColumn returns the column name used for soft-deletes.
+func (r *BaseResource[T]) GetSoftDeleteColumn() string {
+	if r.softDeleteColumn != "" {
+		return r.softDeleteColumn
+	}
+	return "deleted_at"
+}
+
+func (r *BaseResource[T]) GetOnRestore() RestoreHandlerFunc {
+	return r.onRestore
+}
+
+func (r *BaseResource[T]) GetOnForceDelete() ForceDeleteHandlerFunc {
+	return r.onForceDelete
+}
+
+func (r *BaseResource[T]) GetOnRestoreBulk() RestoreBulkHandlerFunc {
+	return r.onRestoreBulk
+}
+
+func (r *BaseResource[T]) GetOnForceDeleteBulk() ForceDeleteBulkHandlerFunc {
+	return r.onForceDeleteBulk
+}
+
+func (r *BaseResource[T]) checkIsTrashed(record T) bool {
+	if r.isRecordTrashed != nil {
+		return r.isRecordTrashed(record)
+	}
+
+	colName := r.GetSoftDeleteColumn()
+
+	if m, ok := any(record).(map[string]any); ok {
+		if val, exists := m[colName]; exists && val != nil {
+			return true
+		}
+		if val, exists := m["deleted_at"]; exists && val != nil {
+			return true
+		}
+		return false
+	}
+
+	v := reflect.ValueOf(record)
+	if v.Kind() == reflect.Pointer && !v.IsNil() {
+		v = v.Elem()
+	}
+	if v.Kind() == reflect.Struct {
+		for _, fieldName := range []string{"DeletedAt", "Deleted", colName} {
+			f := v.FieldByName(fieldName)
+			if f.IsValid() {
+				if f.Kind() == reflect.Pointer {
+					return !f.IsNil()
+				}
+				if t, ok := f.Interface().(time.Time); ok {
+					return !t.IsZero()
+				}
+				if b, ok := f.Interface().(bool); ok {
+					return b
+				}
+			}
+		}
+	}
+	return false
+}
+
 func (r *BaseResource[T]) NavigationItem(ctx *Context) *NavigationItem {
 	if r.canViewAny != nil && !r.canViewAny(ctx) {
 		return nil
@@ -602,6 +751,28 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 	}
 	router.POST(basePath+"/cell", cellHandler)
 	router.PATCH(basePath+"/cell", cellHandler)
+
+	// Soft delete restore static endpoint
+	restoreHandler := func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return r.HandleRestore(ctx, basePath)
+	}
+	router.GET(basePath+"/restore", restoreHandler)
+	router.POST(basePath+"/restore", restoreHandler)
+
+	// Soft delete force-delete static endpoint
+	forceDeleteHandler := func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return r.HandleForceDelete(ctx, basePath)
+	}
+	router.GET(basePath+"/force-delete", forceDeleteHandler)
+	router.POST(basePath+"/force-delete", forceDeleteHandler)
 
 	// 3. Wildcard :id routes
 	router.GET(basePath+"/:id", func(c *gcontext.Context) error {
@@ -722,6 +893,33 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	}
 	if r.idExtractor != nil {
 		tbl.RecordID(r.idExtractor)
+	}
+	if r.softDeletes {
+		tbl.SoftDeletes(true)
+		tbl.IsTrashed(r.checkIsTrashed)
+		if !tbl.HasFilter("trashed") {
+			tbl.Filters(append(tbl.GetFilters(), tables.TrashedFilter())...)
+		}
+		if len(tbl.GetBulkActions()) > 0 {
+			hasRestoreBulk := false
+			hasForceDelBulk := false
+			for _, ba := range tbl.GetBulkActions() {
+				if ba.GetName() == "restore_bulk" {
+					hasRestoreBulk = true
+				}
+				if ba.GetName() == "force_delete_bulk" {
+					hasForceDelBulk = true
+				}
+			}
+			bulk := tbl.GetBulkActions()
+			if !hasRestoreBulk {
+				bulk = append(bulk, tables.RestoreBulkAction())
+			}
+			if !hasForceDelBulk {
+				bulk = append(bulk, tables.ForceDeleteBulkAction())
+			}
+			tbl.BulkActions(bulk...)
+		}
 	}
 
 	search := ctx.Query("search")
@@ -1072,10 +1270,102 @@ func (r *BaseResource[T]) handleBulk(ctx *Context, basePath string) error {
 
 	if action == "delete_bulk" && r.onDeleteBulk != nil && len(selectedIDs) > 0 {
 		_ = r.onDeleteBulk(ctx, selectedIDs)
+	} else if action == "restore_bulk" && len(selectedIDs) > 0 {
+		if r.onRestoreBulk != nil {
+			_ = r.onRestoreBulk(ctx, selectedIDs)
+		} else if r.onRestore != nil {
+			for _, sid := range selectedIDs {
+				_ = r.onRestore(ctx, sid)
+			}
+		}
+	} else if action == "force_delete_bulk" && len(selectedIDs) > 0 {
+		if r.onForceDeleteBulk != nil {
+			_ = r.onForceDeleteBulk(ctx, selectedIDs)
+		} else if r.onForceDelete != nil {
+			for _, sid := range selectedIDs {
+				_ = r.onForceDelete(ctx, sid)
+			}
+		}
 	} else if action == "export_bulk" {
 		return r.handleExport(ctx, selectedIDs...)
 	}
 
+	return ctx.Redirect(http.StatusSeeOther, basePath)
+}
+
+func (r *BaseResource[T]) HandleRestore(ctx *Context, basePath string, idParam ...string) error {
+	var id string
+	if len(idParam) > 0 && idParam[0] != "" {
+		id = idParam[0]
+	} else {
+		id = ctx.Request.PostFormValue("id")
+		if id == "" {
+			id = ctx.Query("id")
+		}
+		if id == "" {
+			var body struct {
+				ID string `json:"id"`
+			}
+			_ = json.NewDecoder(ctx.Request.Body).Decode(&body)
+			id = body.ID
+		}
+	}
+
+	if id == "" {
+		return ctx.String(http.StatusBadRequest, "Missing record ID for restore")
+	}
+
+	if r.canRestore != nil && !r.canRestore(ctx, id) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+
+	if r.onRestore != nil {
+		if err := r.onRestore(ctx, id); err != nil {
+			return ctx.String(http.StatusInternalServerError, "Restore error: %v", err)
+		}
+	}
+
+	if strings.Contains(ctx.Request.Header.Get("Accept"), "application/json") || strings.Contains(ctx.Request.Header.Get("Content-Type"), "application/json") || strings.Contains(basePath, "/api") {
+		return ctx.JSON(http.StatusOK, map[string]any{"success": true, "id": id, "restored": true})
+	}
+	return ctx.Redirect(http.StatusSeeOther, basePath)
+}
+
+func (r *BaseResource[T]) HandleForceDelete(ctx *Context, basePath string, idParam ...string) error {
+	var id string
+	if len(idParam) > 0 && idParam[0] != "" {
+		id = idParam[0]
+	} else {
+		id = ctx.Request.PostFormValue("id")
+		if id == "" {
+			id = ctx.Query("id")
+		}
+		if id == "" {
+			var body struct {
+				ID string `json:"id"`
+			}
+			_ = json.NewDecoder(ctx.Request.Body).Decode(&body)
+			id = body.ID
+		}
+	}
+
+	if id == "" {
+		return ctx.String(http.StatusBadRequest, "Missing record ID for force delete")
+	}
+
+	if r.canForceDelete != nil && !r.canForceDelete(ctx, id) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+
+	if r.onForceDelete != nil {
+		if err := r.onForceDelete(ctx, id); err != nil {
+			return ctx.String(http.StatusInternalServerError, "Force delete error: %v", err)
+		}
+	}
+
+	if strings.Contains(ctx.Request.Header.Get("Accept"), "application/json") || strings.Contains(ctx.Request.Header.Get("Content-Type"), "application/json") || strings.Contains(basePath, "/api") {
+		return ctx.JSON(http.StatusOK, map[string]any{"success": true, "id": id, "force_deleted": true})
+	}
 	return ctx.Redirect(http.StatusSeeOther, basePath)
 }
 

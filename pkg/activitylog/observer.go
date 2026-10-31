@@ -97,6 +97,45 @@ func EnableAuditLog[T any](res *filament.BaseResource[T], store ...Store) *filam
 		})
 	}
 
+	origRestore := res.GetOnRestore()
+	if origRestore != nil {
+		res.OnRestore(func(ctx *filament.Context, id string) error {
+			err := origRestore(ctx, id)
+			if err != nil {
+				return err
+			}
+
+			b := Log(fmt.Sprintf("Restored %s #%s", subjectType, id)).
+				Store(s).
+				Subject(subjectType, id).
+				Event("restored")
+
+			populateCauserFromContext(b, ctx)
+			_, _ = b.Save(toStdContext(ctx))
+			return nil
+		})
+	}
+
+	origForceDelete := res.GetOnForceDelete()
+	if origForceDelete != nil {
+		res.OnForceDelete(func(ctx *filament.Context, id string) error {
+			err := origForceDelete(ctx, id)
+			if err != nil {
+				return err
+			}
+
+			b := Log(fmt.Sprintf("Permanently deleted %s #%s", subjectType, id)).
+				Store(s).
+				Subject(subjectType, id).
+				Event("deleted").
+				Property("force_deleted", true)
+
+			populateCauserFromContext(b, ctx)
+			_, _ = b.Save(toStdContext(ctx))
+			return nil
+		})
+	}
+
 	return res
 }
 

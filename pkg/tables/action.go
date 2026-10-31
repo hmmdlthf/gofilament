@@ -79,8 +79,42 @@ func DeleteAction[T any]() *TableAction[T] {
 		color:                "danger",
 		requiresConfirmation: true,
 		modalHeading:         "Delete Record",
-		modalDescription:     "Are you sure you want to delete this record? This action cannot be undone.",
+		modalDescription:     "Are you sure you want to delete this record?",
 	}
+}
+
+// RestoreAction creates an action to restore a soft-deleted record back to active state.
+func RestoreAction[T any]() *TableAction[T] {
+	return &TableAction[T]{
+		name:                 "restore",
+		label:                "Restore",
+		icon:                 "heroicon-arrow-uturn-left",
+		color:                "success",
+		requiresConfirmation: true,
+		modalHeading:         "Restore Record",
+		modalDescription:     "Are you sure you want to restore this record back to active status?",
+	}
+}
+
+// ForceDeleteAction creates an action to permanently purge a soft-deleted record.
+func ForceDeleteAction[T any]() *TableAction[T] {
+	return &TableAction[T]{
+		name:                 "force-delete",
+		label:                "Force Delete",
+		icon:                 "heroicon-trash",
+		color:                "danger",
+		requiresConfirmation: true,
+		modalHeading:         "Permanently Delete Record",
+		modalDescription:     "Are you sure you want to permanently delete this record? This action CANNOT be undone.",
+	}
+}
+
+func (a *TableAction[T]) GetName() string {
+	return a.name
+}
+
+func (a *TableAction[T]) GetLabel() string {
+	return a.label
 }
 
 func (a *TableAction[T]) Label(l string) *TableAction[T] {
@@ -127,6 +161,11 @@ func (a *TableAction[T]) IsVisible(record T) bool {
 
 func (a *TableAction[T]) Render(record T, recordID string, basePath string) string {
 	url := fmt.Sprintf("%s/%s/%s", basePath, recordID, a.name)
+	if a.name == "restore" {
+		url = fmt.Sprintf("%s/restore?id=%s", basePath, recordID)
+	} else if a.name == "force-delete" {
+		url = fmt.Sprintf("%s/force-delete?id=%s", basePath, recordID)
+	}
 	if a.urlFunc != nil {
 		url = a.urlFunc(record)
 	}
@@ -136,6 +175,8 @@ func (a *TableAction[T]) Render(record T, recordID string, basePath string) stri
 		btnClass = "btn-primary"
 	} else if a.color == "danger" {
 		btnClass = "btn-danger"
+	} else if a.color == "success" {
+		btnClass = "btn-success"
 	}
 
 	confirmAttr := ""
@@ -185,6 +226,34 @@ func ExportBulkAction() *BulkActionDef {
 	}
 }
 
+// RestoreBulkAction restores all selected soft-deleted records.
+func RestoreBulkAction() *BulkActionDef {
+	return &BulkActionDef{
+		name:                 "restore_bulk",
+		label:                "Restore Selected",
+		color:                "success",
+		requiresConfirmation: true,
+	}
+}
+
+// ForceDeleteBulkAction permanently purges all selected soft-deleted records.
+func ForceDeleteBulkAction() *BulkActionDef {
+	return &BulkActionDef{
+		name:                 "force_delete_bulk",
+		label:                "Force Delete Selected",
+		color:                "danger",
+		requiresConfirmation: true,
+	}
+}
+
+func (b *BulkActionDef) GetName() string {
+	return b.name
+}
+
+func (b *BulkActionDef) GetLabel() string {
+	return b.label
+}
+
 func (b *BulkActionDef) Formats(formats ...string) *BulkActionDef {
 	b.formats = formats
 	return b
@@ -199,6 +268,8 @@ func (b *BulkActionDef) Render() string {
 	btnClass := "btn-secondary"
 	if b.color == "danger" {
 		btnClass = "btn-danger"
+	} else if b.color == "success" {
+		btnClass = "btn-success"
 	}
 	confirmAttr := ""
 	if b.requiresConfirmation {

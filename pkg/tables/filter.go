@@ -13,9 +13,23 @@ type FilterInterface interface {
 	Render(currentValue string) string
 }
 
-// ----------------------------------------------------
-// SelectFilter
-// ----------------------------------------------------
+// TrashedFilter creates a specialized select filter for soft-deleted/trashed records.
+func TrashedFilter(name ...string) *SelectFilterDef {
+	filterName := "trashed"
+	if len(name) > 0 && name[0] != "" {
+		filterName = name[0]
+	}
+	return &SelectFilterDef{
+		name:  filterName,
+		label: "Trashed Records",
+		options: map[string]string{
+			"without_trashed": "Without Trashed",
+			"with_trashed":    "With Trashed",
+			"only_trashed":    "Only Trashed",
+		},
+		order: []string{"without_trashed", "with_trashed", "only_trashed"},
+	}
+}
 
 type SelectFilterDef struct {
 	name    string

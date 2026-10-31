@@ -385,6 +385,30 @@ table := tables.New[*Customer]().
     )
 ```
 
+---
+
+### 🗑️ Soft Deletes & Trash Recovery Bin (`res.SoftDeletes()`)
+
+Protect your application from accidental data loss with full lifecycle soft-delete support and Trash Recovery Bin:
+
+```go
+res := filament.NewResource[*Document]("documents").
+    SoftDeletes(true).                           // Enables soft-delete awareness and trash scoping
+    OnRestore(func(ctx *filament.Context, id string) error {
+        return db.RestoreDocument(ctx, id)
+    }).
+    OnForceDelete(func(ctx *filament.Context, id string) error {
+        return db.PermanentlyDeleteDocument(ctx, id)
+    })
+```
+
+- **Automatic Trashed Filter**: Injects a 3-state scope filter (`Without Trashed` (default active), `With Trashed`, and `Only Trashed` (trash bin view)) into the table toolbar.
+- **Dynamic Row Action Swapping**: Active records show standard `Edit` and `Delete` actions, while trashed records automatically display `Restore` (`⟲`) and `Force Delete` (`🗑`) actions with safety confirmation modals.
+- **Visual Highlight**: Trashed records automatically display `[Trashed]` badges and muted row styling (`.table-row-trashed`).
+- **Bulk Operations**: Seamlessly restore or purge batches of records with `tables.RestoreBulkAction()` and `tables.ForceDeleteBulkAction()`.
+- **Activity Log Audit Trail**: Intercepts restore and force delete operations, recording `restored` and `force_deleted` events in the audit trail.
+- **REST API Support**: Native endpoints at `/admin/api/resources/{slug}/restore` and `/admin/api/resources/{slug}/force-delete`.
+
 ### ⚡ Advanced Table Capabilities:
 
 - **✏️ Inline Cell Editing**: Edit values directly in the table row without opening edit modals or full pages:
