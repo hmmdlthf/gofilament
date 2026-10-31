@@ -87,13 +87,16 @@ type WizardStepComponent struct {
 	title       string
 	description string
 	icon        string
+	badge       string
+	badgeColor  string
 	schema      []Component
 }
 
 func WizardStep(title string) *WizardStepComponent {
 	return &WizardStepComponent{
-		title:  title,
-		schema: make([]Component, 0),
+		title:      title,
+		badgeColor: "primary",
+		schema:     make([]Component, 0),
 	}
 }
 
@@ -104,6 +107,16 @@ func (w *WizardStepComponent) Description(desc string) *WizardStepComponent {
 
 func (w *WizardStepComponent) Icon(icon string) *WizardStepComponent {
 	w.icon = icon
+	return w
+}
+
+func (w *WizardStepComponent) Badge(badge string) *WizardStepComponent {
+	w.badge = badge
+	return w
+}
+
+func (w *WizardStepComponent) BadgeColor(color string) *WizardStepComponent {
+	w.badgeColor = color
 	return w
 }
 
@@ -124,17 +137,40 @@ func (w *WizardStepComponent) GetDescription() string {
 	return w.description
 }
 
+func (w *WizardStepComponent) GetIcon() string {
+	return w.icon
+}
+
+func (w *WizardStepComponent) GetBadge() string {
+	return w.badge
+}
+
+func (w *WizardStepComponent) GetBadgeColor() string {
+	return w.badgeColor
+}
+
 type WizardComponent struct {
-	steps        []*WizardStepComponent
-	submitAction string
-	startStep    int
+	steps               []*WizardStepComponent
+	submitAction        string
+	previousActionLabel string
+	nextActionLabel     string
+	cancelUrl           string
+	cancelLabel         string
+	startStep           int
+	skippable           bool
+	hasProgressBar      bool
 }
 
 func Wizard(steps ...*WizardStepComponent) *WizardComponent {
 	return &WizardComponent{
-		steps:        steps,
-		submitAction: "Submit",
-		startStep:    1,
+		steps:               steps,
+		submitAction:        "Submit",
+		previousActionLabel: "← Previous",
+		nextActionLabel:     "Next →",
+		cancelLabel:         "Cancel",
+		startStep:           1,
+		skippable:           false,
+		hasProgressBar:      true,
 	}
 }
 
@@ -147,13 +183,81 @@ func (w *WizardComponent) SubmitAction(label string) *WizardComponent {
 	return w
 }
 
+func (w *WizardComponent) PreviousActionLabel(label string) *WizardComponent {
+	w.previousActionLabel = label
+	return w
+}
+
+func (w *WizardComponent) NextActionLabel(label string) *WizardComponent {
+	w.nextActionLabel = label
+	return w
+}
+
+func (w *WizardComponent) CancelAction(url string, label ...string) *WizardComponent {
+	w.cancelUrl = url
+	if len(label) > 0 && label[0] != "" {
+		w.cancelLabel = label[0]
+	}
+	return w
+}
+
 func (w *WizardComponent) StartStep(step int) *WizardComponent {
 	w.startStep = step
 	return w
 }
 
+func (w *WizardComponent) Skippable(enabled ...bool) *WizardComponent {
+	if len(enabled) > 0 {
+		w.skippable = enabled[0]
+	} else {
+		w.skippable = true
+	}
+	return w
+}
+
+func (w *WizardComponent) ProgressBar(enabled ...bool) *WizardComponent {
+	if len(enabled) > 0 {
+		w.hasProgressBar = enabled[0]
+	} else {
+		w.hasProgressBar = true
+	}
+	return w
+}
+
 func (w *WizardComponent) GetSteps() []*WizardStepComponent {
 	return w.steps
+}
+
+func (w *WizardComponent) GetSubmitAction() string {
+	return w.submitAction
+}
+
+func (w *WizardComponent) GetPreviousActionLabel() string {
+	return w.previousActionLabel
+}
+
+func (w *WizardComponent) GetNextActionLabel() string {
+	return w.nextActionLabel
+}
+
+func (w *WizardComponent) GetCancelUrl() string {
+	return w.cancelUrl
+}
+
+func (w *WizardComponent) GetCancelLabel() string {
+	return w.cancelLabel
+}
+
+func (w *WizardComponent) GetStartStep() int {
+	return w.startStep
+}
+
+func (w *WizardComponent) IsSkippable() bool {
+	return w.skippable
+}
+
+func (w *WizardComponent) HasProgressBar() bool {
+	return w.hasProgressBar
 }
 
 func (w *WizardComponent) Render(ctx context.Context, state map[string]any, errors map[string]string) string {
@@ -179,30 +283,88 @@ func (w *WizardComponent) Render(ctx context.Context, state map[string]any, erro
 
 	totalSteps := len(w.steps)
 
+	// Build titles array for Alpine
+	titlesJS := make([]string, len(w.steps))
+	for i, s := range w.steps {
+		titlesJS[i] = fmt.Sprintf("%q", s.title)
+	}
+	titlesListStr := strings.Join(titlesJS, ", ")
+
+	// Optional Progress Bar
+	var progressBarHTML string
+	if w.hasProgressBar {
+		progressBarHTML = fmt.Sprintf(`
+<div class="wizard-progress-bar-container" style="background-color: var(--gray-200); height: 4px; border-radius: 9999px; overflow: hidden; margin-bottom: 1.5rem;">
+  <div class="wizard-progress-bar" style="background-color: var(--primary-600); height: 100%%; transition: width 0.3s ease;" :style="'width: ' + ((currentStep / totalSteps) * 100) + '%%'"></div>
+</div>`)
+	}
+
+	// Mobile step header
+	mobileHeader := fmt.Sprintf(`
+<div class="wizard-mobile-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--gray-100); font-size: 0.875rem;">
+  <span style="font-weight: 600; color: var(--gray-700);">Step <span x-text="currentStep"></span> of %d</span>
+  <span style="font-weight: 600; color: var(--primary-600);" x-text="stepTitles[currentStep - 1]"></span>
+</div>`, totalSteps)
+
 	// Build Step Header Bar
 	var header strings.Builder
 	header.WriteString(`<div class="wizard-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--gray-200); padding-bottom: 1.25rem; margin-bottom: 1.5rem; gap: 0.5rem; overflow-x: auto;">`)
 
 	for i, step := range w.steps {
 		stepNum := i + 1
+
+		// Badge styling
+		var badgeHTML string
+		if step.badge != "" {
+			var badgeBg, badgeColor string
+			switch step.badgeColor {
+			case "success":
+				badgeBg = "#d1fae5"
+				badgeColor = "#065f46"
+			case "warning":
+				badgeBg = "#fef3c7"
+				badgeColor = "#92400e"
+			case "danger":
+				badgeBg = "#fee2e2"
+				badgeColor = "#991b1b"
+			case "info":
+				badgeBg = "#e0f2fe"
+				badgeColor = "#075985"
+			default:
+				badgeBg = "var(--primary-100, #e0e7ff)"
+				badgeColor = "var(--primary-800, #3730a3)"
+			}
+			badgeHTML = fmt.Sprintf(`<span class="wizard-step-badge" style="font-size: 0.6875rem; font-weight: 600; padding: 0.125rem 0.375rem; border-radius: 9999px; background-color: %s; color: %s; margin-left: 0.375rem;">%s</span>`, badgeBg, badgeColor, html.EscapeString(step.badge))
+		}
+
+		// Icon / Indicator inside circle
+		indicatorHTML := fmt.Sprintf(`<span>%d</span>`, stepNum)
+		if step.icon != "" {
+			if strings.HasPrefix(strings.TrimSpace(step.icon), "<svg") {
+				indicatorHTML = fmt.Sprintf(`<span class="wizard-step-icon" style="display: inline-flex; align-items: center; justify-content: center; width: 1.125rem; height: 1.125rem;">%s</span>`, step.icon)
+			} else {
+				indicatorHTML = fmt.Sprintf(`<i class="%s wizard-step-icon"></i>`, html.EscapeString(step.icon))
+			}
+		}
+
 		header.WriteString(fmt.Sprintf(`
-<div class="wizard-step-pill" @click="currentStep = %d" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; flex: 1; min-width: 8rem;">
+<div class="wizard-step-pill" @click="goToStep(%d)" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; flex: 1; min-width: 8rem;">
   <span class="wizard-step-num" 
     :style="currentStep === %d ? 'background-color: var(--primary-600); color: #fff;' : (currentStep > %d ? 'background-color: #10b981; color: #fff;' : 'background-color: var(--gray-200); color: var(--gray-600);')"
     style="width: 1.875rem; height: 1.875rem; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; transition: all 0.2s ease;">
     <template x-if="currentStep > %d"><span>✓</span></template>
-    <template x-if="currentStep <= %d"><span>%d</span></template>
+    <template x-if="currentStep <= %d">%s</template>
   </span>
   <div>
-    <div style="font-size: 0.875rem; font-weight: 600; color: var(--gray-900);" :style="currentStep === %d ? 'color: var(--primary-600);' : ''">%s</div>
+    <div style="font-size: 0.875rem; font-weight: 600; color: var(--gray-900); display: flex; align-items: center;" :style="currentStep === %d ? 'color: var(--primary-600);' : ''">%s%s</div>
     %s
   </div>
 </div>`,
 			stepNum,
 			stepNum, stepNum,
 			stepNum,
-			stepNum, stepNum,
-			stepNum, html.EscapeString(step.title),
+			stepNum, indicatorHTML,
+			stepNum, html.EscapeString(step.title), badgeHTML,
 			func() string {
 				if step.description != "" {
 					return fmt.Sprintf(`<div style="font-size: 0.75rem; color: var(--gray-400);">%s</div>`, html.EscapeString(step.description))
@@ -228,29 +390,81 @@ func (w *WizardComponent) Render(ctx context.Context, state map[string]any, erro
 		}
 
 		content.WriteString(fmt.Sprintf(`
-<div class="wizard-step-pane" x-show="currentStep === %d" style="display: none;" :style="currentStep === %d ? 'display: block;' : 'display: none;'">
+<div id="wizard_step_%d" class="wizard-step-pane" x-show="currentStep === %d" style="display: none;" :style="currentStep === %d ? 'display: block;' : 'display: none;'">
   %s
-</div>`, stepNum, stepNum, stepBody.String()))
+</div>`, stepNum, stepNum, stepNum, stepBody.String()))
+	}
+
+	// Cancel button if configured
+	var cancelBtnHTML string
+	if w.cancelUrl != "" {
+		cancelBtnHTML = fmt.Sprintf(`<a href="%s" class="btn btn-secondary wizard-btn-cancel" style="text-decoration: none;">%s</a>`, html.EscapeString(w.cancelUrl), html.EscapeString(w.cancelLabel))
 	}
 
 	// Build Navigation Footer
 	footer := fmt.Sprintf(`
 <div class="wizard-footer" style="display: flex; justify-content: space-between; align-items: center; margin-top: 2rem; border-top: 1px solid var(--gray-200); padding-top: 1.25rem;">
-  <div>
-    <button type="button" class="btn btn-secondary wizard-btn-prev" x-show="currentStep > 1" @click="currentStep--">← Previous</button>
+  <div style="display: flex; gap: 0.5rem; align-items: center;">
+    %s
+    <button type="button" class="btn btn-secondary wizard-btn-prev" x-show="currentStep > 1" @click="prevStep()">%s</button>
   </div>
-  <div style="display: flex; gap: 0.75rem;">
-    <button type="button" class="btn btn-primary wizard-btn-next" x-show="currentStep < totalSteps" @click="currentStep++">Next →</button>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    <button type="button" class="btn btn-primary wizard-btn-next" x-show="currentStep < totalSteps" @click="nextStep()">%s</button>
     <button type="submit" form="filament-form" class="btn btn-primary wizard-btn-submit" x-show="currentStep === totalSteps">%s</button>
   </div>
-</div>`, html.EscapeString(w.submitAction))
+</div>`, cancelBtnHTML, html.EscapeString(w.previousActionLabel), html.EscapeString(w.nextActionLabel), html.EscapeString(w.submitAction))
 
 	return fmt.Sprintf(`
-<div class="filament-card wizard-container" x-data="{ currentStep: %d, totalSteps: %d }">
+<div class="filament-card wizard-container" x-data="{
+  currentStep: %d,
+  totalSteps: %d,
+  maxStep: %d,
+  skippable: %t,
+  stepTitles: [%s],
+  validateCurrentStep() {
+    const pane = document.getElementById('wizard_step_' + this.currentStep);
+    if (!pane) return true;
+    const inputs = pane.querySelectorAll('input, select, textarea');
+    for (let el of inputs) {
+      if (!el.checkValidity()) {
+        el.reportValidity();
+        return false;
+      }
+    }
+    return true;
+  },
+  goToStep(step) {
+    if (this.skippable || step < this.currentStep || step <= this.maxStep) {
+      this.currentStep = step;
+      return;
+    }
+    if (step === this.currentStep + 1) {
+      if (this.validateCurrentStep()) {
+        this.currentStep = step;
+        if (this.currentStep > this.maxStep) this.maxStep = this.currentStep;
+      }
+    }
+  },
+  nextStep() {
+    if (this.skippable || this.validateCurrentStep()) {
+      if (this.currentStep < this.totalSteps) {
+        this.currentStep++;
+        if (this.currentStep > this.maxStep) this.maxStep = this.currentStep;
+      }
+    }
+  },
+  prevStep() {
+    if (this.currentStep > 1) {
+      this.currentStep--;
+    }
+  }
+}">
   %s
   %s
   %s
-</div>`, activeStep, totalSteps, header.String(), content.String(), footer)
+  %s
+  %s
+</div>`, activeStep, totalSteps, activeStep, w.skippable, titlesListStr, progressBarHTML, mobileHeader, header.String(), content.String(), footer)
 }
 
 // ----------------------------------------------------

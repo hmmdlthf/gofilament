@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.16.0] - 2026-10-31
+
+### Added
+- **Enhanced Multi-Step Form Wizard (`forms.Wizard` & `forms.WizardStep` in `pkg/forms/advanced_layouts.go`)**:
+  - **Client-Side Step Validation Gate**:
+    - Automatically checks `checkValidity()` and executes `reportValidity()` on all form inputs (`input`, `select`, `textarea`) in the current step pane before advancing forward.
+    - Prevents progression when invalid fields are encountered, displaying native and custom browser validation callouts directly at the offending element.
+  - **Skippable & Navigation Controls (`.Skippable(bool)`)**:
+    - `.Skippable(true)` allows users to click and jump freely between any steps in any sequence.
+    - When `.Skippable(false)` (default), forward jumps are strictly gated behind current step validation or previously visited steps (`maxStep`), while backward navigation is always freely accessible.
+  - **Dynamic Progress Bar (`.ProgressBar(bool)`)**:
+    - Added high-visibility animated progress bar indicator displaying current completion percentage `((currentStep / totalSteps) * 100)%`.
+    - Configurable and toggleable via `.ProgressBar(false)`.
+  - **Step Badges & Status Indicators (`.Badge(string)`, `.BadgeColor(string)`)**:
+    - Added contextual step badges (e.g. "Step 1", "Optional", "Final") with automatic color schemes (`primary`, `success`, `warning`, `danger`, `info`).
+  - **Step Icons & Indicators (`.Icon(string)`)**:
+    - Custom icon rendering supporting both raw SVG markup (`<svg...`) and icon classes (`heroicon-o-user`).
+    - Completed step checkmarks (`✓`) with smooth color transition upon step completion.
+  - **Customizable Actions & Buttons**:
+    - `.NextActionLabel(string)` (default: `"Next →"`).
+    - `.PreviousActionLabel(string)` (default: `"← Previous"`).
+    - `.SubmitAction(string)` (default: `"Submit"`).
+    - `.CancelAction(url string, label ...string)` for clean navigation away from the wizard workflow.
+    - `.StartStep(int)` to configure custom default active steps.
+  - **Responsive Mobile Counter**:
+    - Compact step summary bar (`Step X of Y: Step Title`) to ensure seamless usability on mobile and compact screens without horizontal overflow.
+  - **Error Auto-Activation**:
+    - Automatically analyzes server-side validation error maps on form submission and pre-activates the first step containing invalid fields.
+
+---
+
 ## [v1.15.0] - 2026-10-31
 
 ### Added

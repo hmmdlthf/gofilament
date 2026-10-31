@@ -284,6 +284,56 @@ forms.ColorPicker("primary_color").
 
 ---
 
+### 🧙 Multi-Step Form Wizard (`forms.Wizard`)
+
+Break complex or lengthy input workflows into structured, intuitive multi-step wizards with full step validation, progress indicators, and custom actions:
+
+```go
+forms.Wizard(
+    forms.WizardStep("Personal Information").
+        Description("Your contact and profile details").
+        Icon("heroicon-o-user").
+        Badge("Step 1").
+        BadgeColor("primary").
+        Schema(
+            forms.TextInput("name").Required(),
+            forms.TextInput("email").Email().Required(),
+        ),
+    forms.WizardStep("Company Details").
+        Description("Tell us about your organization").
+        Icon(`<svg viewBox="0 0 20 20"><path d="..."/></svg>`).
+        Badge("Optional").
+        BadgeColor("warning").
+        Schema(
+            forms.TextInput("company_name"),
+            forms.TextInput("vat_number"),
+        ),
+    forms.WizardStep("Confirmation").
+        Description("Review terms and finalize").
+        Badge("Final").
+        BadgeColor("success").
+        Schema(
+            forms.Toggle("terms_agreed").Label("I accept terms & conditions").Required(),
+        ),
+).
+    Skippable(false).                         // Gate forward navigation behind valid step completion
+    ProgressBar(true).                        // Animated completion percentage bar
+    StartStep(1).                             // Initial active step
+    NextActionLabel("Continue →").           // Custom Next button label
+    PreviousActionLabel("← Go Back").         // Custom Previous button label
+    SubmitAction("Complete Registration").    // Custom final Submit button label
+    CancelAction("/admin/users", "Cancel")    // Cancel action link
+```
+
+- **Client-Side Validation Gate**: Evaluates `checkValidity()` and `reportValidity()` across inputs on the active step before allowing forward progression.
+- **Flexible Navigation**: With `.Skippable(false)`, users can return to any previously visited step at any time while forward progression requires valid input. With `.Skippable(true)`, users may freely jump directly to any step.
+- **Dynamic Progress Bar**: Live visual indicator displaying completed percentage `((currentStep / totalSteps) * 100)%`.
+- **Badges & Icons**: Contextual badges (`primary`, `success`, `warning`, `danger`, `info`) and support for SVG or font icon classes.
+- **Error Auto-Activation**: If server validation fails upon form submission, the wizard automatically switches directly to the first step containing invalid fields.
+- **Mobile Responsive**: Adapts seamlessly to mobile viewports with a compact step summary (`Step X of Y: Step Title`) without horizontal layout overflow.
+
+---
+
 ### Live Reactive Fields (`.Live()`)
 
 Form components update state reactively via HTMX micro-swaps:

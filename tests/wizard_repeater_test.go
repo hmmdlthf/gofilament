@@ -34,7 +34,7 @@ func TestWizardComponent_StepNavigationAndErrorAutoActivation(t *testing.T) {
 	html := form.Render(context.Background())
 
 	// Verifies Stepper Navigation & Alpine state
-	if !strings.Contains(html, `x-data="{ currentStep: 1, totalSteps: 3 }"`) {
+	if !strings.Contains(html, "currentStep: 1") || !strings.Contains(html, "totalSteps: 3") {
 		t.Fatalf("expected Alpine currentStep: 1, totalSteps: 3 in wizard HTML, got: %s", html)
 	}
 	if !strings.Contains(html, "Personal Information") || !strings.Contains(html, "Shipping Details") || !strings.Contains(html, "Confirmation") {
@@ -50,7 +50,7 @@ func TestWizardComponent_StepNavigationAndErrorAutoActivation(t *testing.T) {
 		AddError("postal_code", "Postal code is invalid")
 
 	htmlWithErrors := formWithErrors.Render(context.Background())
-	if !strings.Contains(htmlWithErrors, `x-data="{ currentStep: 2, totalSteps: 3 }"`) {
+	if !strings.Contains(htmlWithErrors, "currentStep: 2") || !strings.Contains(htmlWithErrors, "totalSteps: 3") {
 		t.Fatalf("expected wizard to auto-activate step 2 due to postal_code error, got: %s", htmlWithErrors)
 	}
 }
