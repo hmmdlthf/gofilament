@@ -350,6 +350,40 @@ panel := filament.NewPanel("admin").
 
 ---
 
+## 🎨 Custom Theme Builder & Brand Color Palettes
+
+GoFilament features a full-spectrum Theme Builder and Color Palette Engine (`pkg/colors`), allowing you to completely brand your admin panel with zero build tools or complex asset pipelines:
+
+```go
+import "github.com/golaravel/gofilament/pkg/colors"
+
+panel := filament.NewPanel("admin").
+    Path("/admin").
+    Font("Poppins"). // Auto Google Fonts integration
+    Colors(map[string]any{
+        "primary": colors.Indigo,   // Built-in preset
+        "gray":    colors.Zinc,     // Zinc, Slate, Stone, Neutral, Gray
+        "danger":  "#e11d48",       // Hex string auto-generates 11 shades!
+        "warning": colors.Amber,
+        "success": colors.Emerald,
+        "info":    colors.Sky,
+    }).
+    Theme("/css/custom-theme.css"). // Custom stylesheets
+    RenderHook(filament.PanelsRenderHookHeadEnd, func(ctx *filament.Context) string {
+        return `<meta name="application-name" content="My App">`
+    })
+```
+
+### 🌈 Key Theme & Color Features:
+- **11-Shade Mathematical Palette Generator (`pkg/colors`)**: Pass any single hex color (e.g. `"#6366f1"`) and GoFilament will automatically calculate the full 11-step scale (`50`, `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`, `950`) using perceptually balanced HSL interpolation.
+- **22 Built-in Color Presets**: Includes Tailwind/Filament presets (`Amber`, `Blue`, `Cyan`, `Emerald`, `Fuchsia`, `Gray`, `Green`, `Indigo`, `Lime`, `Neutral`, `Orange`, `Pink`, `Purple`, `Red`, `Rose`, `Sky`, `Slate`, `Stone`, `Teal`, `Violet`, `Yellow`, `Zinc`).
+- **Dynamic CSS Variables Injection**: Automatically injects `<style id="filament-theme-vars">` into `<head>`, updating primary buttons, active links, badges, focus outlines, and typography without full rebuilds.
+- **Typography & Google Fonts**: Set `Font("Poppins")` or provide custom font CDN URLs. GoFilament automatically adds preconnect links and updates `--font-sans`.
+- **Filament Render Hooks**: Inject arbitrary HTML, analytics scripts, or custom UI elements into standard lifecycle hooks (`PanelsRenderHookHeadStart`, `PanelsRenderHookHeadEnd`, `PanelsRenderHookBodyStart`, `PanelsRenderHookBodyEnd`, `PanelsRenderHookTopbarStart`, `PanelsRenderHookTopbarEnd`, `PanelsRenderHookSidebarNavStart`, `PanelsRenderHookSidebarNavEnd`).
+- **REST API Schema Alignment**: `GET /admin/api/schema` exports `"theme"` (font family, font URL, and full color palettes) so Flutter and mobile admin apps render with exact brand consistency.
+
+---
+
 ## 🔗 Interactive In-Place Relation Managers
 
 Relation Managers allow you to embed related child models (e.g. `OrdersRelationManager`, `AddressesRelationManager`, or `LineItemsRelationManager`) directly inside a parent resource's View and Edit screens:

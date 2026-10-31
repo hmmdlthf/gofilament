@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.12.0] - 2026-10-31
+
+### Added
+- **Custom Theme Builder & Brand Color Palettes (`pkg/colors`, `pkg/filament/theme.go`, `pkg/filament/hooks.go`, `pkg/assets/dist/filament.css`)**:
+  - **Full-Spectrum Color Palette Engine (`pkg/colors`)**:
+    - **11-Shade Mathematical Palette Generator**: `colors.FromHex(hex)` and `colors.FromRGB(r, g, b)` automatically derive full 11-step Tailwind/Filament scales (`50`, `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900`, `950`) via HSL color space lightness/saturation interpolation.
+    - **22 Built-in Presets**: Pre-configured battle-tested palettes (`Amber`, `Blue`, `Cyan`, `Emerald`, `Fuchsia`, `Gray`, `Green`, `Indigo`, `Lime`, `Neutral`, `Orange`, `Pink`, `Purple`, `Red`, `Rose`, `Sky`, `Slate`, `Stone`, `Teal`, `Violet`, `Yellow`, `Zinc`).
+    - CSS variable generation: `palette.CSSVariables(role)` formats declarations for `:root`.
+  - **Panel Theme & Brand Color Configuration**:
+    - `panel.Colors(map[string]any{"primary": colors.Indigo, "gray": colors.Zinc, "danger": "#ef4444"})`: Registers brand color palettes with auto-resolution from presets, palettes, or raw hex codes.
+    - `panel.Color("primary", "#6366f1")`: Fluent single-role color override.
+  - **Typography & Font Management**:
+    - `panel.Font("Poppins")`: Auto-generates Google Fonts `<link>` and injects `--font-sans` CSS variable.
+    - `panel.Font("Inter", customUrl)`: Custom font CDN stylesheet integration.
+  - **Custom Stylesheets, Scripts & Render Hooks**:
+    - `panel.Theme("custom.css")` / `panel.Stylesheet("extra.css")` and `panel.Script("analytics.js")`.
+    - **Filament Render Hooks**: Injects custom HTML at standard extension points (`PanelsRenderHookHeadStart`, `PanelsRenderHookHeadEnd`, `PanelsRenderHookBodyStart`, `PanelsRenderHookBodyEnd`, `PanelsRenderHookTopbarStart`, `PanelsRenderHookTopbarEnd`, `PanelsRenderHookSidebarNavStart`, `PanelsRenderHookSidebarNavEnd`).
+  - **Dynamic Theme CSS Variables Injection**:
+    - All admin layouts automatically inject `<style id="filament-theme-vars">` containing customized CSS variables into `<head>`, instantly updating primary, gray, danger, warning, success, info, and typography.
+  - **REST API Schema Theme Metadata**:
+    - `GET /admin/api/schema` returns `"theme"` object with `"font_family"`, `"font_url"`, `"colors"`, and `"stylesheets"` for native mobile/Flutter theme alignment.
+
+---
+
 ## [v1.11.0] - 2026-10-31
 
 ### Added

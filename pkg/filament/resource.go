@@ -1321,6 +1321,7 @@ func (r *BaseResource[T]) renderPage(ctx *Context, pageTitle, innerContent strin
   <title>%s - %s</title>
   <link rel="stylesheet" href="%s/assets/filament.css">
   <script src="%s/assets/filament.js"></script>
+%s
 </head>
 <body class="filament-body">
   <div class="filament-shell">
@@ -1332,15 +1333,18 @@ func (r *BaseResource[T]) renderPage(ctx *Context, pageTitle, innerContent strin
       </main>
     </div>
   </div>
+  %s
 </body>
 </html>`,
 		ctx.Locale(), ctx.Direction(),
 		pageTitle, p.GetBrandName(),
 		p.GetPath(), p.GetPath(),
+		p.RenderHeadHTML(ctx),
 		p.RenderSidebar(ctx),
 		p.RenderTopbar(ctx),
 		p.GetMaxContentWidth(),
 		innerContent,
+		p.RenderBodyEndHTML(ctx),
 	)
 	return ctx.HTML(http.StatusOK, html)
 }

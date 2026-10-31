@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/assets"
+	"github.com/golaravel/gofilament/pkg/colors"
 	"github.com/golaravel/gofilament/pkg/notifications"
 	"github.com/golaravel/golaravel/pkg/broadcast"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
@@ -51,7 +52,12 @@ type Panel struct {
 	brandLogo           string
 	favicon             string
 	homeURL             string
-	colors              ColorPalette
+	colors              map[string]colors.Palette
+	fontFamily          string
+	fontURL             string
+	customStylesheets   []string
+	customScripts       []string
+	renderHooks         map[string][]func(ctx *Context) string
 	darkMode            bool
 	sidebarCollapsible  bool
 	topNavigation       bool
@@ -88,7 +94,17 @@ func NewPanel(id string) *Panel {
 		flutterDistDir:      "client/build/web",
 		brandName:           "GoFilament",
 		homeURL:             "/" + strings.Trim(id, "/"),
-		colors:              DefaultColorPalette(),
+		colors: map[string]colors.Palette{
+			colors.RolePrimary: colors.Emerald,
+			colors.RoleGray:    colors.Slate,
+			colors.RoleSuccess: colors.Emerald,
+			colors.RoleWarning: colors.Amber,
+			colors.RoleDanger:  colors.Red,
+			colors.RoleInfo:    colors.Sky,
+		},
+		customStylesheets:   make([]string, 0),
+		customScripts:       make([]string, 0),
+		renderHooks:         make(map[string][]func(ctx *Context) string),
 		darkMode:            true,
 		sidebarCollapsible:  true,
 		maxContentWidth:     Width7xl,
@@ -197,12 +213,6 @@ func (p *Panel) HomeURL(url string) *Panel {
 // GetHomeURL returns the configured home URL.
 func (p *Panel) GetHomeURL() string {
 	return p.homeURL
-}
-
-// Colors overrides the default color palette.
-func (p *Panel) Colors(palette ColorPalette) *Panel {
-	p.colors = palette
-	return p
 }
 
 // DarkMode toggles dark mode availability.
@@ -845,6 +855,7 @@ func (p *Panel) renderDefaultDashboard(ctx *Context) error {
   <title>%s - %s</title>
   <link rel="stylesheet" href="%s/assets/filament.css">
   <script src="%s/assets/filament.js"></script>
+%s
 </head>
 <body class="filament-body">
   <div class="filament-shell">
@@ -862,16 +873,19 @@ func (p *Panel) renderDefaultDashboard(ctx *Context) error {
       </main>
     </div>
   </div>
+  %s
 </body>
 </html>`,
 		ctx.Locale(), ctx.Direction(),
 		title, p.brandName,
 		p.path, p.path,
+		p.RenderHeadHTML(ctx),
 		p.renderSidebarHTML(ctx),
 		p.renderTopbarHTML(ctx),
 		p.maxContentWidth,
 		title, p.brandName,
 		dashboardContent,
+		p.RenderBodyEndHTML(ctx),
 	)
 	return ctx.HTML(http.StatusOK, html)
 }
@@ -897,6 +911,10 @@ func (p *Panel) renderSidebarHTML(ctx *Context) string {
 	</div>`, p.brandName))
 	sb.WriteString(`<nav style="padding: 1rem 0; flex: 1; overflow-y: auto;">`)
 
+	if hook := p.renderHook(PanelsRenderHookSidebarNavStart, ctx); hook != "" {
+		sb.WriteString(hook)
+	}
+
 	groups := p.BuildNavigation(ctx)
 	for _, g := range groups {
 		if g.Name != "" {
@@ -916,6 +934,10 @@ func (p *Panel) renderSidebarHTML(ctx *Context) string {
 		}
 	}
 
+	if hook := p.renderHook(PanelsRenderHookSidebarNavEnd, ctx); hook != "" {
+		sb.WriteString(hook)
+	}
+
 	sb.WriteString(`</nav></aside>`)
 	return sb.String()
 }
@@ -923,6 +945,10 @@ func (p *Panel) renderSidebarHTML(ctx *Context) string {
 func (p *Panel) renderTopbarHTML(ctx *Context) string {
 	var sb strings.Builder
 	sb.WriteString(`<header class="filament-topbar">`)
+
+	if hook := p.renderHook(PanelsRenderHookTopbarStart, ctx); hook != "" {
+		sb.WriteString(hook)
+	}
 
 	sb.WriteString(`<div style="display: flex; align-items: center; gap: 1rem; flex: 1;">`)
 	sb.WriteString(`<button class="btn btn-secondary btn-sm" onclick="Filament.theme.toggle()" title="Toggle Dark/Light Mode">🌓</button>`)
@@ -982,6 +1008,10 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 	sb.WriteString(`<span>Administrator</span>`)
 	sb.WriteString(`</div>`)
 	sb.WriteString(`</div>`)
+
+	if hook := p.renderHook(PanelsRenderHookTopbarEnd, ctx); hook != "" {
+		sb.WriteString(hook)
+	}
 
 	sb.WriteString(`</header>`)
 
@@ -1094,6 +1124,7 @@ func (p *Panel) renderLoginScreen(ctx *Context) error {
   <title>Sign In - %s</title>
   <link rel="stylesheet" href="%s/assets/filament.css">
   <script src="%s/assets/filament.js"></script>
+%s
 </head>
 <body style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: var(--gray-50);">
   <div class="filament-card" style="width: 100%%; max-width: 26rem; padding: 2rem;">
@@ -1118,8 +1149,9 @@ func (p *Panel) renderLoginScreen(ctx *Context) error {
       <button type="submit" class="btn btn-primary" style="width: 100%%;">Sign In</button>
     </form>
   </div>
+  %s
 </body>
-</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.brandName, p.path)
+</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, p.path, p.RenderBodyEndHTML(ctx))
 
 	return ctx.HTML(http.StatusOK, html)
 }
@@ -1152,6 +1184,7 @@ func (p *Panel) mountFlutter(r *router.Router) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>%s - Flutter Mobile-First Admin Panel</title>
   <link rel="stylesheet" href="%s/assets/filament.css">
+%s
 </head>
 <body style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0f172a; color: #f8fafc; font-family: sans-serif; padding: 1rem;">
   <div style="max-width: 32rem; width: 100%%; padding: 2.5rem; background: #1e293b; border-radius: 1rem; border: 1px solid #334155; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
@@ -1170,8 +1203,9 @@ func (p *Panel) mountFlutter(r *router.Router) {
       <a href="%s/api/schema" style="display: inline-block; padding: 0.5rem 1rem; border-radius: 0.375rem; background: #38bdf8; color: #0f172a; font-weight: 600; text-decoration: none; font-size: 0.875rem;">View JSON Schema</a>
     </div>
   </div>
+  %s
 </body>
-</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.brandName, clientDir, clientDir, p.path)
+</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.RenderHeadHTML(ctx), p.brandName, clientDir, clientDir, p.path, p.RenderBodyEndHTML(ctx))
 		return c.HTML(http.StatusOK, html)
 	})
 

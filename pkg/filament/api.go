@@ -96,12 +96,32 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			}
 		}
 
+		colorsDTO := make(map[string]map[string]string)
+		for role, pal := range p.colors {
+			if pal != nil {
+				palMap := make(map[string]string)
+				for shade, hex := range pal {
+					palMap[strconv.Itoa(shade)] = hex
+				}
+				colorsDTO[role] = palMap
+			}
+		}
+
+		themeDTO := map[string]any{
+			"font_family": p.fontFamily,
+			"font_url":    p.fontURL,
+			"colors":      colorsDTO,
+			"stylesheets": p.customStylesheets,
+			"scripts":     p.customScripts,
+		}
+
 		schema := map[string]any{
 			"id":                p.id,
 			"brand_name":        p.brandName,
 			"path":              p.path,
 			"engine":            string(p.GetEngine()),
 			"dark_mode":         p.darkMode,
+			"theme":             themeDTO,
 			"locale":            ctx.Locale(),
 			"direction":         ctx.Direction(),
 			"is_rtl":            ctx.IsRTL(),
