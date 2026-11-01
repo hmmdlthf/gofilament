@@ -199,3 +199,27 @@ func TestFlutterAdmin_ResourcesJSONAPI(t *testing.T) {
 		t.Errorf("expected Access-Control-Allow-Origin on preflight response")
 	}
 }
+
+func TestEnsureFlutterClientReady(t *testing.T) {
+	clientDir := "client"
+	err := ensureFlutterClientReady(clientDir, "Pulse", "http://localhost:8081/admin")
+	if err != nil {
+		t.Fatalf("ensureFlutterClientReady failed: %v", err)
+	}
+
+	distIndexPath := filepath.Join(clientDir, "build", "web", "index.html")
+	content, err := os.ReadFile(distIndexPath)
+	if err != nil {
+		t.Fatalf("failed to read generated index.html: %v", err)
+	}
+
+	if !strings.Contains(string(content), "account-btn") {
+		t.Errorf("expected index.html to contain account-btn")
+	}
+	if !strings.Contains(string(content), "floating-account-sheet") {
+		t.Errorf("expected index.html to contain floating-account-sheet")
+	}
+	if !strings.Contains(string(content), "modal-settings") {
+		t.Errorf("expected index.html to contain modal-settings")
+	}
+}
