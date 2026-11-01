@@ -2425,221 +2425,253 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
       return;
     }
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dialogCtx, setModalState) {
-            final theme = Theme.of(ctx);
-            final isDark = theme.brightness == Brightness.dark;
-            final bg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final isWideScreen = MediaQuery.of(context).size.width >= 720;
 
-            return Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-                maxWidth: 600,
+    Widget buildFilterContent(BuildContext ctx, StateSetter setModalState) {
+      final theme = Theme.of(ctx);
+      final isDark = theme.brightness == Brightness.dark;
+      final bg = isDark ? const Color(0xFF1E293B) : Colors.white;
+
+      return Container(
+        width: isWideScreen ? 580 : double.infinity,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * (isWideScreen ? 0.80 : 0.85),
+          maxWidth: 580,
+        ),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: isWideScreen
+              ? BorderRadius.circular(20)
+              : const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 20)],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!isWideScreen)
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 10, bottom: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-              margin: EdgeInsets.only(
-                left: MediaQuery.of(ctx).size.width > 600 ? (MediaQuery.of(ctx).size.width - 600) / 2 : 0,
-                right: MediaQuery.of(ctx).size.width > 600 ? (MediaQuery.of(ctx).size.width - 600) / 2 : 0,
-              ),
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 20)],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.only(top: 10, bottom: 8),
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.4),
-                        borderRadius: BorderRadius.circular(2),
+                  Row(
+                    children: [
+                      Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Refined Search Filters',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                    ),
+                    ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Refined Search Filters',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                  Row(
+                    children: [
+                      if (activeFilterCount > 0)
+                        TextButton.icon(
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Reset All', style: TextStyle(fontSize: 13)),
+                          onPressed: () {
+                            _clearAllFilters();
+                            setModalState(() {});
+                          },
                         ),
-                        if (activeFilterCount > 0)
-                          TextButton.icon(
-                            icon: const Icon(Icons.refresh, size: 16),
-                            label: const Text('Reset All', style: TextStyle(fontSize: 13)),
-                            onPressed: () {
-                              _clearAllFilters();
-                              setModalState(() {});
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      itemCount: availableFilters.length,
-                      itemBuilder: (c, idx) {
-                        final f = availableFilters[idx];
-                        final colKey = (f['column'] ?? f['name'] ?? '').toString();
-                        final label = (f['label'] ?? colKey).toString();
-                        final options = _getOptionsForFilter(f);
-                        if (options.isEmpty) return const SizedBox.shrink();
-
-                        final selectedSet = activeFilters[colKey] ?? <String>{};
-
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
-                          ),
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      label.toUpperCase(),
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.8,
-                                        color: theme.colorScheme.primary,
-                                      ),
-                                    ),
-                                    if (selectedSet.isNotEmpty)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: Text(
-                                          '${selectedSet.length} selected',
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: theme.colorScheme.primary,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                ...options.map((optVal) {
-                                  final isChecked = selectedSet.contains(optVal);
-                                  final count = _calculateFacetCount(colKey, optVal);
-
-                                  return InkWell(
-                                    borderRadius: BorderRadius.circular(8),
-                                    onTap: () {
-                                      _toggleFilter(colKey, optVal);
-                                      setModalState(() {});
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                                      child: Row(
-                                        children: [
-                                          Checkbox(
-                                            value: isChecked,
-                                            activeColor: theme.colorScheme.primary,
-                                            onChanged: (val) {
-                                              _toggleFilter(colKey, optVal);
-                                              setModalState(() {});
-                                            },
-                                          ),
-                                          Expanded(
-                                            child: Text(
-                                              optVal,
-                                              style: TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
-                                                color: (count == 0 && !isChecked) ? Colors.grey : null,
-                                              ),
-                                            ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: isChecked
-                                                  ? theme.colorScheme.primary.withValues(alpha: 0.2)
-                                                  : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              '$count',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: isChecked
-                                                    ? theme.colorScheme.primary
-                                                    : ((count == 0 && !isChecked) ? Colors.grey : null),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                }),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
-                    ),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      if (isWideScreen)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => Navigator.pop(ctx),
                         ),
-                        onPressed: () => Navigator.pop(ctx),
-                        child: Text(
-                          'Show ${filteredRecords.length} Results',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                        ),
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
-            );
-          },
-        );
-      },
-    );
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                itemCount: availableFilters.length,
+                itemBuilder: (c, idx) {
+                  final f = availableFilters[idx];
+                  final colKey = (f['column'] ?? f['name'] ?? '').toString();
+                  final label = (f['label'] ?? colKey).toString();
+                  final options = _getOptionsForFilter(f);
+                  if (options.isEmpty) return const SizedBox.shrink();
+
+                  final selectedSet = activeFilters[colKey] ?? <String>{};
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                    ),
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                label.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.8,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              if (selectedSet.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${selectedSet.length} selected',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ...options.map((optVal) {
+                            final isChecked = selectedSet.contains(optVal);
+                            final count = _calculateFacetCount(colKey, optVal);
+
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () {
+                                _toggleFilter(colKey, optVal);
+                                setModalState(() {});
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: Checkbox(
+                                        value: isChecked,
+                                        activeColor: theme.colorScheme.primary,
+                                        onChanged: (val) {
+                                          _toggleFilter(colKey, optVal);
+                                          setModalState(() {});
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        optVal,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                                          color: (count == 0 && !isChecked) ? Colors.grey : null,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: isChecked
+                                            ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                                            : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        '$count',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isChecked
+                                              ? theme.colorScheme.primary
+                                              : ((count == 0 && !isChecked) ? Colors.grey : null),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Show ${filteredRecords.length} Results',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isWideScreen) {
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => StatefulBuilder(
+          builder: (ctx, setModalState) => Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: buildFilterContent(ctx, setModalState),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (bottomSheetCtx) => StatefulBuilder(
+          builder: (ctx, setModalState) => buildFilterContent(ctx, setModalState),
+        ),
+      );
+    }
   }
 
   @override
