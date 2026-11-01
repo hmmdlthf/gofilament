@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/golaravel/gofilament/pkg/filament"
+	"github.com/golaravel/gofilament/pkg/tables"
 	"github.com/golaravel/golaravel/pkg/golaravel"
 )
 
@@ -87,9 +88,15 @@ func TestMobileFirst_CSSResponsiveRules(t *testing.T) {
 		t.Errorf("expected tablet media query in CSS")
 	}
 
-	// 4. Verify responsive table horizontal pan
-	if !strings.Contains(css, "min-width: 44rem") {
-		t.Errorf("expected min-width for table in CSS to prevent crushed columns on mobile")
+	// 4. Verify responsive table cards on mobile & tablet (Zero Horizontal Scrolling)
+	if !strings.Contains(css, "attr(data-label)") {
+		t.Errorf("expected attr(data-label) for responsive card column labels in CSS")
+	}
+	if !strings.Contains(css, "Mobile Responsive Table to Stacked Cards") {
+		t.Errorf("expected Mobile Responsive Table card rules in CSS")
+	}
+	if !strings.Contains(css, "Tablet Responsive Table to 2-Column Card Grid") {
+		t.Errorf("expected Tablet Responsive Table card grid rules in CSS")
 	}
 }
 
@@ -120,5 +127,55 @@ func TestMobileFirst_JSSidebarController(t *testing.T) {
 	}
 	if !strings.Contains(js, "sidebar-mobile-open") {
 		t.Errorf("expected body lock class sidebar-mobile-open in filament.js")
+	}
+}
+
+func TestMobileFirst_TableCardDataLabels(t *testing.T) {
+	app := golaravel.Default()
+	panel := filament.NewPanel("admin").Path("/admin")
+
+	type Product struct {
+		ID    string
+		Name  string
+		Price string
+	}
+
+	res := filament.NewResource[*Product]("products").
+		RecordID(func(p *Product) string { return p.ID })
+
+	res.Table(func(tbl *tables.Table[*Product]) *tables.Table[*Product] {
+		return tbl.Columns(
+			tables.TextColumn[*Product]("Name").Label("Product Name"),
+			tables.TextColumn[*Product]("Price").Label("Unit Price"),
+		)
+	})
+
+	res.OnList(func(ctx *filament.Context, search, sortCol, sortDir string, page, perPage int, filters map[string]string) ([]*Product, int, error) {
+		return []*Product{
+			{ID: "1", Name: "Wireless Keyboard", Price: "$49.99"},
+		}, 1, nil
+	})
+
+	panel.Resource(res)
+	if err := panel.Register(app); err != nil {
+		t.Fatalf("failed to register panel: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/admin/products", nil)
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	body := w.Body.String()
+
+	// Verify data-label attributes are injected on td elements for mobile card display
+	if !strings.Contains(body, `data-label="Product Name"`) {
+		t.Errorf("expected data-label=\"Product Name\" on td element, got body: %s", body)
+	}
+	if !strings.Contains(body, `data-label="Unit Price"`) {
+		t.Errorf("expected data-label=\"Unit Price\" on td element")
 	}
 }

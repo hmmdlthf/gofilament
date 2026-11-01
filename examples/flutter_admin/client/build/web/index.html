@@ -68,12 +68,44 @@
     /* Toast Notification */
     #toast { position: fixed; bottom: 24px; right: 24px; background: #10b981; color: #000; font-weight: 600; padding: 12px 20px; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4); display: none; z-index: 2000; font-size: 13px; align-items: center; gap: 8px; }
 
-    @media (max-width: 768px) {
+    @media (max-width: 640px) {
       .nav-rail { display: none; }
       .mobile-bottom-bar { display: flex; }
       .content-pane { padding: 16px; }
       .kpi-grid { grid-template-columns: 1fr; }
       .form-row { grid-template-columns: 1fr; }
+
+      /* Mobile 1-Column Responsive Cards (Zero Horizontal Scrolling) */
+      .card { background: transparent; border: none; box-shadow: none; margin-bottom: 16px; }
+      .table-container { overflow-x: visible; }
+      table { display: block; min-width: 0 !important; width: 100%; border: none; }
+      thead { display: none; }
+      tbody { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+      tbody tr { display: flex; flex-direction: column; width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+      td { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: right; width: 100%; }
+      td::before { content: attr(data-label); font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; text-align: left; margin-right: 12px; }
+      td:not([data-label])::before, td[data-label=""]::before { display: none; }
+      td:last-child { border-bottom: none; justify-content: flex-end; padding-top: 10px; }
+      td:last-child::before { display: none; }
+    }
+
+    @media (min-width: 641px) and (max-width: 1024px) {
+      .nav-rail { width: 64px; }
+      .content-pane { padding: 20px; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+
+      /* Tablet 2-Column Responsive Card Grid (Zero Horizontal Scrolling) */
+      .card { background: transparent; border: none; box-shadow: none; margin-bottom: 16px; }
+      .table-container { overflow-x: visible; }
+      table { display: block; min-width: 0 !important; width: 100%; border: none; }
+      thead { display: none; }
+      tbody { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; width: 100%; }
+      tbody tr { display: flex; flex-direction: column; width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+      td { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: right; width: 100%; }
+      td::before { content: attr(data-label); font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; text-align: left; margin-right: 12px; }
+      td:not([data-label])::before, td[data-label=""]::before { display: none; }
+      td:last-child { border-bottom: none; justify-content: flex-end; padding-top: 10px; }
+      td:last-child::before { display: none; }
     }
   </style>
 </head>
@@ -331,12 +363,12 @@
           tbody.innerHTML = items.map(d => {
             const badgeClass = d.status === 'online' ? 'badge-online' : d.status === 'offline' ? 'badge-offline' : 'badge-maint';
             return '<tr>' +
-              '<td style="font-weight: 600;">' + d.name + '</td>' +
-              '<td><span class="badge ' + badgeClass + '">' + d.status + '</span></td>' +
-              '<td style="font-family: monospace;">' + d.serial_no + '</td>' +
-              '<td>' + d.battery_level + '%</td>' +
-              '<td>' + d.location + '</td>' +
-              '<td style="text-align: right;"><button class="btn-danger" onclick="deleteDevice(\'' + d.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</span></button></td>' +
+              '<td data-label="Device Name" style="font-weight: 600;">' + d.name + '</td>' +
+              '<td data-label="Status"><span class="badge ' + badgeClass + '">' + d.status + '</span></td>' +
+              '<td data-label="Serial Number" style="font-family: monospace;">' + d.serial_no + '</td>' +
+              '<td data-label="Battery Level">' + d.battery_level + '%</td>' +
+              '<td data-label="Location">' + d.location + '</td>' +
+              '<td data-label="Actions" style="text-align: right;"><button class="btn-danger" onclick="deleteDevice(\'' + d.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</span></button></td>' +
               '</tr>';
           }).join('');
         }
@@ -401,11 +433,11 @@
           }
           tbody.innerHTML = items.map(u => {
             return '<tr>' +
-              '<td style="font-weight: 600;">' + u.name + '</td>' +
-              '<td>' + u.email + '</td>' +
-              '<td><span class="chip">' + u.role + '</span></td>' +
-              '<td>' + u.department + '</td>' +
-              '<td style="text-align: right;"><button class="btn-danger" onclick="deleteOperator(\'' + u.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</span></button></td>' +
+              '<td data-label="Full Name" style="font-weight: 600;">' + u.name + '</td>' +
+              '<td data-label="Email">' + u.email + '</td>' +
+              '<td data-label="Role"><span class="chip">' + u.role + '</span></td>' +
+              '<td data-label="Department">' + u.department + '</td>' +
+              '<td data-label="Actions" style="text-align: right;"><button class="btn-danger" onclick="deleteOperator(\'' + u.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</span></button></td>' +
               '</tr>';
           }).join('');
         }

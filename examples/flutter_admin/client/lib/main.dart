@@ -411,6 +411,244 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     }
   }
 
+  Widget _buildFieldItem(String label, String value, {IconData? icon, Color? valueColor}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade400,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: valueColor ?? Colors.grey.shade300),
+              const SizedBox(width: 4),
+            ],
+            Flexible(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: valueColor,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecordCard(BuildContext context, dynamic item, String id) {
+    final name = item['Name'] ?? item['name'] ?? item['Title'] ?? item['title'] ?? 'Record #$id';
+    final isDevice = widget.slug == 'devices';
+    final status = (item['Status'] ?? item['status'] ?? 'online').toString().toLowerCase();
+
+    Color statusColor = const Color(0xFF10B981);
+    if (status == 'offline') statusColor = Colors.redAccent;
+    if (status == 'maintenance') statusColor = Colors.amber;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      color: Theme.of(context).colorScheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header: Icon + Title + Status Pill
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  child: Icon(
+                    isDevice ? Icons.router : Icons.person,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name.toString(),
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'ID: #$id',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isDevice)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          status.toUpperCase(),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (item['Role'] != null || item['role'] != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      '${item['Role'] ?? item['role']}',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, thickness: 0.5),
+            const SizedBox(height: 12),
+
+            // Columns Grid: Muted column name above formatted value
+            if (isDevice) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildFieldItem(
+                      'Serial Number',
+                      '${item['SerialNo'] ?? item['serial_no'] ?? 'N/A'}',
+                      icon: Icons.tag,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildFieldItem(
+                      'Battery',
+                      '${item['BatteryLevel'] ?? item['battery_level'] ?? 100}%',
+                      icon: Icons.battery_charging_full,
+                      valueColor: statusColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildFieldItem(
+                      'Location',
+                      '${item['Location'] ?? item['location'] ?? 'Unknown'}',
+                      icon: Icons.location_on_outlined,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildFieldItem(
+                      'Model',
+                      '${item['Model'] ?? item['model'] ?? 'EdgeCore-Pro'}',
+                      icon: Icons.memory,
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildFieldItem(
+                      'Email Address',
+                      '${item['Email'] ?? item['email'] ?? 'N/A'}',
+                      icon: Icons.email_outlined,
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildFieldItem(
+                      'Department',
+                      '${item['Department'] ?? item['department'] ?? 'General'}',
+                      icon: Icons.business,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            const SizedBox(height: 12),
+            const Divider(height: 1, thickness: 0.5),
+            const SizedBox(height: 8),
+
+            // Footer Actions Row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.edit_outlined, size: 15),
+                  label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                  onPressed: () => showEditSheet(context, id, item),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  icon: const Icon(Icons.delete_outline, size: 15, color: Colors.redAccent),
+                  label: const Text('Delete', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Delete Record?'),
+                        content: Text('Are you sure you want to delete #$id?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await widget.api.deleteRecord(widget.slug, id);
+                      loadRecords();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -441,48 +679,40 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
               ? const Center(child: Text('No records found.'))
               : RefreshIndicator(
                   onRefresh: loadRecords,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: records.length,
-                    itemBuilder: (context, i) {
-                      final item = records[i];
-                      final id = item['ID'] ?? item['id'] ?? '$i';
-                      final title = item['Name'] ?? item['Title'] ?? item['name'] ?? item['title'] ?? 'Record #$id';
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Tablet & Desktop: 2-column card grid (Zero horizontal scrolling)
+                      final isTabletOrWide = constraints.maxWidth >= 600;
+                      if (isTabletOrWide) {
+                        return GridView.builder(
+                          padding: const EdgeInsets.all(16),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisExtent: 260,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          itemCount: records.length,
+                          itemBuilder: (context, i) {
+                            final item = records[i];
+                            final id = (item['ID'] ?? item['id'] ?? '$i').toString();
+                            return _buildRecordCard(context, item, id);
+                          },
+                        );
+                      }
 
-                      return Dismissible(
-                        key: ValueKey(id),
-                        direction: DismissDirection.endToStart,
-                        background: Container(
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 20),
-                          color: Colors.red,
-                          child: const Icon(Icons.delete, color: Colors.white),
-                        ),
-                        confirmDismiss: (dir) async {
-                          return await showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Delete Record?'),
-                              content: Text('Are you sure you want to delete #$id?'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
-                              ],
-                            ),
+                      // Mobile: 1-column stacked cards (Zero horizontal scrolling)
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: records.length,
+                        itemBuilder: (context, i) {
+                          final item = records[i];
+                          final id = (item['ID'] ?? item['id'] ?? '$i').toString();
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildRecordCard(context, item, id),
                           );
                         },
-                        onDismissed: (dir) async {
-                          await widget.api.deleteRecord(widget.slug, id.toString());
-                        },
-                        child: Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            title: Text(title.toString(), style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text('ID: $id'),
-                            trailing: const Icon(Icons.edit_outlined, size: 18),
-                            onTap: () => showEditSheet(context, id.toString(), item),
-                          ),
-                        ),
                       );
                     },
                   ),
@@ -544,7 +774,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
               if (widget.slug == 'devices') ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: status,
+                  initialValue: status,
                   decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder(), isDense: true),
                   items: const [
                     DropdownMenuItem(value: 'online', child: Text('Online (Active)')),
@@ -623,7 +853,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
               if (widget.slug == 'devices') ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: ['online', 'offline', 'maintenance'].contains(status) ? status : 'online',
+                  initialValue: ['online', 'offline', 'maintenance'].contains(status) ? status : 'online',
                   decoration: const InputDecoration(labelText: 'Status', border: OutlineInputBorder(), isDense: true),
                   items: const [
                     DropdownMenuItem(value: 'online', child: Text('Online (Active)')),

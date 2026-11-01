@@ -430,7 +430,7 @@ func (t *Table[T]) Render(basePath string) string {
 		if len(t.actions) > 0 || t.softDeletes {
 			colspan++
 		}
-		sb.WriteString(fmt.Sprintf(`<tr><td colspan="%d" style="text-align: center; padding: 3rem 1rem; color: var(--gray-400);">No records found.</td></tr>`, colspan))
+		sb.WriteString(fmt.Sprintf(`<tr class="empty-row"><td colspan="%d" style="text-align: center; padding: 3rem 1rem; color: var(--gray-400);">No records found.</td></tr>`, colspan))
 	} else {
 		for _, rec := range t.records {
 			recID := t.extractRecordID(rec)
@@ -446,12 +446,12 @@ func (t *Table[T]) Render(basePath string) string {
 
 			// Reorder handle cell
 			if t.reorderable {
-				sb.WriteString(`<td class="drag-handle" style="width: 2.5rem; text-align: center; cursor: grab; color: var(--gray-400); user-select: none;">&#8942;&#8942;</td>`)
+				sb.WriteString(`<td class="drag-handle" data-label="Reorder" style="width: 2.5rem; text-align: center; cursor: grab; color: var(--gray-400); user-select: none;">&#8942;&#8942;</td>`)
 			}
 
 			// Bulk checkbox
 			if len(t.bulkActions) > 0 {
-				sb.WriteString(fmt.Sprintf(`<td style="text-align: center;"><input type="checkbox" name="selected_ids[]" value="%s" class="row-select-checkbox" /></td>`, recID))
+				sb.WriteString(fmt.Sprintf(`<td class="table-cell-checkbox" data-label="Select" style="text-align: center;"><label class="table-checkbox-label"><input type="checkbox" name="selected_ids[]" value="%s" class="row-select-checkbox" /><span class="table-checkbox-text">Select</span></label></td>`, recID))
 			}
 
 			// Render columns
@@ -469,11 +469,11 @@ func (t *Table[T]) Render(basePath string) string {
 					cellHTML = col.RenderCell(rec, raw)
 				}
 
-				sb.WriteString(fmt.Sprintf(`<td data-col="%s" %s>%s</td>`, col.GetName(), colStyle, cellHTML))
+				sb.WriteString(fmt.Sprintf(`<td data-col="%s" data-label="%s" %s><span class="table-cell-value">%s</span></td>`, col.GetName(), html.EscapeString(col.FormatLabel()), colStyle, cellHTML))
 			}
 
 			if len(t.actions) > 0 || isRecTrashed {
-				sb.WriteString(`<td style="text-align: right;"><div style="display: inline-flex; gap: 0.375rem; align-items: center;">`)
+				sb.WriteString(`<td class="table-cell-actions" data-label="Actions" style="text-align: right;"><div style="display: inline-flex; gap: 0.375rem; align-items: center;">`)
 				if isRecTrashed {
 					sb.WriteString(`<span class="badge badge-danger" style="font-size: 0.6875rem; margin-right: 0.25rem;">Trashed</span>`)
 					restoreAct := RestoreAction[T]()
