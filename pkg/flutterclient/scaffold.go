@@ -2,6 +2,7 @@ package flutterclient
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,6 +67,14 @@ flutter:
 		return err
 	}
 
+	panelPath := apiBaseURL
+	if u, err := url.Parse(apiBaseURL); err == nil && u.Path != "" {
+		panelPath = u.Path
+	}
+	if !strings.HasPrefix(panelPath, "/") {
+		panelPath = "/" + panelPath
+	}
+
 	// 3. lib/api.dart - GoFilament API Client
 	apiDart := fmt.Sprintf(`import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -80,11 +89,14 @@ class FilamentApiClient {
   static String _defaultBaseUrl() {
     if (kIsWeb) {
       final origin = Uri.base.origin;
-      if (Uri.base.port == 8081 || Uri.base.port == 8080) {
-        return '$origin/admin';
+      final host = Uri.base.host;
+      if (host.isNotEmpty && host != 'localhost' && host != '127.0.0.1') {
+        return '$origin%s';
       }
-      final host = Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
-      return 'http://$host:8081/admin';
+      if (Uri.base.port == 8081 || Uri.base.port == 8080 || Uri.base.port == 80 || Uri.base.port == 443) {
+        return '$origin%s';
+      }
+      return '%s';
     }
     return '%s';
   }
@@ -186,7 +198,7 @@ class FilamentApiClient {
     return {};
   }
 }
-`, apiBaseURL)
+`, panelPath, panelPath, apiBaseURL, apiBaseURL)
 	if err := os.WriteFile(filepath.Join(libDir, "api.dart"), []byte(apiDart), 0644); err != nil {
 		return err
 	}
