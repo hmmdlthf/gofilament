@@ -2232,6 +2232,12 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   bool isLoading = true;
   String search = '';
   final Map<String, Set<String>> activeFilters = {};
+  bool _showRelations = true;
+  final Set<String> _toggledRecordIds = {};
+
+  bool _isRelationsVisible(String id) {
+    return _showRelations ? !_toggledRecordIds.contains(id) : _toggledRecordIds.contains(id);
+  }
 
   int get activeFilterCount {
     int count = 0;
@@ -2684,6 +2690,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   void didUpdateWidget(covariant ResourceRecordList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.slug != widget.slug) {
+      _toggledRecordIds.clear();
       loadRecords();
     }
   }
@@ -3012,11 +3019,135 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     return Icons.account_tree_outlined;
   }
 
+  List<String> _extractColumns() {
+    if (records.isEmpty) return [];
+
+    const excluded = {
+      'id', 'ID', '_id',
+      'status', 'Status', 'status_text', 'active',
+      'password', 'token', 'remember_token', 'deleted_at',
+      'created_at', 'updated_at', 'createdAt', 'updatedAt',
+      'relations', 'sub_entities', 'hash', 'salt',
+    };
+
+    final orderedKeys = <String>[];
+    final seen = <String>{};
+
+    // 1. Primary identification keys first
+    for (final candidate in ['name', 'Name', 'title', 'Title', 'code', 'Code', 'username', 'login']) {
+      for (final r in records) {
+        if (r is Map && r.containsKey(candidate) && !seen.contains(candidate.toLowerCase())) {
+          orderedKeys.add(candidate);
+          seen.add(candidate.toLowerCase());
+          break;
+        }
+      }
+    }
+
+    // 2. All other business columns found across records
+    for (final r in records) {
+      if (r is Map) {
+        for (final entry in r.entries) {
+          final kStr = entry.key.toString();
+          final kLower = kStr.toLowerCase();
+          if (excluded.contains(kStr) || excluded.contains(kLower)) continue;
+          if (seen.contains(kLower)) continue;
+
+          final val = entry.value;
+          if (val is Map || val is List) continue;
+
+          orderedKeys.add(kStr);
+          seen.add(kLower);
+        }
+      }
+    }
+
+    return orderedKeys;
+  }
+
+  double _columnWidth(String colKey) {
+    final k = colKey.toLowerCase();
+    if (k == 'name' || k == 'title') return 220;
+    if (k == 'email' || k == 'username') return 200;
+    if (k.contains('address') || k.contains('description') || k.contains('notes')) return 240;
+    if (k == 'phone' || k.contains('phone')) return 150;
+    if (k.contains('code') || k.contains('serial') || k.contains('plate') || k.contains('cr_')) return 150;
+    if (k == 'city' || k == 'type' || k == 'role' || k == 'category') return 140;
+    if (k.contains('amount') || k.contains('balance') || k.contains('price') || k.contains('rate')) return 140;
+    return 150;
+  }
+
+  Widget _buildTableCell(BuildContext context, String colKey, dynamic item, bool isDark, IconData headerIcon) {
+    final theme = Theme.of(context);
+    final kLower = colKey.toLowerCase();
+    final val = item[colKey] ?? item[colKey.toLowerCase()] ?? item[colKey.toUpperCase()] ?? item[_snakeToCamel(colKey)];
+    final str = val?.toString().trim() ?? '';
+
+    if (str.isEmpty) {
+      return Text('—', style: TextStyle(color: Colors.grey.shade500, fontSize: 13));
+    }
+
+    if (kLower == 'name' || kLower == 'title') {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 13,
+            backgroundColor: theme.colorScheme.primaryContainer,
+            child: Icon(headerIcon, size: 13, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              str,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (kLower == 'email') {
+      return Text(
+        str,
+        style: TextStyle(fontSize: 12, color: isDark ? Colors.blue.shade300 : Colors.blue.shade700),
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    if (kLower.contains('amount') || kLower.contains('balance') || kLower.contains('price')) {
+      return Text(
+        str,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    return Text(
+      str,
+      style: TextStyle(fontSize: 13, color: isDark ? Colors.grey.shade300 : Colors.grey.shade800),
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  void _openRelation(BuildContext context, String id, String name, String relSlug, String relTitle) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Opening $relTitle for #$id')),
+    );
+  }
+
   Widget _buildRecordTable(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final relations = _getRelations();
     final hasRelations = relations.isNotEmpty;
+    final columns = _extractColumns();
+
+    double totalColsWidth = 70.0 + 130.0 + 150.0; // ID + STATUS + ACTIONS
+    for (final col in columns) {
+      totalColsWidth += _columnWidth(col);
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -3035,7 +3166,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
             clipBehavior: Clip.antiAlias,
             child: LayoutBuilder(
               builder: (ctx, constraints) {
-                final tableWidth = constraints.maxWidth > 960 ? constraints.maxWidth : 960.0;
+                final tableWidth = constraints.maxWidth > totalColsWidth ? constraints.maxWidth : totalColsWidth;
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: SizedBox(
@@ -3059,43 +3190,68 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                 ),
                               ),
-                              const Expanded(
-                                flex: 3,
-                                child: Text(
-                                  'RECORD / TITLE',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                              for (final col in columns)
+                                SizedBox(
+                                  width: _columnWidth(col),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 12),
+                                    child: Text(
+                                      _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              const Expanded(
-                                flex: 3,
-                                child: Text(
-                                  'ATTRIBUTES',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                ),
-                              ),
                               const SizedBox(
-                                width: 140,
+                                width: 130,
                                 child: Text(
                                   'STATUS',
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                 ),
                               ),
-                              if (hasRelations)
-                                const Expanded(
-                                  flex: 2,
-                                  child: Text(
-                                    'SUB-ENTITIES',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                  ),
-                                ),
-                              const SizedBox(
-                                width: 130,
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: Text(
-                                    'ACTIONS',
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                  ),
+                              SizedBox(
+                                width: 150,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    if (hasRelations)
+                                      Tooltip(
+                                        message: _showRelations ? 'Hide All Relations' : 'Show All Relations',
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(6),
+                                          onTap: () {
+                                            setState(() {
+                                              _showRelations = !_showRelations;
+                                              _toggledRecordIds.clear();
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: _showRelations ? Colors.amber.withValues(alpha: 0.15) : Colors.transparent,
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: _showRelations ? Colors.amber.withValues(alpha: 0.4) : Colors.grey.withValues(alpha: 0.3)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.account_tree_outlined, size: 12, color: _showRelations ? Colors.amber.shade400 : Colors.grey),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  _showRelations ? 'Hide' : 'Relations',
+                                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _showRelations ? Colors.amber.shade400 : Colors.grey),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'ACTIONS',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -3104,7 +3260,15 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
                         // Table Rows
                         for (int i = 0; i < records.length; i++)
-                          _buildTableRow(context, records[i], (records[i]['ID'] ?? records[i]['id'] ?? '$i').toString(), hasRelations, relations, i == records.length - 1),
+                          _buildTableRow(
+                            context,
+                            records[i],
+                            (records[i]['ID'] ?? records[i]['id'] ?? '$i').toString(),
+                            columns,
+                            hasRelations,
+                            relations,
+                            i == records.length - 1,
+                          ),
                       ],
                     ),
                   ),
@@ -3121,6 +3285,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     BuildContext context,
     dynamic item,
     String id,
+    List<String> columns,
     bool hasRelations,
     List<Map<String, dynamic>> relations,
     bool isLast,
@@ -3160,137 +3325,171 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
       statusColor = Colors.amber;
     }
 
-    // Contextual attributes
-    final attributes = <String>[];
-    if (item is Map) {
-      for (final k in ['code', 'phone', 'city', 'total_amount', 'quantity', 'balance_due', 'category_name', 'metric', 'hardware_target', 'plate_number', 'serial_number']) {
-        final v = item[k] ?? item[k.toUpperCase()] ?? item[_snakeToCamel(k)];
-        if (v != null && v.toString().isNotEmpty) {
-          attributes.add('${_titleCase(k.replaceAll('_', ' '))}: $v');
-        }
-      }
-    }
+    final isRelationsVisible = hasRelations && _isRelationsVisible(id);
 
     return Container(
       decoration: BoxDecoration(
-        border: isLast ? null : Border(bottom: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05))),
+        border: isLast && !isRelationsVisible
+            ? null
+            : Border(bottom: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05))),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          hoverColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
-          onTap: () => showEditSheet(context, id, item),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            child: Row(
-              children: [
-                // ID Column
-                SizedBox(
-                  width: 70,
-                  child: Text(
-                    '#$id',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade400,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Main Columns Row
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              hoverColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
+              onTap: () => showEditSheet(context, id, item),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Row(
+                  children: [
+                    // ID Column
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        '#$id',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
 
-                // Record / Title Column
-                Expanded(
-                  flex: 3,
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: theme.colorScheme.primaryContainer,
-                        child: Icon(headerIcon, size: 16, color: theme.colorScheme.primary),
+                    // Discovered Columns
+                    for (final col in columns)
+                      SizedBox(
+                        width: _columnWidth(col),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: _buildTableCell(context, col, item, isDark, headerIcon),
+                        ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              name,
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (item['email'] != null || item['Email'] != null)
+
+                    // Status Badge Column
+                    SizedBox(
+                      width: 130,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                              const SizedBox(width: 6),
                               Text(
-                                '${item['email'] ?? item['Email']}',
-                                style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
-                                overflow: TextOverflow.ellipsis,
+                                status.toUpperCase(),
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
                               ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    ),
 
-                // Attributes Column
-                Expanded(
-                  flex: 3,
-                  child: attributes.isEmpty
-                      ? const Text('—', style: TextStyle(color: Colors.grey))
-                      : Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: attributes.take(3).map((attr) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                attr,
-                                style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade300 : Colors.grey.shade700),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                ),
-
-                // Status Badge Column
-                SizedBox(
-                  width: 140,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-                      ),
+                    // Actions Column
+                    SizedBox(
+                      width: 150,
                       child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
-                          const SizedBox(width: 6),
-                          Text(
-                            status.toUpperCase(),
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                          if (hasRelations)
+                            IconButton(
+                              icon: Icon(
+                                isRelationsVisible ? Icons.account_tree : Icons.account_tree_outlined,
+                                size: 18,
+                                color: isRelationsVisible ? Colors.amber.shade400 : Colors.grey,
+                              ),
+                              tooltip: isRelationsVisible ? 'Hide Relations' : 'View Relations',
+                              onPressed: () {
+                                setState(() {
+                                  if (_toggledRecordIds.contains(id)) {
+                                    _toggledRecordIds.remove(id);
+                                  } else {
+                                    _toggledRecordIds.add(id);
+                                  }
+                                });
+                              },
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            tooltip: 'Edit Record',
+                            onPressed: () => showEditSheet(context, id, item),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                            tooltip: 'Delete Record',
+                            onPressed: () async {
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Delete Record?'),
+                                  content: Text('Are you sure you want to delete #$id?'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await widget.api.deleteRecord(widget.slug, id);
+                                loadRecords();
+                              }
+                            },
                           ),
                         ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
+              ),
+            ),
+          ),
 
-                // Sub-Entities / Relations Column (if present)
-                if (hasRelations)
+          // Relationship Managers (at the bottom of every record, same like for the card)
+          if (isRelationsVisible)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.7) : const Color(0xFFF1F5F9).withValues(alpha: 0.9),
+                border: Border(
+                  top: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 50),
+                  Icon(Icons.account_tree_outlined, size: 14, color: Colors.amber.shade400),
+                  const SizedBox(width: 8),
+                  Text(
+                    'RELATIONS:',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber.shade400,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    flex: 2,
                     child: Wrap(
-                      spacing: 6,
+                      spacing: 8,
                       runSpacing: 4,
                       children: relations.map((rel) {
                         final relTitle = (rel['title'] ?? rel['relationship'] ?? 'Related').toString();
+                        final relSlug = (rel['relationship'] ?? '').toString();
                         final iconName = (rel['icon'] ?? '').toString();
                         return ActionChip(
                           avatar: Icon(_iconForRelation(iconName), size: 14, color: Colors.amber.shade400),
@@ -3300,57 +3499,16 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
                           visualDensity: VisualDensity.compact,
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Opening $relTitle for #$id')),
-                            );
+                            _openRelation(context, id, name, relSlug, relTitle);
                           },
                         );
                       }).toList(),
                     ),
                   ),
-
-                // Actions Column
-                SizedBox(
-                  width: 130,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        tooltip: 'Edit Record',
-                        onPressed: () => showEditSheet(context, id, item),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                        tooltip: 'Delete Record',
-                        onPressed: () async {
-                          final confirm = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Delete Record?'),
-                              content: Text('Are you sure you want to delete #$id?'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
-                                ),
-                              ],
-                            ),
-                          );
-                          if (confirm == true) {
-                            await widget.api.deleteRecord(widget.slug, id);
-                            loadRecords();
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
+        ],
       ),
     );
   }
