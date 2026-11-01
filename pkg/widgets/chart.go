@@ -177,6 +177,23 @@ func (w *ChartWidget) EvaluateChartData(ctx *filament.Context, filter string) an
 	return w.EvaluateData(ctx, filter)
 }
 
+func (w *ChartWidget) WidgetType() string {
+	return "chart"
+}
+
+func (w *ChartWidget) ToWidgetDTO(ctx *filament.Context) map[string]any {
+	return map[string]any{
+		"type":           "chart",
+		"heading":        w.GetHeading(),
+		"chart_type":     w.GetChartTypeString(),
+		"filters":        w.GetFilters(),
+		"default_filter": w.GetDefaultFilter(),
+		"drilldown_url":  w.GetDrilldownPattern(),
+		"polling":        w.GetPolling(),
+		"data":           w.EvaluateChartData(ctx, ""),
+	}
+}
+
 func (w *ChartWidget) Render(ctx *filament.Context) string {
 	chartID := "chart_dashboard_main"
 	if w.id != "" {

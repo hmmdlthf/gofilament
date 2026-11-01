@@ -41,6 +41,41 @@ func (w *TableWidget) Rows(provider func(ctx *filament.Context) []map[string]any
 	return w
 }
 
+func (w *TableWidget) GetHeading() string {
+	return w.heading
+}
+
+func (w *TableWidget) GetColumns() []TableWidgetColumn {
+	return w.columns
+}
+
+func (w *TableWidget) EvaluateRows(ctx *filament.Context) []map[string]any {
+	if w.rows != nil {
+		return w.rows(ctx)
+	}
+	return nil
+}
+
+func (w *TableWidget) WidgetType() string {
+	return "table"
+}
+
+func (w *TableWidget) ToWidgetDTO(ctx *filament.Context) map[string]any {
+	var cols []map[string]string
+	for _, c := range w.columns {
+		cols = append(cols, map[string]string{
+			"name":  c.Name,
+			"label": c.Label,
+		})
+	}
+	return map[string]any{
+		"type":    "table",
+		"heading": w.heading,
+		"columns": cols,
+		"rows":    w.EvaluateRows(ctx),
+	}
+}
+
 func (w *TableWidget) Render(ctx *filament.Context) string {
 	var rowData []map[string]any
 	if w.rows != nil {

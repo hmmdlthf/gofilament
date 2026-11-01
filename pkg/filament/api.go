@@ -290,6 +290,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"navigation":            navDTOs,
 			"resources":             resourceDTOs,
 			"widgets_count":         len(p.widgets),
+			"widgets":               p.EvaluateWidgetDTOs(ctx),
 			"account_nav_placement": string(p.GetAccountNavPlacement()),
 			"requires_auth":         p.requiresAuth,
 			"session_duration":      int(p.GetSessionDuration().Seconds()),
@@ -472,38 +473,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			return err
 		}
 
-		var widgetData []map[string]any
-		for _, w := range p.widgets {
-			dto := map[string]any{
-				"id":          w.ID(),
-				"sort":        w.Sort(),
-				"column_span": w.ColumnSpan(),
-			}
-			if chart, ok := w.(interface {
-				GetHeading() string
-				GetChartTypeString() string
-				GetFilters() map[string]string
-				GetDefaultFilter() string
-				GetDrilldownPattern() string
-				GetPolling() string
-				EvaluateChartData(ctx *Context, filter string) any
-			}); ok {
-				dto["type"] = "chart"
-				dto["heading"] = chart.GetHeading()
-				dto["chart_type"] = chart.GetChartTypeString()
-				dto["filters"] = chart.GetFilters()
-				dto["default_filter"] = chart.GetDefaultFilter()
-				dto["drilldown_url"] = chart.GetDrilldownPattern()
-				dto["polling"] = chart.GetPolling()
-				dto["data"] = chart.EvaluateChartData(ctx, "")
-			} else if stats, ok := w.(interface {
-				EvaluateStatsMap(ctx *Context) []map[string]any
-			}); ok {
-				dto["type"] = "stats_overview"
-				dto["stats"] = stats.EvaluateStatsMap(ctx)
-			}
-			widgetData = append(widgetData, dto)
-		}
+		widgetData := p.EvaluateWidgetDTOs(ctx)
 		return c.JSON(http.StatusOK, map[string]any{
 			"widgets": widgetData,
 		})
@@ -598,6 +568,48 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	for _, res := range p.resources {
 		p.registerResourceAPI(res, apiPrefix, r)
 	}
+}
+
+// EvaluateWidgetDTOs serializes all panel dashboard widgets for headless REST clients and Flutter UI.
+func (p *Panel) EvaluateWidgetDTOs(ctx *Context) []map[string]any {
+	var widgetData []map[string]any
+	for _, w := range p.widgets {
+		dto := map[string]any{
+			"id":          w.ID(),
+			"sort":        w.Sort(),
+			"column_span": w.ColumnSpan(),
+		}
+		if wp, ok := w.(interface{ ToWidgetDTO(ctx *Context) map[string]any }); ok {
+			customDTO := wp.ToWidgetDTO(ctx)
+			for k, v := range customDTO {
+				dto[k] = v
+			}
+		} else if chart, ok := w.(interface {
+			GetHeading() string
+			GetChartTypeString() string
+			GetFilters() map[string]string
+			GetDefaultFilter() string
+			GetDrilldownPattern() string
+			GetPolling() string
+			EvaluateChartData(ctx *Context, filter string) any
+		}); ok {
+			dto["type"] = "chart"
+			dto["heading"] = chart.GetHeading()
+			dto["chart_type"] = chart.GetChartTypeString()
+			dto["filters"] = chart.GetFilters()
+			dto["default_filter"] = chart.GetDefaultFilter()
+			dto["drilldown_url"] = chart.GetDrilldownPattern()
+			dto["polling"] = chart.GetPolling()
+			dto["data"] = chart.EvaluateChartData(ctx, "")
+		} else if stats, ok := w.(interface {
+			EvaluateStatsMap(ctx *Context) []map[string]any
+		}); ok {
+			dto["type"] = "stats_overview"
+			dto["stats"] = stats.EvaluateStatsMap(ctx)
+		}
+		widgetData = append(widgetData, dto)
+	}
+	return widgetData
 }
 
 // registerResourceAPI binds JSON endpoints for a specific Resource.

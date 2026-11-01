@@ -151,6 +151,17 @@ func (w *StatsOverviewWidget) EvaluateStatsMap(ctx *filament.Context) []map[stri
 	return result
 }
 
+func (w *StatsOverviewWidget) WidgetType() string {
+	return "stats_overview"
+}
+
+func (w *StatsOverviewWidget) ToWidgetDTO(ctx *filament.Context) map[string]any {
+	return map[string]any{
+		"type":  "stats_overview",
+		"stats": w.EvaluateStatsMap(ctx),
+	}
+}
+
 func (w *StatsOverviewWidget) Render(ctx *filament.Context) string {
 	if w.statsProvider == nil {
 		return ""

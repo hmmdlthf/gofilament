@@ -416,6 +416,26 @@ class FilamentApiClient {
     }
     return true;
   }
+
+  Future<List<dynamic>> fetchWidgets() async {
+    final res = await http.get(Uri.parse('$baseUrl/api/widgets'), headers: _headers);
+    if (res.statusCode == 200) {
+      final data = json.decode(res.body);
+      return (data['widgets'] as List<dynamic>?) ?? [];
+    }
+    return [];
+  }
+
+  Future<dynamic> fetchWidgetData(String widgetId, {String filter = ''}) async {
+    final uri = Uri.parse('$baseUrl/api/widgets/$widgetId/data').replace(
+      queryParameters: filter.isNotEmpty ? {'filter': filter} : null,
+    );
+    final res = await http.get(uri, headers: _headers);
+    if (res.statusCode == 200) {
+      return json.decode(res.body);
+    }
+    return null;
+  }
 }
 `, panelPath, panelPath, apiBaseURL, apiBaseURL)
 	if err := os.WriteFile(filepath.Join(libDir, "api.dart"), []byte(apiDart), 0644); err != nil {
@@ -3209,6 +3229,211 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+class SparklinePainter extends CustomPainter {
+  final List<double> data;
+  final Color color;
+
+  SparklinePainter({required this.data, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (data.length < 2) return;
+    final min = data.reduce((a, b) => a < b ? a : b);
+    final max = data.reduce((a, b) => a > b ? a : b);
+    final range = (max - min) == 0 ? 1.0 : (max - min);
+
+    final path = Path();
+    final fillPath = Path();
+    final stepX = size.width / (data.length - 1);
+
+    for (int i = 0; i < data.length; i++) {
+      final x = i * stepX;
+      final normalized = (data[i] - min) / range;
+      final y = size.height - (normalized * (size.height - 8)) - 4;
+      if (i == 0) {
+        path.moveTo(x, y);
+        fillPath.moveTo(x, size.height);
+        fillPath.lineTo(x, y);
+      } else {
+        path.lineTo(x, y);
+        fillPath.lineTo(x, y);
+      }
+    }
+    fillPath.lineTo(size.width, size.height);
+    fillPath.close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [color.withValues(alpha: 0.3), color.withValues(alpha: 0.0)],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(fillPath, fillPaint);
+
+    final linePaint = Paint()
+      ..color = color
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(path, linePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant SparklinePainter oldDelegate) => true;
+}
+
+class DashboardChartPainter extends CustomPainter {
+  final List<String> labels;
+  final List<dynamic> datasets;
+  final bool isBar;
+  final bool isDark;
+
+  DashboardChartPainter({
+    required this.labels,
+    required this.datasets,
+    this.isBar = false,
+    this.isDark = true,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (labels.isEmpty || datasets.isEmpty) return;
+
+    final paddingBottom = 24.0;
+    final chartHeight = size.height - paddingBottom;
+    final chartWidth = size.width;
+
+    double maxVal = 1.0;
+    for (final ds in datasets) {
+      final rawData = (ds['data'] as List<dynamic>?) ?? [];
+      for (final v in rawData) {
+        final d = (v is num) ? v.toDouble() : double.tryParse('$v') ?? 0.0;
+        if (d > maxVal) maxVal = d;
+      }
+    }
+
+    final gridPaint = Paint()
+      ..color = isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06)
+      ..strokeWidth = 1.0;
+
+    for (int i = 0; i <= 3; i++) {
+      final y = (chartHeight / 3) * i;
+      canvas.drawLine(Offset(0, y), Offset(chartWidth, y), gridPaint);
+    }
+
+    final n = labels.length;
+    final stepX = n > 1 ? chartWidth / (n - 1) : chartWidth;
+
+    final labelStyle = TextStyle(
+      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+      fontSize: 10,
+      fontWeight: FontWeight.w500,
+    );
+
+    for (int i = 0; i < n; i++) {
+      final tp = TextPainter(
+        text: TextSpan(text: labels[i], style: labelStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final x = n > 1 ? (i * stepX) - (tp.width / 2) : (chartWidth / 2) - (tp.width / 2);
+      tp.paint(canvas, Offset(x.clamp(0.0, chartWidth - tp.width), chartHeight + 6));
+    }
+
+    if (isBar) {
+      final barWidth = (chartWidth / n) * 0.5 / datasets.length;
+      for (int dIdx = 0; dIdx < datasets.length; dIdx++) {
+        final ds = datasets[dIdx];
+        final rawColor = ds['backgroundColor'] ?? ds['borderColor'] ?? '#10b981';
+        final color = _parseColor(rawColor.toString());
+        final rawData = (ds['data'] as List<dynamic>?) ?? [];
+        final barPaint = Paint()..color = color;
+
+        for (int i = 0; i < rawData.length && i < n; i++) {
+          final val = (rawData[i] is num) ? rawData[i].toDouble() : double.tryParse('${rawData[i]}') ?? 0.0;
+          final h = (val / maxVal) * (chartHeight - 10);
+          final groupStartX = (i * (chartWidth / n)) + ((chartWidth / n) * 0.25);
+          final barX = groupStartX + (dIdx * barWidth);
+          final barY = chartHeight - h;
+          final rRect = RRect.fromRectAndCorners(
+            Rect.fromLTWH(barX, barY, barWidth * 0.85, h),
+            topLeft: const Radius.circular(4),
+            topRight: const Radius.circular(4),
+          );
+          canvas.drawRRect(rRect, barPaint);
+        }
+      }
+    } else {
+      for (final ds in datasets) {
+        final rawColor = ds['borderColor'] ?? ds['backgroundColor'] ?? '#10b981';
+        final color = _parseColor(rawColor.toString());
+        final rawData = (ds['data'] as List<dynamic>?) ?? [];
+        if (rawData.length < 2) continue;
+
+        final path = Path();
+        final fillPath = Path();
+
+        for (int i = 0; i < rawData.length && i < n; i++) {
+          final val = (rawData[i] is num) ? rawData[i].toDouble() : double.tryParse('${rawData[i]}') ?? 0.0;
+          final x = i * stepX;
+          final y = chartHeight - ((val / maxVal) * (chartHeight - 12)) - 6;
+
+          if (i == 0) {
+            path.moveTo(x, y);
+            fillPath.moveTo(x, chartHeight);
+            fillPath.lineTo(x, y);
+          } else {
+            path.lineTo(x, y);
+            fillPath.lineTo(x, y);
+          }
+        }
+
+        fillPath.lineTo((rawData.length - 1) * stepX, chartHeight);
+        fillPath.close();
+
+        final fillPaint = Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [color.withValues(alpha: 0.25), color.withValues(alpha: 0.0)],
+          ).createShader(Rect.fromLTWH(0, 0, chartWidth, chartHeight));
+        canvas.drawPath(fillPath, fillPaint);
+
+        final linePaint = Paint()
+          ..color = color
+          ..strokeWidth = 2.5
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        canvas.drawPath(path, linePaint);
+
+        final pointPaint = Paint()..color = color;
+        final innerPaint = Paint()..color = isDark ? const Color(0xFF1E293B) : Colors.white;
+        for (int i = 0; i < rawData.length && i < n; i++) {
+          final val = (rawData[i] is num) ? rawData[i].toDouble() : double.tryParse('${rawData[i]}') ?? 0.0;
+          final x = i * stepX;
+          final y = chartHeight - ((val / maxVal) * (chartHeight - 12)) - 6;
+          canvas.drawCircle(Offset(x, y), 4.5, pointPaint);
+          canvas.drawCircle(Offset(x, y), 2.5, innerPaint);
+        }
+      }
+    }
+  }
+
+  static Color _parseColor(String c) {
+    c = c.replaceAll('#', '').trim();
+    if (c.length == 6) {
+      return Color(int.parse('FF$c', radix: 16));
+    } else if (c.length == 8) {
+      return Color(int.parse(c, radix: 16));
+    }
+    return const Color(0xFFF59E0B);
+  }
+
+  @override
+  bool shouldRepaint(covariant DashboardChartPainter oldDelegate) => true;
+}
+
 enum SidebarCollapseMode {
   expanded,
   partialCollapse,
@@ -4202,27 +4427,92 @@ class _AdminShellPageState extends State<AdminShellPage> {
     );
   }
 
-  // --- Mobile Dashboard (KPI Cards Carousel & Quick Actions) ---
+  // --- Dynamic Dashboard Views (Mobile & Desktop) ---
   Widget _buildMobileDashboard() {
+    return _buildDashboardView(true);
+  }
+
+  Widget _buildDesktopDashboard() {
+    return _buildDashboardView(false);
+  }
+
+  Widget _buildDashboardView(bool isMobile) {
+    final widgetsList = (schema?['widgets'] as List<dynamic>?) ?? [];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (widgetsList.isEmpty) {
+      return _buildFallbackDashboard(isMobile);
+    }
+
     return RefreshIndicator(
       onRefresh: loadSchema,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         children: [
-          const Text('Performance Overview', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 130,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _kpiCard('Active Entities', '${schema?['resources']?.length ?? 0}', Colors.indigo, Icons.layers),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Operational Dashboard',
+                    style: TextStyle(
+                      fontSize: isMobile ? 20 : 26,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Live operational metrics, telematics & hardware analytics',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+              IconButton.filledTonal(
+                tooltip: 'Refresh Dashboard',
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+                onPressed: loadSchema,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          ...widgetsList.map((w) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 20),
+              child: _buildWidgetCard(Map<String, dynamic>.from(w as Map), isMobile, isDark),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFallbackDashboard(bool isMobile) {
+    return RefreshIndicator(
+      onRefresh: loadSchema,
+      child: ListView(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        children: [
+          Text(
+            isMobile ? 'Performance Overview' : 'Admin Dashboard',
+            style: TextStyle(fontSize: isMobile ? 20 : 28, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(child: _kpiCard('Active Entities', '${schema?['resources']?.length ?? 0}', Colors.indigo, Icons.layers)),
+              const SizedBox(width: 12),
+              Expanded(child: _kpiCard('System Status', 'Operational', const Color(0xFF10B981), Icons.check_circle)),
+              if (!isMobile) ...[
                 const SizedBox(width: 12),
-                _kpiCard('System Status', 'Operational', const Color(0xFF10B981), Icons.check_circle),
-                const SizedBox(width: 12),
-                _kpiCard('Multi-Tenancy', schema?['active_tenant'] ?? 'Global', Colors.amber, Icons.business),
+                Expanded(child: _kpiCard('Multi-Tenancy', schema?['active_tenant'] ?? 'Global', Colors.amber, Icons.business)),
               ],
-            ),
+            ],
           ),
           const SizedBox(height: 24),
           const Text('Quick Access Entities', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -4249,6 +4539,791 @@ class _AdminShellPageState extends State<AdminShellPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildWidgetCard(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final type = (w['type'] ?? '').toString();
+    switch (type) {
+      case 'banner':
+        return _buildBannerWidget(w, isMobile, isDark);
+      case 'stats_overview':
+        return _buildStatsOverviewWidget(w, isMobile, isDark);
+      case 'chart':
+        return _buildChartWidget(w, isMobile, isDark);
+      case 'breakdown':
+        return _buildBreakdownWidget(w, isMobile, isDark);
+      case 'progress':
+        return _buildProgressWidget(w, isMobile, isDark);
+      case 'quick_actions':
+        return _buildQuickActionsWidget(w, isMobile, isDark);
+      case 'timeline':
+        return _buildTimelineWidget(w, isMobile, isDark);
+      case 'table':
+        return _buildTableWidget(w, isMobile, isDark);
+      default:
+        return const SizedBox();
+    }
+  }
+
+  Widget _buildBannerWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final title = (w['title'] ?? 'Welcome').toString();
+    final subtitle = (w['subtitle'] ?? '').toString();
+    final actionLabel = (w['action_label'] ?? '').toString();
+    final actionUrl = (w['action_url'] ?? '').toString();
+    final icon = _resolveHeroicon((w['icon'] ?? 'heroicon-sparkles').toString());
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [const Color(0xFF1E293B), const Color(0xFF0F172A)]
+              : [const Color(0xFFFEF3C7), const Color(0xFFFFFBEB)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.amber.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.amber.shade400, size: 28),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (actionLabel.isNotEmpty && !isMobile) ...[
+            const SizedBox(width: 16),
+            FilledButton.tonal(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.amber.withValues(alpha: 0.25),
+                foregroundColor: isDark ? Colors.amber.shade200 : Colors.amber.shade900,
+              ),
+              onPressed: () => _handleWidgetUrl(actionUrl),
+              child: Text(actionLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsOverviewWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final stats = (w['stats'] as List<dynamic>?) ?? [];
+    if (stats.isEmpty) return const SizedBox();
+
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    final statWidgets = stats.map((sRaw) {
+      final s = Map<String, dynamic>.from(sRaw as Map);
+      final label = (s['label'] ?? '').toString();
+      final value = (s['value'] ?? '').toString();
+      final desc = (s['description'] ?? '').toString();
+      final colorRole = (s['color'] ?? 'primary').toString();
+      final color = _resolveColorRole(colorRole);
+      final chartRaw = (s['chart'] as List<dynamic>?) ?? [];
+      final chartData = chartRaw.map((v) => (v as num).toDouble()).toList();
+
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    label.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.6,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (chartData.length >= 2)
+                  SizedBox(
+                    width: 70,
+                    height: 28,
+                    child: CustomPaint(
+                      painter: SparklinePainter(data: chartData, color: color),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+            ),
+            if (desc.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(
+                    desc.contains('-') ? Icons.trending_down_rounded : Icons.trending_up_rounded,
+                    size: 14,
+                    color: color,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      desc,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: color),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      );
+    }).toList();
+
+    if (isMobile) {
+      return GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.35,
+        children: statWidgets,
+      );
+    }
+
+    return Row(
+      children: statWidgets
+          .map((sw) => Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: sw)))
+          .toList(),
+    );
+  }
+
+  Widget _buildChartWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final heading = (w['heading'] ?? 'Chart Analytics').toString();
+    final description = (w['description'] ?? '').toString();
+    final chartType = (w['chart_type'] ?? 'line').toString();
+    final isBar = chartType == 'bar';
+    final dataObj = w['data'] as Map<String, dynamic>? ?? {};
+    final labels = ((dataObj['labels'] as List<dynamic>?) ?? []).map((e) => e.toString()).toList();
+    final datasets = (dataObj['datasets'] as List<dynamic>?) ?? [];
+
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(heading, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    if (description.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (datasets.isNotEmpty) ...[
+                Wrap(
+                  spacing: 12,
+                  children: datasets.map((ds) {
+                    final rawColor = ds['borderColor'] ?? ds['backgroundColor'] ?? '#10b981';
+                    final color = DashboardChartPainter._parseColor(rawColor.toString());
+                    final label = (ds['label'] ?? '').toString();
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: isMobile ? 180 : 240,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: DashboardChartPainter(
+                labels: labels,
+                datasets: datasets,
+                isBar: isBar,
+                isDark: isDark,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBreakdownWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final heading = (w['heading'] ?? 'Distribution Breakdown').toString();
+    final description = (w['description'] ?? '').toString();
+    final items = (w['items'] as List<dynamic>?) ?? [];
+
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(heading, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          // Multi-color segmented distribution bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              height: 12,
+              child: Row(
+                children: items.map((itRaw) {
+                  final it = Map<String, dynamic>.from(itRaw as Map);
+                  final pct = (it['percentage'] as num?)?.toDouble() ?? 10.0;
+                  final colorStr = (it['color'] ?? '#10b981').toString();
+                  final color = DashboardChartPainter._parseColor(colorStr);
+                  return Expanded(
+                    flex: (pct * 10).toInt().clamp(1, 1000),
+                    child: Container(color: color),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Category items
+          ...items.map((itRaw) {
+            final it = Map<String, dynamic>.from(itRaw as Map);
+            final label = (it['label'] ?? '').toString();
+            final formatted = (it['formatted'] ?? '').toString();
+            final pct = (it['percentage'] as num?)?.toDouble() ?? 0.0;
+            final colorStr = (it['color'] ?? '#10b981').toString();
+            final color = DashboardChartPainter._parseColor(colorStr);
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                  const Spacer(),
+                  if (formatted.isNotEmpty) ...[
+                    Text(
+                      formatted,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${pct.toStringAsFixed(1)}%',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final heading = (w['heading'] ?? 'Quota Progress').toString();
+    final description = (w['description'] ?? '').toString();
+    final items = (w['items'] as List<dynamic>?) ?? [];
+
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(heading, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          ...items.map((itRaw) {
+            final it = Map<String, dynamic>.from(itRaw as Map);
+            final label = (it['label'] ?? '').toString();
+            final pct = (it['percentage'] as num?)?.toDouble() ?? 0.0;
+            final colorRole = (it['color'] ?? 'emerald').toString();
+            final color = _resolveColorRole(colorRole);
+            final subtitle = (it['subtitle'] ?? '').toString();
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      Text('${pct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: (pct / 100.0).clamp(0.0, 1.0),
+                      minHeight: 7,
+                      backgroundColor: isDark ? Colors.white12 : Colors.black12,
+                      valueColor: AlwaysStoppedAnimation<Color>(color),
+                    ),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final heading = (w['heading'] ?? 'Quick Actions').toString();
+    final description = (w['description'] ?? '').toString();
+    final actions = (w['actions'] as List<dynamic>?) ?? [];
+
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(heading, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          isMobile
+              ? Column(
+                  children: actions.map((aRaw) => _buildQuickActionItem(Map<String, dynamic>.from(aRaw as Map), isDark)).toList(),
+                )
+              : GridView.count(
+                  crossAxisCount: 2,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 2.8,
+                  children: actions.map((aRaw) => _buildQuickActionItem(Map<String, dynamic>.from(aRaw as Map), isDark)).toList(),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionItem(Map<String, dynamic> a, bool isDark) {
+    final label = (a['label'] ?? '').toString();
+    final desc = (a['description'] ?? '').toString();
+    final url = (a['url'] ?? '').toString();
+    final colorRole = (a['color'] ?? 'primary').toString();
+    final color = _resolveColorRole(colorRole);
+    final icon = _resolveHeroicon((a['icon'] ?? 'heroicon-arrow-right').toString());
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _handleWidgetUrl(url),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 20, color: color),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    if (desc.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        desc,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimelineWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final heading = (w['heading'] ?? 'Recent Activities').toString();
+    final description = (w['description'] ?? '').toString();
+    final items = (w['items'] as List<dynamic>?) ?? [];
+
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(heading, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 12,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          ...items.map((itRaw) {
+            final it = Map<String, dynamic>.from(itRaw as Map);
+            final title = (it['title'] ?? '').toString();
+            final desc = (it['description'] ?? '').toString();
+            final timestamp = (it['timestamp'] ?? '').toString();
+            final user = (it['user'] ?? '').toString();
+            final colorRole = (it['color'] ?? 'sky').toString();
+            final color = _resolveColorRole(colorRole);
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                            if (timestamp.isNotEmpty)
+                              Text(
+                                timestamp,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                              ),
+                          ],
+                        ),
+                        if (desc.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            desc,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                        if (user.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.white12 : Colors.black12,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '@$user',
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTableWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
+    final heading = (w['heading'] ?? 'Latest Records').toString();
+    final columns = (w['columns'] as List<dynamic>?) ?? [];
+    final rows = (w['rows'] as List<dynamic>?) ?? [];
+
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(heading, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          if (rows.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: Text('No records available.')),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: columns.map((c) {
+                  final label = (c['label'] ?? c['name'] ?? '').toString();
+                  return DataColumn(label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)));
+                }).toList(),
+                rows: rows.map((rRaw) {
+                  final r = Map<String, dynamic>.from(rRaw as Map);
+                  return DataRow(
+                    cells: columns.map((c) {
+                      final colName = (c['name'] ?? '').toString();
+                      final val = (r[colName] ?? '').toString();
+                      return DataCell(Text(val));
+                    }).toList(),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Color _resolveColorRole(String role) {
+    switch (role.toLowerCase()) {
+      case 'emerald':
+      case 'success':
+        return const Color(0xFF10B981);
+      case 'amber':
+      case 'warning':
+        return const Color(0xFFF59E0B);
+      case 'red':
+      case 'danger':
+        return const Color(0xFFEF4444);
+      case 'sky':
+      case 'info':
+        return const Color(0xFF0284C7);
+      case 'purple':
+      case 'indigo':
+        return const Color(0xFF8B5CF6);
+      default:
+        return const Color(0xFFF59E0B);
+    }
+  }
+
+  IconData _resolveHeroicon(String name) {
+    final lower = name.toLowerCase();
+    if (lower.contains('sparkles') || lower.contains('star')) return Icons.auto_awesome;
+    if (lower.contains('truck') || lower.contains('vehicle')) return Icons.local_shipping_outlined;
+    if (lower.contains('building') || lower.contains('office') || lower.contains('station')) return Icons.business_outlined;
+    if (lower.contains('cpu') || lower.contains('chip') || lower.contains('nfc')) return Icons.nfc_outlined;
+    if (lower.contains('bank') || lower.contains('money') || lower.contains('wallet') || lower.contains('currency')) return Icons.account_balance_wallet_outlined;
+    if (lower.contains('user') || lower.contains('person')) return Icons.people_outline;
+    if (lower.contains('check') || lower.contains('shield')) return Icons.verified_outlined;
+    if (lower.contains('clock') || lower.contains('time')) return Icons.schedule_outlined;
+    return Icons.widgets_outlined;
+  }
+
+  void _handleWidgetUrl(String url) {
+    if (url.isEmpty) return;
+    final parts = url.split('/').where((s) => s.isNotEmpty).toList();
+    if (parts.isNotEmpty) {
+      final slug = parts.last;
+      final resources = (schema?['resources'] as List<dynamic>?) ?? [];
+      final match = resources.firstWhere((r) => r['slug'] == slug, orElse: () => null);
+      if (match != null) {
+        setState(() {
+          selectedResourceSlug = slug;
+          _currentIndex = 1;
+        });
+      }
+    }
   }
 
   Widget _kpiCard(String title, String val, Color color, IconData icon) {
@@ -4318,7 +5393,8 @@ class _AdminShellPageState extends State<AdminShellPage> {
                   final cur = resources.firstWhere((r) => r['slug'] == selectedResourceSlug, orElse: () => null);
                   final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
                   final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
-                  return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters);
+                  final tabs = cur != null ? (cur['tabs'] as List<dynamic>?) : null;
+                  return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters, tabs: tabs);
                 }),
         ),
       ],
@@ -4326,27 +5402,6 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   // --- Desktop Views ---
-  Widget _buildDesktopDashboard() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Admin Dashboard', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(child: _kpiCard('Entities', '${schema?['resources']?.length ?? 0}', Colors.indigo, Icons.layers)),
-              const SizedBox(width: 16),
-              Expanded(child: _kpiCard('Kernel Engine', 'GoLaravel', const Color(0xFF10B981), Icons.check_circle)),
-              const SizedBox(width: 16),
-              Expanded(child: _kpiCard('UI Mode', 'Mobile-First Flutter', Colors.amber, Icons.devices)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildDesktopResources(List<dynamic> resources) {
     if (selectedResourceSlug == null && resources.isNotEmpty) {
