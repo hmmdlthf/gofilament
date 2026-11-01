@@ -55,4 +55,10 @@ func TestGenerateFlutterAdmin(t *testing.T) {
 	if !strings.Contains(mainStr, "SecuritySettingsScreen") {
 		t.Errorf("expected main.dart to contain SecuritySettingsScreen")
 	}
+	if !strings.Contains(mainStr, "_accountNavPlacement") {
+		t.Errorf("expected main.dart to contain _accountNavPlacement")
+	}
+	if !strings.Contains(mainStr, "SegmentedButton") {
+		t.Errorf("expected main.dart to contain SegmentedButton")
+	}
 }

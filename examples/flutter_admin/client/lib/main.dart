@@ -69,13 +69,22 @@ class _AdminShellPageState extends State<AdminShellPage> {
   bool isLoading = true;
   int _currentIndex = 0;
   String? selectedResourceSlug;
-
+  String _accountNavPlacement = 'header'; // 'header' (top circle button) or 'bottom_bar' (bottom menu tab)
   String? errorMessage;
 
   @override
   void initState() {
     super.initState();
     loadSchema();
+  }
+
+  void setAccountNavPlacement(String placement) {
+    setState(() {
+      _accountNavPlacement = placement;
+      if (placement == 'header' && _currentIndex > 1) {
+        _currentIndex = 0;
+      }
+    });
   }
 
   Future<void> loadSchema() async {
@@ -89,6 +98,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
         schema = s;
         if (s['active_tenant'] != null) {
           api.activeTenant = s['active_tenant'];
+        }
+        if (s['account_nav_placement'] != null && (s['account_nav_placement'] == 'header' || s['account_nav_placement'] == 'bottom_bar')) {
+          _accountNavPlacement = s['account_nav_placement'];
         }
         final resources = s['resources'] as List<dynamic>?;
         if (resources != null && resources.isNotEmpty) {
@@ -185,11 +197,17 @@ class _AdminShellPageState extends State<AdminShellPage> {
     final brandName = schema?['brand_name'] ?? 'Pulse';
     final resources = (schema?['resources'] as List<dynamic>?) ?? [];
 
+    final isHeaderPlacement = _accountNavPlacement == 'header';
+    final activeMobileIndex = isHeaderPlacement ? _currentIndex.clamp(0, 1) : _currentIndex;
+
     return ResponsiveLayout(
       // 📱 Mobile-First Layout: One-thumb bottom navigation, pull-to-refresh, cards
       mobile: Scaffold(
         appBar: AppBar(
-          title: Text(brandName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          title: Text(
+            !isHeaderPlacement && _currentIndex == 2 ? 'Account & Profile' : brandName,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
           actions: [
             IconButton(
               icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
@@ -199,43 +217,54 @@ class _AdminShellPageState extends State<AdminShellPage> {
               icon: const Icon(Icons.corporate_fare),
               onPressed: showTenantSwitcher,
             ),
-            Padding(
-              padding: const EdgeInsets.only(right: 8, left: 4),
-              child: CircularAccountButton(
-                initial: 'S',
-                name: 'Sarah Connor',
-                email: 'sarah@fleetpulse.io',
-                role: 'Operations Lead',
-                onTap: () => AccountModalSheet.show(
-                  context: context,
-                  api: api,
-                  activeTenant: api.activeTenant,
-                  onThemeToggle: widget.onToggleTheme,
-                  isDark: widget.isDark,
+            // Header circle account button is shown ONLY when placement is 'header' (never both!)
+            if (isHeaderPlacement)
+              Padding(
+                padding: const EdgeInsets.only(right: 8, left: 4),
+                child: CircularAccountButton(
+                  initial: 'S',
+                  name: 'Sarah Connor',
+                  email: 'sarah@fleetpulse.io',
+                  role: 'Operations Lead',
+                  onTap: () => AccountModalSheet.show(
+                    context: context,
+                    api: api,
+                    activeTenant: api.activeTenant,
+                    onThemeToggle: widget.onToggleTheme,
+                    isDark: widget.isDark,
+                    accountNavPlacement: _accountNavPlacement,
+                    onAccountNavPlacementChanged: setAccountNavPlacement,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
         body: IndexedStack(
-          index: _currentIndex,
+          index: activeMobileIndex,
           children: [
             _buildMobileDashboard(),
             _buildMobileResourceFeed(resources),
-            _buildMobileSettings(),
+            if (!isHeaderPlacement)
+              _buildMobileAccountHub(),
           ],
         ),
         bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex,
+          selectedIndex: activeMobileIndex,
           onDestinationSelected: (idx) {
             HapticFeedback.selectionClick();
             setState(() => _currentIndex = idx);
           },
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-            NavigationDestination(icon: Icon(Icons.layers_outlined), selectedIcon: Icon(Icons.layers), label: 'Entities'),
-            NavigationDestination(icon: Icon(Icons.account_circle_outlined), selectedIcon: Icon(Icons.account_circle), label: 'Account'),
-          ],
+          // Bottom menu account tab is shown ONLY when placement is 'bottom_bar' (never both!)
+          destinations: isHeaderPlacement
+              ? const [
+                  NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
+                  NavigationDestination(icon: Icon(Icons.layers_outlined), selectedIcon: Icon(Icons.layers), label: 'Entities'),
+                ]
+              : const [
+                  NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
+                  NavigationDestination(icon: Icon(Icons.layers_outlined), selectedIcon: Icon(Icons.layers), label: 'Entities'),
+                  NavigationDestination(icon: Icon(Icons.account_circle_outlined), selectedIcon: Icon(Icons.account_circle), label: 'Account'),
+                ],
         ),
       ),
 
@@ -244,39 +273,23 @@ class _AdminShellPageState extends State<AdminShellPage> {
         body: Row(
           children: [
             NavigationRail(
-              selectedIndex: _currentIndex,
+              selectedIndex: activeMobileIndex,
               onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
               labelType: NavigationRailLabelType.all,
               leading: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text('⚡ ' + brandName, style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
-              trailing: Expanded(
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: CircularAccountButton(
-                      initial: 'S',
-                      name: 'Sarah Connor',
-                      email: 'sarah@fleetpulse.io',
-                      role: 'Operations Lead',
-                      onTap: () => AccountModalSheet.show(
-                        context: context,
-                        api: api,
-                        activeTenant: api.activeTenant,
-                        onThemeToggle: widget.onToggleTheme,
-                        isDark: widget.isDark,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              destinations: const [
-                NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), label: Text('Dashboard')),
-                NavigationRailDestination(icon: Icon(Icons.layers_outlined), label: Text('Resources')),
-                NavigationRailDestination(icon: Icon(Icons.account_circle_outlined), label: Text('Account')),
-              ],
+              destinations: isHeaderPlacement
+                  ? const [
+                      NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), label: Text('Dashboard')),
+                      NavigationRailDestination(icon: Icon(Icons.layers_outlined), label: Text('Resources')),
+                    ]
+                  : const [
+                      NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), label: Text('Dashboard')),
+                      NavigationRailDestination(icon: Icon(Icons.layers_outlined), label: Text('Resources')),
+                      NavigationRailDestination(icon: Icon(Icons.account_circle_outlined), label: Text('Account')),
+                    ],
             ),
             const VerticalDivider(thickness: 1, width: 1),
             Expanded(
@@ -324,20 +337,25 @@ class _AdminShellPageState extends State<AdminShellPage> {
                               tooltip: 'Switch Tenant',
                               onPressed: showTenantSwitcher,
                             ),
-                            const SizedBox(width: 8),
-                            CircularAccountButton(
-                              initial: 'S',
-                              name: 'Sarah Connor',
-                              email: 'sarah@fleetpulse.io',
-                              role: 'Operations Lead',
-                              onTap: () => AccountModalSheet.show(
-                                context: context,
-                                api: api,
-                                activeTenant: api.activeTenant,
-                                onThemeToggle: widget.onToggleTheme,
-                                isDark: widget.isDark,
+                            // Header circular button is shown ONLY when placement is 'header'
+                            if (isHeaderPlacement) ...[
+                              const SizedBox(width: 8),
+                              CircularAccountButton(
+                                initial: 'S',
+                                name: 'Sarah Connor',
+                                email: 'sarah@fleetpulse.io',
+                                role: 'Operations Lead',
+                                onTap: () => AccountModalSheet.show(
+                                  context: context,
+                                  api: api,
+                                  activeTenant: api.activeTenant,
+                                  onThemeToggle: widget.onToggleTheme,
+                                  isDark: widget.isDark,
+                                  accountNavPlacement: _accountNavPlacement,
+                                  onAccountNavPlacementChanged: setAccountNavPlacement,
+                                ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ],
@@ -345,11 +363,12 @@ class _AdminShellPageState extends State<AdminShellPage> {
                   ),
                   Expanded(
                     child: IndexedStack(
-                      index: _currentIndex,
+                      index: activeMobileIndex,
                       children: [
                         _buildDesktopDashboard(),
                         _buildDesktopResources(resources),
-                        _buildMobileSettings(),
+                        if (!isHeaderPlacement)
+                          _buildMobileAccountHub(),
                       ],
                     ),
                   ),
@@ -532,79 +551,80 @@ class _AdminShellPageState extends State<AdminShellPage> {
     );
   }
 
-  Widget _buildMobileSettings() {
+  Widget _buildMobileAccountHub() {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // User Profile Summary Card
+        // User Profile Summary Card (Informational header — does NOT re-open modal sheet)
         Card(
+          elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: Colors.amber.withValues(alpha: 0.3)),
           ),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => AccountModalSheet.show(
-              context: context,
-              api: api,
-              activeTenant: api.activeTenant,
-              onThemeToggle: widget.onToggleTheme,
-              isDark: widget.isDark,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
-                      ),
-                      border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 2),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
                     ),
-                    child: const Center(
-                      child: Text('S', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 22)),
-                    ),
+                    border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 2),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Sarah Connor',
-                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'sarah@fleetpulse.io • Operations Lead',
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Text(
-                                'PRO FLEET TIER',
-                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
-                              ),
+                  child: const Center(
+                    child: Text('S', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 22)),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'Sarah Connor',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
+                            child: const Text(
+                              'PRO',
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'sarah@fleetpulse.io • Operations Lead',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 6),
+                      const Row(
+                        children: [
+                          Icon(Icons.verified_user_outlined, size: 13, color: Color(0xFF10B981)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Active Session • Enclave Secured',
+                            style: TextStyle(fontSize: 11, color: Color(0xFF10B981)),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  const Icon(Icons.chevron_right, color: Colors.grey),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -624,7 +644,15 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 subtitle: 'Theme & Bio',
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => SettingsScreen(onThemeToggle: widget.onToggleTheme, isDark: widget.isDark, api: api)),
+                  MaterialPageRoute(
+                    builder: (_) => SettingsScreen(
+                      onThemeToggle: widget.onToggleTheme,
+                      isDark: widget.isDark,
+                      api: api,
+                      accountNavPlacement: _accountNavPlacement,
+                      onAccountNavPlacementChanged: setAccountNavPlacement,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -681,6 +709,28 @@ class _AdminShellPageState extends State<AdminShellPage> {
         Card(
           child: Column(
             children: [
+              ListTile(
+                leading: const Icon(Icons.switch_access_shortcut),
+                title: const Text('Account Navigation Entrypoint'),
+                subtitle: Text(
+                  _accountNavPlacement == 'header'
+                      ? 'Top Header Avatar Circle (opens floating sheet)'
+                      : 'Bottom Navigation Bar Tab (opens dedicated page)',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: DropdownButton<String>(
+                  value: _accountNavPlacement,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(value: 'header', child: Text('Header Circle')),
+                    DropdownMenuItem(value: 'bottom_bar', child: Text('Bottom Bar Tab')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setAccountNavPlacement(val);
+                  },
+                ),
+              ),
+              const Divider(height: 1),
               ListTile(
                 leading: const Icon(Icons.brightness_6),
                 title: const Text('Theme Mode'),
@@ -1529,6 +1579,8 @@ class AccountModalSheet extends StatelessWidget {
   final String? activeTenant;
   final VoidCallback onThemeToggle;
   final bool isDark;
+  final String accountNavPlacement;
+  final ValueChanged<String>? onAccountNavPlacementChanged;
 
   const AccountModalSheet({
     super.key,
@@ -1536,6 +1588,8 @@ class AccountModalSheet extends StatelessWidget {
     required this.activeTenant,
     required this.onThemeToggle,
     required this.isDark,
+    this.accountNavPlacement = 'header',
+    this.onAccountNavPlacementChanged,
   });
 
   static Future<void> show({
@@ -1544,6 +1598,8 @@ class AccountModalSheet extends StatelessWidget {
     required String? activeTenant,
     required VoidCallback onThemeToggle,
     required bool isDark,
+    String accountNavPlacement = 'header',
+    ValueChanged<String>? onAccountNavPlacementChanged,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -1554,6 +1610,8 @@ class AccountModalSheet extends StatelessWidget {
         activeTenant: activeTenant,
         onThemeToggle: onThemeToggle,
         isDark: isDark,
+        accountNavPlacement: accountNavPlacement,
+        onAccountNavPlacementChanged: onAccountNavPlacementChanged,
       ),
     );
   }
@@ -1697,7 +1755,15 @@ class AccountModalSheet extends StatelessWidget {
                         Navigator.pop(context);
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => SettingsScreen(onThemeToggle: onThemeToggle, isDark: isDark, api: api)),
+                          MaterialPageRoute(
+                            builder: (_) => SettingsScreen(
+                              onThemeToggle: onThemeToggle,
+                              isDark: isDark,
+                              api: api,
+                              accountNavPlacement: accountNavPlacement,
+                              onAccountNavPlacementChanged: onAccountNavPlacementChanged,
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -1838,14 +1904,24 @@ class SettingsScreen extends StatefulWidget {
   final VoidCallback onThemeToggle;
   final bool isDark;
   final FilamentApiClient api;
+  final String accountNavPlacement;
+  final ValueChanged<String>? onAccountNavPlacementChanged;
 
-  const SettingsScreen({super.key, required this.onThemeToggle, required this.isDark, required this.api});
+  const SettingsScreen({
+    super.key,
+    required this.onThemeToggle,
+    required this.isDark,
+    required this.api,
+    this.accountNavPlacement = 'header',
+    this.onAccountNavPlacementChanged,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  late String _selectedPlacement = widget.accountNavPlacement;
   bool isBiometricEnabled = true;
   String autoLockTimeout = '5 Minutes';
   bool requireBioForCriticalActions = true;
@@ -1930,6 +2006,49 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Account Navigation Placement Section (Mutually Exclusive: either Header Circle OR Bottom Bar Tab)
+          const Text('ACCOUNT NAVIGATION ENTRYPOINT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.8, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(
+                        value: 'header',
+                        icon: Icon(Icons.account_circle),
+                        label: Text('Top Header Circle'),
+                      ),
+                      ButtonSegment(
+                        value: 'bottom_bar',
+                        icon: Icon(Icons.vertical_align_bottom),
+                        label: Text('Bottom Bar Tab'),
+                      ),
+                    ],
+                    selected: {_selectedPlacement},
+                    onSelectionChanged: (newSelection) {
+                      final val = newSelection.first;
+                      setState(() => _selectedPlacement = val);
+                      widget.onAccountNavPlacementChanged?.call(val);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _selectedPlacement == 'header'
+                        ? '• Circular avatar in header opens floating account sheet.\n• Bottom bar contains only core tabs (Dashboard & Entities).'
+                        : '• Dedicated Account tab in bottom bar opens full account hub page.\n• Header circle avatar button is hidden (strictly one entrypoint).',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
             ),
           ),
 

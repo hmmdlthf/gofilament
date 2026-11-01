@@ -89,6 +89,9 @@ func TestFlutterAdmin_JSONAPISchema(t *testing.T) {
 	if schema["brand_name"] != "Pulse Fleet" {
 		t.Errorf("expected brand_name 'Pulse Fleet', got %v", schema["brand_name"])
 	}
+	if schema["account_nav_placement"] != "header" {
+		t.Errorf("expected account_nav_placement 'header', got %v", schema["account_nav_placement"])
+	}
 	if schema["engine"] != "flutter" {
 		t.Errorf("expected engine 'flutter', got %v", schema["engine"])
 	}
@@ -221,5 +224,11 @@ func TestEnsureFlutterClientReady(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "modal-settings") {
 		t.Errorf("expected index.html to contain modal-settings")
+	}
+	if !strings.Contains(string(content), "setting-account-placement") {
+		t.Errorf("expected index.html to contain setting-account-placement")
+	}
+	if !strings.Contains(string(content), "pane-account") {
+		t.Errorf("expected index.html to contain pane-account")
 	}
 }

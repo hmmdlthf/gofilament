@@ -161,7 +161,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"tenants":           tenantsDTO,
 			"navigation":        navDTOs,
 			"resources":         resourceDTOs,
-			"widgets_count":     len(p.widgets),
+			"widgets_count":         len(p.widgets),
+			"account_nav_placement": string(p.GetAccountNavPlacement()),
 		}
 
 		return c.JSON(http.StatusOK, schema)

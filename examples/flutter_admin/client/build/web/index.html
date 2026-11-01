@@ -268,8 +268,8 @@
       <a href="/admin/api/schema" target="_blank" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;">
         <span class="material-icons" style="font-size: 16px;">api</span> JSON API
       </a>
-      <!-- Circular Account Button on Top -->
-      <button class="account-btn" onclick="openFloatingAccount()" title="Sarah Connor - Fleet Lead (Click to open Account)">
+      <!-- Circular Account Button on Top (shown only when placement is 'header') -->
+      <button class="account-btn" id="header-account-btn" onclick="openFloatingAccount()" title="Sarah Connor - Fleet Lead (Click to open Account)">
         <span>SC</span>
         <span class="account-badge-online"></span>
       </button>
@@ -301,6 +301,10 @@
       <button class="rail-btn" onclick="switchTab('analytics', this)">
         <span class="material-icons">bar_chart</span>
         <span>Metrics</span>
+      </button>
+      <button class="rail-btn" id="rail-account-btn" style="display: none;" onclick="switchTab('account', this)">
+        <span class="material-icons">account_circle</span>
+        <span>Account</span>
       </button>
     </aside>
 
@@ -498,6 +502,65 @@
         </div>
       </div>
 
+      <!-- 7. Account Hub Pane (Active in bottom_bar navigation mode) -->
+      <div id="pane-account" style="display: none;">
+        <div class="section-title">
+          <span>Operator Profile & Account Hub</span>
+        </div>
+        <!-- Informational Profile Card (Clean display — does NOT re-open modal sheet) -->
+        <div class="card" style="padding: 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 16px;">
+          <div class="account-avatar-large">SC</div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px; font-weight: 700; color: #fff;">Sarah Connor</span>
+              <span class="badge badge-normal" style="font-size: 9px; padding: 2px 6px;">PRO</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 2px;">sarah@fleetpulse.io • Operations Lead</div>
+            <div style="font-size: 11px; color: #34d399; margin-top: 4px;">● Active Session • Enclave Secured</div>
+          </div>
+        </div>
+
+        <!-- Quick Hub Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px;">
+          <div class="card" style="padding: 16px; cursor: pointer; transition: transform 0.15s;" onclick="openSettingsModal()">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="account-nav-icon"><span class="material-icons">settings</span></div>
+              <div>
+                <div style="font-weight: 700; color: #fff;">Settings & Preferences</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Theme, Biometrics, Placement</div>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="padding: 16px; cursor: pointer; transition: transform 0.15s;" onclick="openOrdersModal()">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="account-nav-icon"><span class="material-icons">shopping_bag</span></div>
+              <div>
+                <div style="font-weight: 700; color: #fff;">Hardware Orders</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Procurement & Invoices</div>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="padding: 16px; cursor: pointer; transition: transform 0.15s;" onclick="openBillingModal()">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="account-nav-icon"><span class="material-icons">credit_card</span></div>
+              <div>
+                <div style="font-weight: 700; color: #fff;">Billing & Subscription</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Enterprise Fleet License</div>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="padding: 16px; cursor: pointer; transition: transform 0.15s;" onclick="openSecurityModal()">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div class="account-nav-icon"><span class="material-icons">fingerprint</span></div>
+              <div>
+                <div style="font-weight: 700; color: #fff;">Biometrics & Security</div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Sensor diagnostics & sessions</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div style="margin-top: 32px; padding: 20px; border-radius: 12px; background: rgba(0,0,0,0.3); border: 1px dashed var(--border);">
         <h4 style="margin-bottom: 8px; color: var(--primary);">🚀 Native Multiplatform Compilation</h4>
         <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
@@ -515,7 +578,8 @@
     <button class="rail-btn" onclick="switchTab('firmware', this)"><span class="material-icons">system_update</span><span>Firmware</span></button>
     <button class="rail-btn" onclick="switchTab('operators', this)"><span class="material-icons">badge</span><span>Team</span></button>
     <button class="rail-btn" onclick="switchTab('analytics', this)"><span class="material-icons">bar_chart</span><span>Metrics</span></button>
-    <button class="rail-btn" onclick="openFloatingAccount()"><span class="material-icons">account_circle</span><span>Account</span></button>
+    <!-- Shown ONLY when account placement is 'bottom_bar' (never both!) -->
+    <button class="rail-btn" id="bottom-bar-account-btn" style="display: none;" onclick="switchTab('account', this)"><span class="material-icons">account_circle</span><span>Account</span></button>
   </nav>
 
   <!-- Interactive Modal: Add Device -->
@@ -787,6 +851,18 @@
           </button>
         </div>
 
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--primary); letter-spacing: 0.5px; margin-top: 14px;">Navigation & Placement</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">Account Navigation Entrypoint</div>
+            <div class="setting-desc">Either Top Header Circle OR Bottom Bar Tab (strictly one, never both)</div>
+          </div>
+          <select id="setting-account-placement" class="form-input" style="width: 180px;" onchange="setAccountNavPlacement(this.value)">
+            <option value="header" selected>Top Header Circle</option>
+            <option value="bottom_bar">Bottom Bar Tab</option>
+          </select>
+        </div>
+
         <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--primary); letter-spacing: 0.5px; margin-top: 14px;">Biometric Security & Enclave</div>
         <div class="setting-row">
           <div>
@@ -1035,6 +1111,33 @@
       showToast('Telemetry cache cleared (42.8 MB freed)');
     }
 
+    let currentAccountPlacement = 'header';
+
+    function setAccountNavPlacement(placement) {
+      currentAccountPlacement = placement;
+      const headerBtn = document.getElementById('header-account-btn');
+      const bottomBtn = document.getElementById('bottom-bar-account-btn');
+      const railBtn = document.getElementById('rail-account-btn');
+      const selectEl = document.getElementById('setting-account-placement');
+      if (selectEl) selectEl.value = placement;
+
+      if (placement === 'header') {
+        if (headerBtn) headerBtn.style.display = 'flex';
+        if (bottomBtn) bottomBtn.style.display = 'none';
+        if (railBtn) railBtn.style.display = 'none';
+        const accountPane = document.getElementById('pane-account');
+        if (accountPane && accountPane.style.display === 'block') {
+          switchTab('devices', document.querySelector('.rail-btn'));
+        }
+        showToast('Account navigation set to: Top Header Circle');
+      } else {
+        if (headerBtn) headerBtn.style.display = 'none';
+        if (bottomBtn) bottomBtn.style.display = 'flex';
+        if (railBtn) railBtn.style.display = 'flex';
+        showToast('Account navigation set to: Bottom Bar Tab');
+      }
+    }
+
     function toggleThemeWeb() {
       const root = document.documentElement;
       const isDark = getComputedStyle(root).getPropertyValue('--bg').trim() === '#0f172a';
@@ -1084,8 +1187,8 @@
 
     function switchTab(name, btn) {
       document.querySelectorAll('.rail-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const tabs = ['devices', 'telemetry', 'tickets', 'firmware', 'operators', 'analytics'];
+      if (btn) btn.classList.add('active');
+      const tabs = ['devices', 'telemetry', 'tickets', 'firmware', 'operators', 'analytics', 'account'];
       tabs.forEach(t => {
         const el = document.getElementById('pane-' + t);
         if (el) el.style.display = t === name ? 'block' : 'none';
@@ -1403,9 +1506,21 @@
       } catch (e) {}
     }
 
-    // Initialize data
-    fetchDevices();
-    fetchOperators();
+    // Initialize data & layout
+    async function initApp() {
+      try {
+        const res = await fetch('/admin/api/schema');
+        if (res.ok) {
+          const s = await res.json();
+          if (s.account_nav_placement) {
+            setAccountNavPlacement(s.account_nav_placement);
+          }
+        }
+      } catch (e) {}
+      fetchDevices();
+      fetchOperators();
+    }
+    initApp();
   </script>
 </body>
 </html>

@@ -37,6 +37,14 @@ const (
 	EngineFlutter PanelEngine = "flutter" // Flutter Multiplatform (Mobile-First Web, iOS, Android, Desktop)
 )
 
+// AccountNavPlacement specifies where the operator account entrypoint is displayed.
+type AccountNavPlacement string
+
+const (
+	AccountNavHeader    AccountNavPlacement = "header"     // Circular avatar button in top header/AppBar (opens floating drawer)
+	AccountNavBottomBar AccountNavPlacement = "bottom_bar" // Dedicated account tab in mobile bottom navigation bar (opens account page)
+)
+
 // NavigationGroup aggregates items under a named section in the sidebar.
 type NavigationGroup struct {
 	Name  string
@@ -49,6 +57,7 @@ type Panel struct {
 	path                string
 	engine              PanelEngine
 	flutterDistDir      string
+	accountNavPlacement AccountNavPlacement
 	brandName           string
 	brandLogo           string
 	favicon             string
@@ -209,6 +218,22 @@ func (p *Panel) BrandLogo(logo string) *Panel {
 func (p *Panel) Favicon(fav string) *Panel {
 	p.favicon = fav
 	return p
+}
+
+// AccountNavPlacement configures whether the operator account entrypoint is placed
+// in the top header circle (AccountNavHeader) or in the bottom navigation bar (AccountNavBottomBar).
+// This enforces an either-or design so both entrypoints are not shown at once.
+func (p *Panel) AccountNavPlacement(placement AccountNavPlacement) *Panel {
+	p.accountNavPlacement = placement
+	return p
+}
+
+// GetAccountNavPlacement returns the configured account navigation placement, defaulting to AccountNavHeader.
+func (p *Panel) GetAccountNavPlacement() AccountNavPlacement {
+	if p.accountNavPlacement == "" {
+		return AccountNavHeader
+	}
+	return p.accountNavPlacement
 }
 
 // HomeURL sets the redirect URL when clicking the brand logo or home icon.
