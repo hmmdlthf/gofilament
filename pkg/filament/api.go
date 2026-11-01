@@ -39,6 +39,85 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	r.OPTIONS(apiPrefix+"/global-search", corsPreflight)
 	r.OPTIONS(apiPrefix+"/tenants", corsPreflight)
 	r.OPTIONS(apiPrefix+"/notifications", corsPreflight)
+	r.OPTIONS(apiPrefix+"/login", corsPreflight)
+	r.OPTIONS(apiPrefix+"/logout", corsPreflight)
+	r.OPTIONS(apiPrefix+"/me", corsPreflight)
+
+	// Panel Auth Login Endpoint (Flutter & Headless Clients)
+	r.POST(apiPrefix+"/login", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		var creds struct {
+			Username string `json:"username"`
+			Login    string `json:"login"`
+			Email    string `json:"email"`
+			Password string `json:"password"`
+		}
+		if err := c.BindJSON(&creds); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
+		}
+		identifier := creds.Username
+		if identifier == "" {
+			identifier = creds.Login
+		}
+		if identifier == "" {
+			identifier = creds.Email
+		}
+		if identifier == "" || creds.Password == "" {
+			return c.JSON(http.StatusUnprocessableEntity, map[string]string{"error": "Username and password are required"})
+		}
+		if p.authValidator == nil {
+			return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Panel authentication not configured"})
+		}
+
+		ctx := NewContext(c, p)
+		authUser, tokenStr, err := p.authValidator(ctx, identifier, creds.Password)
+		if err != nil || authUser == nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
+		}
+
+		var userInfo map[string]any
+		if pu, ok := authUser.(interface{ ToMap() map[string]any }); ok {
+			userInfo = pu.ToMap()
+		} else {
+			userInfo = map[string]any{
+				"id":    authUser.GetAuthIdentifier(),
+				"login": authUser.GetAuthIdentifier(),
+				"name":  authUser.GetAuthIdentifier(),
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"status": "success",
+			"token":  tokenStr,
+			"user":   userInfo,
+		})
+	})
+
+	// Panel Auth Logout Endpoint
+	r.POST(apiPrefix+"/logout", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		return c.JSON(http.StatusOK, map[string]string{"status": "logged_out"})
+	})
+
+	// Panel Current User Endpoint
+	r.GET(apiPrefix+"/me", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		u := ctx.User()
+		if u == nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthenticated"})
+		}
+		if pu, ok := u.(interface{ ToMap() map[string]any }); ok {
+			return c.JSON(http.StatusOK, pu.ToMap())
+		}
+		return c.JSON(http.StatusOK, map[string]any{
+			"id":    u.GetAuthIdentifier(),
+			"login": u.GetAuthIdentifier(),
+		})
+	})
 
 	// 1. Panel Schema Endpoint
 	r.GET(apiPrefix+"/schema", func(c *gcontext.Context) error {
@@ -166,6 +245,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"resources":             resourceDTOs,
 			"widgets_count":         len(p.widgets),
 			"account_nav_placement": string(p.GetAccountNavPlacement()),
+			"requires_auth":         p.requiresAuth,
 		}
 
 		return c.JSON(http.StatusOK, schema)

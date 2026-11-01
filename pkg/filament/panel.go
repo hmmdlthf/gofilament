@@ -14,6 +14,7 @@ import (
 	"github.com/golaravel/gofilament/pkg/colors"
 	"github.com/golaravel/gofilament/pkg/globalsearch"
 	"github.com/golaravel/gofilament/pkg/notifications"
+	"github.com/golaravel/golaravel/pkg/auth"
 	"github.com/golaravel/golaravel/pkg/broadcast"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/flutter"
@@ -85,7 +86,10 @@ type Panel struct {
 	hasRegistration     bool
 	hasPasswordReset    bool
 	hasProfile          bool
+	requiresAuth        bool
 	authGuard           any
+	authValidator       AuthValidatorFunc
+	tokenValidator      TokenValidatorFunc
 	canAccess           func(ctx *Context) bool
 	middlewares         []gcontext.HandlerFunc
 	resources           []ResourceInterface
@@ -372,6 +376,64 @@ func (p *Panel) TenantScoping(enabled ...bool) *Panel {
 	return p
 }
 
+// AuthValidatorFunc authenticates credentials and returns the user, token, and optional error.
+type AuthValidatorFunc func(ctx *Context, username, password string) (auth.Authenticatable, string, error)
+
+// TokenValidatorFunc verifies a Bearer token and returns the authenticatable user.
+type TokenValidatorFunc func(ctx *Context, token string) (auth.Authenticatable, error)
+
+// PanelUser represents a standardized user for Filament panels.
+type PanelUser struct {
+	ID    string `json:"id"`
+	Login string `json:"login"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Role  string `json:"role"`
+}
+
+func (u *PanelUser) GetAuthIdentifier() string {
+	return u.Login
+}
+
+func (u *PanelUser) ToMap() map[string]any {
+	return map[string]any{
+		"id":    u.ID,
+		"login": u.Login,
+		"name":  u.Name,
+		"email": u.Email,
+		"role":  u.Role,
+	}
+}
+
+// RequiresAuth enforces authentication for this panel.
+func (p *Panel) RequiresAuth(enabled ...bool) *Panel {
+	if len(enabled) > 0 {
+		p.requiresAuth = enabled[0]
+	} else {
+		p.requiresAuth = true
+	}
+	return p
+}
+
+// IsAuthRequired returns whether authentication is enforced on this panel.
+func (p *Panel) IsAuthRequired() bool {
+	return p.requiresAuth
+}
+
+// AuthValidator registers a credential authenticator function.
+func (p *Panel) AuthValidator(fn AuthValidatorFunc) *Panel {
+	p.authValidator = fn
+	p.requiresAuth = true
+	return p
+}
+
+// TokenValidator registers a token validator function.
+func (p *Panel) TokenValidator(fn TokenValidatorFunc) *Panel {
+	p.tokenValidator = fn
+	p.requiresAuth = true
+	return p
+}
+
 // AuthGuard specifies an authentication guard.
 func (p *Panel) AuthGuard(guard any) *Panel {
 	p.authGuard = guard
@@ -393,12 +455,46 @@ func (p *Panel) Middleware(mw ...gcontext.HandlerFunc) *Panel {
 // AuthorizeAccess verifies panel authorization for the incoming request context.
 func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 	ctx := NewContext(c, p)
+
+	// 1. Resolve user from Authorization header if present
+	authHeader := c.Header("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+		if p.tokenValidator != nil {
+			if u, err := p.tokenValidator(ctx, tokenStr); err == nil && u != nil {
+				c.Set(auth.ContextUserKey, u)
+			}
+		}
+	}
+
+	// 2. Check if panel requires authentication
+	reqPath := ""
+	if c.Request != nil && c.Request.URL != nil {
+		reqPath = c.Request.URL.Path
+	}
+	if p.requiresAuth && ctx.User() == nil {
+		if strings.Contains(reqPath, "/api/") {
+			setCorsHeaders(c)
+			return ctx, c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized: Authentication required"})
+		}
+		if p.hasLogin {
+			return ctx, c.Redirect(http.StatusSeeOther, p.path+"/login")
+		}
+		return ctx, c.String(http.StatusUnauthorized, "401 Unauthorized: Authentication required")
+	}
+
+	// 3. Check custom canAccess authorization rule
 	if p.canAccess != nil && !p.canAccess(ctx) {
+		if strings.Contains(reqPath, "/api/") {
+			setCorsHeaders(c)
+			return ctx, c.JSON(http.StatusForbidden, map[string]string{"error": "Forbidden: Panel access denied"})
+		}
 		if p.hasLogin && ctx.User() == nil {
 			return ctx, c.Redirect(http.StatusSeeOther, p.path+"/login")
 		}
 		return ctx, c.String(http.StatusForbidden, "403 Forbidden: Panel access denied")
 	}
+
 	return ctx, nil
 }
 

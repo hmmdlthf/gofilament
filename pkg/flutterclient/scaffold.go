@@ -83,8 +83,12 @@ import 'package:http/http.dart' as http;
 class FilamentApiClient {
   String baseUrl;
   String? activeTenant;
+  String? token;
+  Map<String, dynamic>? currentUser;
 
   FilamentApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl();
+
+  bool get isAuthenticated => token != null && token!.isNotEmpty;
 
   static String _defaultBaseUrl() {
     if (kIsWeb) {
@@ -106,10 +110,39 @@ class FilamentApiClient {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
+    if (token != null && token!.isNotEmpty) {
+      h['Authorization'] = 'Bearer $token';
+    }
     if (activeTenant != null && activeTenant!.isNotEmpty) {
       h['X-Tenant-ID'] = activeTenant!;
     }
     return h;
+  }
+
+  Future<Map<String, dynamic>> login(String username, String password) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/login'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'username': username, 'password': password}),
+    );
+    if (res.statusCode == 200) {
+      final data = json.decode(res.body) as Map<String, dynamic>;
+      token = data['token'] as String?;
+      currentUser = data['user'] as Map<String, dynamic>?;
+      return data;
+    }
+    try {
+      final err = json.decode(res.body);
+      throw Exception(err['error'] ?? 'Authentication failed');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Authentication failed (${res.statusCode})');
+    }
+  }
+
+  void logout() {
+    token = null;
+    currentUser = null;
   }
 
   Future<Map<String, dynamic>> fetchSchema() async {
@@ -423,9 +456,17 @@ class FilamentApp extends StatefulWidget {
 }
 
 class _FilamentAppState extends State<FilamentApp> {
+  final FilamentApiClient api = FilamentApiClient();
   ThemeMode _themeMode = ThemeMode.dark;
   String _locale = 'en';
   bool _isRTL = false;
+  bool _isAuthenticated = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isAuthenticated = api.isAuthenticated;
+  }
 
   void toggleTheme() {
     setState(() {
@@ -470,31 +511,279 @@ class _FilamentAppState extends State<FilamentApp> {
         useMaterial3: true,
         fontFamily: 'sans-serif',
       ),
-      home: AdminShellPage(
-        onToggleTheme: toggleTheme,
-        isDark: _themeMode == ThemeMode.dark,
-        currentLocale: _locale,
-        isRTL: _isRTL,
-        onLocaleChanged: setLocale,
+      home: _isAuthenticated
+          ? AdminShellPage(
+              api: api,
+              onToggleTheme: toggleTheme,
+              isDark: _themeMode == ThemeMode.dark,
+              currentLocale: _locale,
+              isRTL: _isRTL,
+              onLocaleChanged: setLocale,
+              onSignOut: () {
+                api.logout();
+                setState(() {
+                  _isAuthenticated = false;
+                });
+              },
+            )
+          : LoginScreen(
+              api: api,
+              panelTitle: '{{TITLE}}',
+              isDark: _themeMode == ThemeMode.dark,
+              onToggleTheme: toggleTheme,
+              onLoginSuccess: (user) {
+                setState(() {
+                  _isAuthenticated = true;
+                });
+              },
+            ),
+    );
+  }
+}
+
+class LoginScreen extends StatefulWidget {
+  final FilamentApiClient api;
+  final String panelTitle;
+  final bool isDark;
+  final VoidCallback onToggleTheme;
+  final ValueChanged<Map<String, dynamic>> onLoginSuccess;
+
+  const LoginScreen({
+    super.key,
+    required this.api,
+    required this.panelTitle,
+    required this.isDark,
+    required this.onToggleTheme,
+    required this.onLoginSuccess,
+  });
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text.trim();
+    if (username.isEmpty || password.isEmpty) {
+      setState(() {
+        _errorMessage = 'Please enter both username and password';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final res = await widget.api.login(username, password);
+      final user = res['user'] as Map<String, dynamic>? ?? {'login': username};
+      if (mounted) {
+        widget.onLoginSuccess(user);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final scaffoldBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
+    final borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
+    return Scaffold(
+      backgroundColor: scaffoldBg,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Card(
+              elevation: 8,
+              color: cardBg,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: borderColor),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.shield_outlined, color: Color(0xFFF59E0B), size: 28),
+                            ),
+                            const SizedBox(width: 14),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.panelTitle,
+                                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                ),
+                                const Text(
+                                  'GoFilament Multiplatform',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          onPressed: widget.onToggleTheme,
+                          icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+                          tooltip: 'Toggle Theme',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 28),
+                    const Text(
+                      'Sign In to Your Workspace',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Enter your authorized credentials to access this administration panel.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 20),
+                    if (_errorMessage != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    TextField(
+                      controller: _usernameController,
+                      decoration: InputDecoration(
+                        labelText: 'Username or Email',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      ),
+                      textInputAction: TextInputAction.next,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                        ),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      ),
+                      onSubmitted: (_) => _handleLogin(),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton(
+                      onPressed: _isLoading ? null : _handleLogin,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFF59E0B),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                            )
+                          : const Text('Sign In', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(height: 20),
+                    Center(
+                      child: Text(
+                        'Enclave Secured • GoFilament & GoLaravel Engine',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
 class AdminShellPage extends StatefulWidget {
+  final FilamentApiClient api;
   final VoidCallback onToggleTheme;
   final bool isDark;
   final String currentLocale;
   final bool isRTL;
   final void Function(String locale, bool isRTL) onLocaleChanged;
+  final VoidCallback onSignOut;
 
   const AdminShellPage({
     super.key,
+    required this.api,
     required this.onToggleTheme,
     required this.isDark,
     required this.currentLocale,
     required this.isRTL,
     required this.onLocaleChanged,
+    required this.onSignOut,
   });
 
   @override
@@ -502,7 +791,7 @@ class AdminShellPage extends StatefulWidget {
 }
 
 class _AdminShellPageState extends State<AdminShellPage> {
-  final FilamentApiClient api = FilamentApiClient();
+  FilamentApiClient get api => widget.api;
   Map<String, dynamic>? schema;
   bool isLoading = true;
   int _currentIndex = 0;
@@ -553,6 +842,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
       });
     } catch (e) {
       debugPrint('Failed to load schema from ${api.baseUrl}: $e');
+      if (e.toString().contains('401') || e.toString().contains('Unauthorized')) {
+        widget.onSignOut();
+        return;
+      }
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
@@ -765,10 +1058,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
               Padding(
                 padding: const EdgeInsets.only(right: 8, left: 4),
                 child: CircularAccountButton(
-                  initial: 'S',
-                  name: 'Sarah Connor',
-                  email: 'sarah@fleetpulse.io',
-                  role: 'Operations Lead',
+                  initial: (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
+                  name: api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
+                  email: api.currentUser?['email'] ?? 'admin@filament.local',
+                  role: (api.currentUser?['role'] ?? 'OPERATIONS LEAD').toString().toUpperCase(),
                   onTap: () => AccountModalSheet.show(
                     context: context,
                     api: api,
@@ -781,6 +1074,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     isRTL: widget.isRTL,
                     onLocaleChanged: widget.onLocaleChanged,
                     onOpenLanguagePicker: () => showLanguageDialog(context),
+                    onSignOut: widget.onSignOut,
                   ),
                 ),
               ),
@@ -936,10 +1230,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
                             if (isHeaderPlacement) ...[
                               const SizedBox(width: 8),
                               CircularAccountButton(
-                                initial: 'S',
-                                name: 'Sarah Connor',
-                                email: 'sarah@fleetpulse.io',
-                                role: 'Operations Lead',
+                                initial: (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
+                                name: api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
+                                email: api.currentUser?['email'] ?? 'admin@filament.local',
+                                role: (api.currentUser?['role'] ?? 'OPERATIONS LEAD').toString().toUpperCase(),
                                 onTap: () => AccountModalSheet.show(
                                   context: context,
                                   api: api,
@@ -952,6 +1246,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                                   isRTL: widget.isRTL,
                                   onLocaleChanged: widget.onLocaleChanged,
                                   onOpenLanguagePicker: () => showLanguageDialog(context),
+                                  onSignOut: widget.onSignOut,
                                 ),
                               ),
                             ],
@@ -1175,8 +1470,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     ),
                     border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 2),
                   ),
-                  child: const Center(
-                    child: Text('S', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 22)),
+                  child: Center(
+                    child: Text(
+                      (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 22),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -1186,9 +1484,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     children: [
                       Row(
                         children: [
-                          const Text(
-                            'Sarah Connor',
-                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                          Text(
+                            api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(width: 8),
                           Container(
@@ -1205,9 +1503,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      const Text(
-                        'sarah@fleetpulse.io • Operations Lead',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      Text(
+                        '${api.currentUser?['email'] ?? "admin@filament.local"} • ${(api.currentUser?['role'] ?? "OPERATIONS LEAD").toString().toUpperCase()}',
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 6),
                       const Row(
@@ -1375,9 +1673,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Operator session closed.'), behavior: SnackBarBehavior.floating),
-            );
+            widget.onSignOut();
           },
         ),
       ],
@@ -2198,6 +2494,7 @@ class AccountModalSheet extends StatelessWidget {
   final bool isRTL;
   final void Function(String locale, bool isRTL)? onLocaleChanged;
   final VoidCallback? onOpenLanguagePicker;
+  final VoidCallback? onSignOut;
 
   const AccountModalSheet({
     super.key,
@@ -2211,6 +2508,7 @@ class AccountModalSheet extends StatelessWidget {
     this.isRTL = false,
     this.onLocaleChanged,
     this.onOpenLanguagePicker,
+    this.onSignOut,
   });
 
   static Future<void> show({
@@ -2225,6 +2523,7 @@ class AccountModalSheet extends StatelessWidget {
     bool isRTL = false,
     void Function(String locale, bool isRTL)? onLocaleChanged,
     VoidCallback? onOpenLanguagePicker,
+    VoidCallback? onSignOut,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -2241,6 +2540,7 @@ class AccountModalSheet extends StatelessWidget {
         isRTL: isRTL,
         onLocaleChanged: onLocaleChanged,
         onOpenLanguagePicker: onOpenLanguagePicker,
+        onSignOut: onSignOut,
       ),
     );
   }
@@ -2321,21 +2621,24 @@ class AccountModalSheet extends StatelessWidget {
                           CircleAvatar(
                             radius: 30,
                             backgroundColor: const Color(0xFFF59E0B),
-                            child: const Text('S', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black)),
+                            child: Text(
+                              (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
+                              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black),
+                            ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'Sarah Connor',
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                Text(
+                                  api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
+                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 2),
-                                const Text(
-                                  'sarah@fleetpulse.io',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                                Text(
+                                  api.currentUser?['email'] ?? 'admin@filament.local',
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                                 ),
                                 const SizedBox(height: 8),
                                 Row(
@@ -2346,9 +2649,9 @@ class AccountModalSheet extends StatelessWidget {
                                         color: Colors.amber.withValues(alpha: 0.2),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
-                                      child: const Text(
-                                        'OPERATIONS LEAD',
-                                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber),
+                                      child: Text(
+                                        (api.currentUser?['role'] ?? 'OPERATIONS LEAD').toString().toUpperCase(),
+                                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.amber),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -2497,9 +2800,7 @@ class AccountModalSheet extends StatelessWidget {
                       ),
                       onPressed: () {
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Operator signed out.'), behavior: SnackBarBehavior.floating),
-                        );
+                        onSignOut?.call();
                       },
                     ),
                     const SizedBox(height: 12),
