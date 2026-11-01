@@ -288,6 +288,50 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
     }
     .setting-title { font-size: 14px; font-weight: 600; color: #fff; }
     .setting-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* RTL Directionality Mirroring */
+    [dir="rtl"] {
+      direction: rtl;
+      text-align: right;
+    }
+    [dir="rtl"] .main-layout {
+      flex-direction: row-reverse;
+    }
+    [dir="rtl"] .nav-rail {
+      border-right: none;
+      border-left: 1px solid var(--border);
+    }
+    [dir="rtl"] table {
+      text-align: right;
+    }
+    [dir="rtl"] th {
+      text-align: right;
+    }
+    [dir="rtl"] td {
+      text-align: right;
+    }
+    [dir="rtl"] td::before {
+      text-align: right;
+      margin-right: 0;
+      margin-left: 12px;
+    }
+    [dir="rtl"] .floating-sheet {
+      right: auto;
+      left: 0;
+      border-left: none;
+      border-right: 1px solid var(--border);
+      animation: slideInLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideInLeft {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(0); }
+    }
+    [dir="rtl"] .modal-actions {
+      justify-content: flex-start;
+    }
+    [dir="rtl"] .badge {
+      letter-spacing: 0;
+    }
   </style>
 </head>
 <body>
@@ -298,6 +342,11 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
       <span class="chip">Flutter Multiplatform</span>
     </div>
     <div style="display: flex; gap: 10px; align-items: center;">
+      <!-- Language Switcher Button -->
+      <button class="btn" id="lang-btn" onclick="openLanguageModal()" style="background: rgba(255,255,255,0.08); color: #fff; padding: 6px 12px; border-radius: 8px;" title="Switch Language / اختيار اللغة">
+        <span id="current-lang-flag">🇺🇸</span>
+        <span id="current-lang-code" style="font-weight: 700; font-size: 12px; margin-left: 4px;">EN</span>
+      </button>
       <a href="/admin/api/schema" target="_blank" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;">
         <span class="material-icons" style="font-size: 16px;">api</span> JSON API
       </a>
@@ -313,31 +362,31 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
     <aside class="nav-rail">
       <button class="rail-btn active" onclick="switchTab('devices', this)">
         <span class="material-icons">router</span>
-        <span>Devices</span>
+        <span data-t="devices">Devices</span>
       </button>
       <button class="rail-btn" onclick="switchTab('telemetry', this)">
         <span class="material-icons">insights</span>
-        <span>Telemetry</span>
+        <span data-t="telemetry">Telemetry</span>
       </button>
       <button class="rail-btn" onclick="switchTab('tickets', this)">
         <span class="material-icons">confirmation_number</span>
-        <span>Tickets</span>
+        <span data-t="tickets">Tickets</span>
       </button>
       <button class="rail-btn" onclick="switchTab('firmware', this)">
         <span class="material-icons">system_update</span>
-        <span>Firmware</span>
+        <span data-t="firmware">Firmware</span>
       </button>
       <button class="rail-btn" onclick="switchTab('operators', this)">
         <span class="material-icons">badge</span>
-        <span>Team</span>
+        <span data-t="team">Team</span>
       </button>
       <button class="rail-btn" onclick="switchTab('analytics', this)">
         <span class="material-icons">bar_chart</span>
-        <span>Metrics</span>
+        <span data-t="metrics">Metrics</span>
       </button>
       <button class="rail-btn" id="rail-account-btn" style="display: none;" onclick="switchTab('account', this)">
         <span class="material-icons">account_circle</span>
-        <span>Account</span>
+        <span data-t="account">Account</span>
       </button>
     </aside>
 
@@ -605,14 +654,14 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
   </div>
 
   <nav class="mobile-bottom-bar">
-    <button class="rail-btn active" onclick="switchTab('devices', this)"><span class="material-icons">router</span><span>Devices</span></button>
-    <button class="rail-btn" onclick="switchTab('telemetry', this)"><span class="material-icons">insights</span><span>Telemetry</span></button>
-    <button class="rail-btn" onclick="switchTab('tickets', this)"><span class="material-icons">confirmation_number</span><span>Tickets</span></button>
-    <button class="rail-btn" onclick="switchTab('firmware', this)"><span class="material-icons">system_update</span><span>Firmware</span></button>
-    <button class="rail-btn" onclick="switchTab('operators', this)"><span class="material-icons">badge</span><span>Team</span></button>
-    <button class="rail-btn" onclick="switchTab('analytics', this)"><span class="material-icons">bar_chart</span><span>Metrics</span></button>
+    <button class="rail-btn active" onclick="switchTab('devices', this)"><span class="material-icons">router</span><span data-t="devices">Devices</span></button>
+    <button class="rail-btn" onclick="switchTab('telemetry', this)"><span class="material-icons">insights</span><span data-t="telemetry">Telemetry</span></button>
+    <button class="rail-btn" onclick="switchTab('tickets', this)"><span class="material-icons">confirmation_number</span><span data-t="tickets">Tickets</span></button>
+    <button class="rail-btn" onclick="switchTab('firmware', this)"><span class="material-icons">system_update</span><span data-t="firmware">Firmware</span></button>
+    <button class="rail-btn" onclick="switchTab('operators', this)"><span class="material-icons">badge</span><span data-t="team">Team</span></button>
+    <button class="rail-btn" onclick="switchTab('analytics', this)"><span class="material-icons">bar_chart</span><span data-t="metrics">Metrics</span></button>
     <!-- Shown ONLY when account placement is 'bottom_bar' (never both!) -->
-    <button class="rail-btn" id="bottom-bar-account-btn" style="display: none;" onclick="switchTab('account', this)"><span class="material-icons">account_circle</span><span>Account</span></button>
+    <button class="rail-btn" id="bottom-bar-account-btn" style="display: none;" onclick="switchTab('account', this)"><span class="material-icons">account_circle</span><span data-t="account">Account</span></button>
   </nav>
 
   <!-- Interactive Modal: Add Device -->
@@ -813,6 +862,15 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
       </div>
 
       <div class="account-nav-list">
+        <button class="account-nav-item" onclick="openLanguageModal()">
+          <div class="account-nav-icon"><span class="material-icons">translate</span></div>
+          <div style="flex: 1;">
+            <span class="account-nav-title">Language & Direction</span>
+            <span class="account-nav-sub" id="account-lang-sub">English • العربية (RTL) • Español • Deutsch</span>
+          </div>
+          <span class="material-icons" style="font-size: 18px; color: var(--text-muted);">chevron_right</span>
+        </button>
+
         <button class="account-nav-item" onclick="openSettingsModal()">
           <div class="account-nav-icon"><span class="material-icons">settings</span></div>
           <div style="flex: 1;">
@@ -882,6 +940,20 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
           <button class="btn" style="background: rgba(255,255,255,0.1); color: #fff;" onclick="toggleThemeWeb()">
             <span class="material-icons" style="font-size: 16px;">brightness_6</span> Toggle Theme
           </button>
+        </div>
+
+        <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--primary); letter-spacing: 0.5px; margin-top: 14px;">Language & Direction (LTR / RTL)</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-title">Language & Layout Direction</div>
+            <div class="setting-desc">English, العربية (RTL), Español, Deutsch</div>
+          </div>
+          <select id="setting-lang-select" class="form-input" style="width: 180px;" onchange="changeLanguage(this.value)">
+            <option value="en">🇺🇸 English (LTR)</option>
+            <option value="ar">🇸🇦 العربية (RTL)</option>
+            <option value="es">🇪🇸 Español (LTR)</option>
+            <option value="de">🇩🇪 Deutsch (LTR)</option>
+          </select>
         </div>
 
         <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--primary); letter-spacing: 0.5px; margin-top: 14px;">Navigation & Placement</div>
@@ -954,6 +1026,58 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
       </div>
       <div class="modal-actions" style="margin-top: 16px;">
         <button class="btn btn-primary" onclick="closeModal('modal-settings')">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Language & Layout Direction -->
+  <div id="modal-language" class="modal-backdrop" style="display: none;" onclick="if(event.target===this)closeModal('modal-language')">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="lang-modal-title"><span class="material-icons" style="color: var(--primary);">translate</span> Select Language & Layout</h3>
+        <button class="close-btn" onclick="closeModal('modal-language')">&times;</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+        <div class="lang-option" onclick="changeLanguage('en')" style="padding: 12px 16px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px;">🇺🇸</span>
+            <div>
+              <div style="font-weight: 700; font-size: 14px;">English</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Left-to-Right (LTR) • Default</div>
+            </div>
+          </div>
+          <span class="badge badge-normal">LTR</span>
+        </div>
+        <div class="lang-option" onclick="changeLanguage('ar')" style="padding: 12px 16px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px;">🇸🇦</span>
+            <div>
+              <div style="font-weight: 700; font-size: 14px;">العربية (Arabic)</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Right-to-Left (RTL) • من اليمين لليسار</div>
+            </div>
+          </div>
+          <span class="badge badge-warning">RTL</span>
+        </div>
+        <div class="lang-option" onclick="changeLanguage('es')" style="padding: 12px 16px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px;">🇪🇸</span>
+            <div>
+              <div style="font-weight: 700; font-size: 14px;">Español</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Left-to-Right (LTR) • Spanish</div>
+            </div>
+          </div>
+          <span class="badge badge-normal">LTR</span>
+        </div>
+        <div class="lang-option" onclick="changeLanguage('de')" style="padding: 12px 16px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 24px;">🇩🇪</span>
+            <div>
+              <div style="font-weight: 700; font-size: 14px;">Deutsch</div>
+              <div style="font-size: 11px; color: var(--text-muted);">Left-to-Right (LTR) • German</div>
+            </div>
+          </div>
+          <span class="badge badge-normal">LTR</span>
+        </div>
       </div>
     </div>
   </div>
@@ -1539,6 +1663,82 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
       } catch (e) {}
     }
 
+    const localeFlags = { en: '🇺🇸', ar: '🇸🇦', es: '🇪🇸', de: '🇩🇪' };
+    const localeLabels = { en: 'English', ar: 'العربية', es: 'Español', de: 'Deutsch' };
+    let currentLocale = localStorage.getItem('fleet_locale') || 'en';
+
+    function openLanguageModal() {
+      document.getElementById('modal-language').style.display = 'flex';
+    }
+
+    async function changeLanguage(locale) {
+      currentLocale = locale;
+      localStorage.setItem('fleet_locale', locale);
+      const isRTL = locale === 'ar';
+      
+      document.documentElement.lang = locale;
+      document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
+      
+      const flagEl = document.getElementById('current-lang-flag');
+      const codeEl = document.getElementById('current-lang-code');
+      if (flagEl) flagEl.textContent = localeFlags[locale] || '🌐';
+      if (codeEl) codeEl.textContent = locale.toUpperCase();
+
+      const selectEl = document.getElementById('setting-lang-select');
+      if (selectEl) selectEl.value = locale;
+
+      const subEl = document.getElementById('account-lang-sub');
+      if (subEl) subEl.textContent = (localeFlags[locale] || '') + ' ' + (localeLabels[locale] || locale) + ' • ' + (isRTL ? 'RTL' : 'LTR');
+
+      closeModal('modal-language');
+
+      try {
+        await fetch('/admin/api/locale/switch?lang=' + locale, { method: 'POST' });
+      } catch (_) {}
+
+      applyTranslations(locale);
+      showToast(isRTL ? '🇸🇦 تم تفعيل اللغة العربية والاتجاه من اليمين إلى اليسار (RTL)' : (localeFlags[locale] || '') + ' Language set to ' + (localeLabels[locale] || locale) + ' (LTR)');
+    }
+
+    const translationsDict = {
+      en: {
+        devices: 'Devices', telemetry: 'Telemetry', tickets: 'Tickets', firmware: 'Firmware', team: 'Team', metrics: 'Metrics', account: 'Account',
+        add_device: 'Add Device', add_ticket: 'Open Ticket', add_operator: 'Add Operator',
+        search_devices: 'Search devices by serial, model...',
+        status: 'Status', serial: 'Serial', model: 'Model', firmware_col: 'Firmware', ip: 'IP Address', location: 'Location', actions: 'Actions'
+      },
+      ar: {
+        devices: 'الأجهزة', telemetry: 'القياس عن بُعد', tickets: 'التذاكر', firmware: 'البرامج الثابتة', team: 'فريق العمل', metrics: 'المؤشرات', account: 'الحساب',
+        add_device: 'إضافة جهاز', add_ticket: 'فتح تذكرة', add_operator: 'إضافة عضو',
+        search_devices: 'البحث عن الأجهزة بالرقم التسلسلي أو الطراز...',
+        status: 'الحالة', serial: 'الرقم التسلسلي', model: 'الطراز', firmware_col: 'البرنامج', ip: 'عنوان IP', location: 'الموقع', actions: 'الإجراءات'
+      },
+      es: {
+        devices: 'Dispositivos', telemetry: 'Telemetría', tickets: 'Tickets', firmware: 'Firmware', team: 'Equipo', metrics: 'Métricas', account: 'Cuenta',
+        add_device: 'Añadir Dispositivo', add_ticket: 'Abrir Ticket', add_operator: 'Añadir Miembro',
+        search_devices: 'Buscar dispositivos por serie, modelo...',
+        status: 'Estado', serial: 'Serie', model: 'Modelo', firmware_col: 'Firmware', ip: 'Dirección IP', location: 'Ubicación', actions: 'Acciones'
+      },
+      de: {
+        devices: 'Geräte', telemetry: 'Telemetrie', tickets: 'Tickets', firmware: 'Firmware', team: 'Team', metrics: 'Metriken', account: 'Konto',
+        add_device: 'Gerät hinzufügen', add_ticket: 'Ticket erstellen', add_operator: 'Mitglied hinzufügen',
+        search_devices: 'Geräte nach Seriennummer, Modell durchsuchen...',
+        status: 'Status', serial: 'Seriennummer', model: 'Modell', firmware_col: 'Firmware', ip: 'IP-Adresse', location: 'Standort', actions: 'Aktionen'
+      }
+    };
+
+    function applyTranslations(locale) {
+      const t = translationsDict[locale] || translationsDict.en;
+      document.querySelectorAll('[data-t]').forEach(el => {
+        const key = el.getAttribute('data-t');
+        if (t[key]) el.textContent = t[key];
+      });
+      document.querySelectorAll('[data-t-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-t-placeholder');
+        if (t[key]) el.placeholder = t[key];
+      });
+    }
+
     // Initialize data & layout
     async function initApp() {
       try {
@@ -1550,6 +1750,11 @@ func ensureFlutterClientReady(targetDir string, panelName, apiBaseURL string) er
           }
         }
       } catch (e) {}
+      if (currentLocale && currentLocale !== 'en') {
+        changeLanguage(currentLocale);
+      } else {
+        changeLanguage('en');
+      }
       fetchDevices();
       fetchOperators();
     }
@@ -1589,6 +1794,20 @@ func main() {
 		BrandName("Pulse Fleet").
 		Engine(filament.EngineFlutter).
 		AccountNavPlacement(filament.AccountNavHeader).
+		Locales("en", "ar", "es", "de").
+		DefaultLocale("en").
+		LocaleLabels(map[string]string{
+			"en": "English",
+			"ar": "العربية",
+			"es": "Español",
+			"de": "Deutsch",
+		}).
+		LocaleFlags(map[string]string{
+			"en": "🇺🇸",
+			"ar": "🇸🇦",
+			"es": "🇪🇸",
+			"de": "🇩🇪",
+		}).
 		Flutter(filepath.Join(clientDir, "build", "web")).
 		Colors(map[string]any{
 			colors.RolePrimary: colors.Amber,

@@ -32,6 +32,21 @@ func createTestFlutterAdminApp(t *testing.T) *golaravel.Engine {
 		Path("/admin").
 		BrandName("Pulse Fleet").
 		Engine(filament.EngineFlutter).
+		AccountNavPlacement(filament.AccountNavHeader).
+		Locales("en", "ar", "es", "de").
+		DefaultLocale("en").
+		LocaleLabels(map[string]string{
+			"en": "English",
+			"ar": "العربية",
+			"es": "Español",
+			"de": "Deutsch",
+		}).
+		LocaleFlags(map[string]string{
+			"en": "🇺🇸",
+			"ar": "🇸🇦",
+			"es": "🇪🇸",
+			"de": "🇩🇪",
+		}).
 		Flutter(webDist).
 		Colors(map[string]any{
 			colors.RolePrimary: colors.Amber,
@@ -230,5 +245,96 @@ func TestEnsureFlutterClientReady(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "pane-account") {
 		t.Errorf("expected index.html to contain pane-account")
+	}
+	if !strings.Contains(string(content), "modal-language") {
+		t.Errorf("expected index.html to contain modal-language")
+	}
+	if !strings.Contains(string(content), "lang-btn") {
+		t.Errorf("expected index.html to contain lang-btn")
+	}
+	if !strings.Contains(string(content), "[dir=\"rtl\"]") {
+		t.Errorf("expected index.html to contain RTL CSS rules")
+	}
+}
+
+func TestFlutterAdmin_LocalesAndRTL(t *testing.T) {
+	app := createTestFlutterAdminApp(t)
+
+	// 1. GET /admin/api/schema contains locales, flags, and active translations
+	req := httptest.NewRequest("GET", "/admin/api/schema", nil)
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &schema); err != nil {
+		t.Fatalf("failed to decode schema: %v", err)
+	}
+
+	locales, ok := schema["supported_locales"].([]any)
+	if !ok || len(locales) < 4 {
+		t.Fatalf("expected at least 4 supported locales in schema, got %v", schema["supported_locales"])
+	}
+
+	flags, ok := schema["locale_flags"].(map[string]any)
+	if !ok || flags["ar"] != "🇸🇦" || flags["en"] != "🇺🇸" {
+		t.Errorf("expected locale_flags in schema with ar=🇸🇦, got %v", schema["locale_flags"])
+	}
+
+	// 2. Switch to Arabic (RTL) via POST /admin/api/locale/switch?lang=ar
+	reqSwitchAR := httptest.NewRequest("POST", "/admin/api/locale/switch?lang=ar", nil)
+	wSwitchAR := httptest.NewRecorder()
+	app.ServeHTTP(wSwitchAR, reqSwitchAR)
+	if wSwitchAR.Code != http.StatusOK {
+		t.Fatalf("expected status 200 on locale switch to ar, got %d: %s", wSwitchAR.Code, wSwitchAR.Body.String())
+	}
+
+	var arRes map[string]any
+	if err := json.Unmarshal(wSwitchAR.Body.Bytes(), &arRes); err != nil {
+		t.Fatalf("failed to decode switch response: %v", err)
+	}
+	if arRes["locale"] != "ar" || arRes["direction"] != "rtl" || arRes["is_rtl"] != true {
+		t.Errorf("expected ar locale with direction=rtl and is_rtl=true, got %v", arRes)
+	}
+	if arRes["flag"] != "🇸🇦" {
+		t.Errorf("expected flag 🇸🇦 for ar, got %v", arRes["flag"])
+	}
+
+	// 3. Switch to Spanish (LTR) via POST /admin/api/locale/switch?lang=es
+	reqSwitchES := httptest.NewRequest("POST", "/admin/api/locale/switch?lang=es", nil)
+	wSwitchES := httptest.NewRecorder()
+	app.ServeHTTP(wSwitchES, reqSwitchES)
+	if wSwitchES.Code != http.StatusOK {
+		t.Fatalf("expected status 200 on locale switch to es, got %d", wSwitchES.Code)
+	}
+
+	var esRes map[string]any
+	if err := json.Unmarshal(wSwitchES.Body.Bytes(), &esRes); err != nil {
+		t.Fatalf("failed to decode switch response: %v", err)
+	}
+	if esRes["locale"] != "es" || esRes["direction"] != "ltr" || esRes["is_rtl"] != false {
+		t.Errorf("expected es locale with direction=ltr and is_rtl=false, got %v", esRes)
+	}
+
+	// 4. GET /admin/api/translations?locale=ar
+	reqTrans := httptest.NewRequest("GET", "/admin/api/translations?locale=ar", nil)
+	wTrans := httptest.NewRecorder()
+	app.ServeHTTP(wTrans, reqTrans)
+	if wTrans.Code != http.StatusOK {
+		t.Fatalf("expected status 200 on translations request, got %d", wTrans.Code)
+	}
+
+	var transRes map[string]any
+	if err := json.Unmarshal(wTrans.Body.Bytes(), &transRes); err != nil {
+		t.Fatalf("failed to decode translations: %v", err)
+	}
+	if transRes["locale"] != "ar" || transRes["direction"] != "rtl" {
+		t.Errorf("expected locale=ar and direction=rtl in translations response, got %v", transRes)
+	}
+	lines, ok := transRes["translations"].(map[string]any)
+	if !ok || lines["dashboard"] == "" {
+		t.Errorf("expected arabic lines dictionary, got %v", transRes["translations"])
 	}
 }

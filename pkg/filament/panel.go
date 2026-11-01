@@ -96,6 +96,7 @@ type Panel struct {
 	defaultLocale       string
 	localeLabels        map[string]string
 	localeFlags         map[string]string
+	translations        map[string]map[string]string
 }
 
 // NewPanel creates a new Panel with sensible defaults.
@@ -130,6 +131,7 @@ func NewPanel(id string) *Panel {
 		defaultLocale:            "en",
 		localeLabels:             make(map[string]string),
 		localeFlags:              make(map[string]string),
+		translations:             make(map[string]map[string]string),
 		globalSearchKeyBinding:   "k",
 		globalSearchResultsLimit: 10,
 		globalSearchFuzzy:        true,

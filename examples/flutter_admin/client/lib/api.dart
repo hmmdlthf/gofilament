@@ -93,4 +93,30 @@ class FilamentApiClient {
     }
     return [];
   }
+
+  Future<Map<String, dynamic>> switchLocale(String locale) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/locale/switch?lang=$locale'),
+        headers: _headers,
+      );
+      if (res.statusCode == 200) {
+        return json.decode(res.body);
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  Future<Map<String, dynamic>> fetchTranslations(String locale) async {
+    try {
+      final res = await http.get(
+        Uri.parse('$baseUrl/api/translations?locale=$locale'),
+        headers: _headers,
+      );
+      if (res.statusCode == 200) {
+        return json.decode(res.body);
+      }
+    } catch (_) {}
+    return {};
+  }
 }

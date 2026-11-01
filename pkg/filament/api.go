@@ -11,6 +11,7 @@ import (
 	"github.com/golaravel/gofilament/pkg/notifications"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/router"
+	"github.com/golaravel/golaravel/pkg/translation"
 )
 
 func setCorsHeaders(c *gcontext.Context) {
@@ -151,16 +152,18 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 				"limit":       p.GetGlobalSearchResultsLimit(),
 				"fuzzy":       p.GetGlobalSearchFuzzy(),
 			},
-			"locale":            ctx.Locale(),
-			"direction":         ctx.Direction(),
-			"is_rtl":            ctx.IsRTL(),
-			"supported_locales": p.locales,
-			"default_locale":    p.GetDefaultLocale(),
-			"locale_labels":     p.localeLabels,
-			"active_tenant":     activeTenantKey,
-			"tenants":           tenantsDTO,
-			"navigation":        navDTOs,
-			"resources":         resourceDTOs,
+			"locale":                ctx.Locale(),
+			"direction":             ctx.Direction(),
+			"is_rtl":                ctx.IsRTL(),
+			"supported_locales":     p.locales,
+			"default_locale":        p.GetDefaultLocale(),
+			"locale_labels":         p.GetLocaleLabels(),
+			"locale_flags":          p.GetLocaleFlags(),
+			"translations":          p.GetTranslations(ctx.Locale()),
+			"active_tenant":         activeTenantKey,
+			"tenants":               tenantsDTO,
+			"navigation":            navDTOs,
+			"resources":             resourceDTOs,
 			"widgets_count":         len(p.widgets),
 			"account_nav_placement": string(p.GetAccountNavPlacement()),
 		}
@@ -256,12 +259,36 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		ctx.SetLocale(targetLocale)
 
 		return c.JSON(http.StatusOK, map[string]any{
-			"success":   true,
-			"locale":    ctx.Locale(),
-			"direction": ctx.Direction(),
-			"is_rtl":    ctx.IsRTL(),
-			"label":     p.GetLocaleLabel(ctx.Locale()),
-			"flag":      p.GetLocaleFlag(ctx.Locale()),
+			"success":      true,
+			"locale":       ctx.Locale(),
+			"direction":    ctx.Direction(),
+			"is_rtl":       ctx.IsRTL(),
+			"label":        p.GetLocaleLabel(ctx.Locale()),
+			"flag":         p.GetLocaleFlag(ctx.Locale()),
+			"translations": p.GetTranslations(ctx.Locale()),
+		})
+	})
+
+	// Translations REST API endpoint
+	r.GET(apiPrefix+"/translations", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		loc := c.Query("locale")
+		if loc == "" {
+			loc = c.Query("lang")
+		}
+		if loc == "" {
+			loc = ctx.Locale()
+		}
+		return c.JSON(http.StatusOK, map[string]any{
+			"locale":       loc,
+			"direction":    translation.Direction(loc),
+			"is_rtl":       translation.IsRTL(loc),
+			"label":        p.GetLocaleLabel(loc),
+			"flag":         p.GetLocaleFlag(loc),
+			"translations": p.GetTranslations(loc),
 		})
 	})
 

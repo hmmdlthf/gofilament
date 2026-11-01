@@ -4,7 +4,140 @@ import (
 	"fmt"
 	"html"
 	"strings"
+
+	"github.com/golaravel/golaravel/pkg/translation"
 )
+
+var defaultAdminTranslations = map[string]map[string]string{
+	"en": {
+		"dashboard":       "Dashboard",
+		"entities":        "Entities",
+		"resources":       "Resources",
+		"account":         "Account",
+		"settings":        "Settings",
+		"orders":          "Orders",
+		"billing":         "Billing",
+		"security":        "Security",
+		"biometrics":      "Biometrics",
+		"devices":         "Devices",
+		"telemetry":       "Telemetry",
+		"tickets":         "Tickets",
+		"firmware":        "Firmware",
+		"operators":       "Team",
+		"analytics":       "Metrics",
+		"theme":           "Theme",
+		"language":        "Language",
+		"sign_out":        "Sign Out",
+		"search":          "Search",
+		"add":             "Add",
+		"save":            "Save",
+		"cancel":          "Cancel",
+		"delete":          "Delete",
+		"edit":            "Edit",
+		"status":          "Status",
+		"active_session":  "Active Session",
+		"dark_mode":       "Dark Mode",
+		"light_mode":      "Light Mode",
+		"refresh":         "Refresh",
+		"system":          "System",
+	},
+	"ar": {
+		"dashboard":       "لوحة التحكم",
+		"entities":        "الكيانات",
+		"resources":       "الموارد",
+		"account":         "الحساب",
+		"settings":        "الإعدادات",
+		"orders":          "الطلبات",
+		"billing":         "الفواتير",
+		"security":        "الأمان",
+		"biometrics":      "القياسات الحيوية",
+		"devices":         "الأجهزة",
+		"telemetry":       "القياس عن بُعد",
+		"tickets":         "التذاكر",
+		"firmware":        "البرامج الثابتة",
+		"operators":       "فريق العمل",
+		"analytics":       "المؤشرات",
+		"theme":           "المظهر",
+		"language":        "اللغة",
+		"sign_out":        "تسجيل الخروج",
+		"search":          "بحث",
+		"add":             "إضافة",
+		"save":            "حفظ",
+		"cancel":          "إلغاء",
+		"delete":          "حذف",
+		"edit":            "تعديل",
+		"status":          "الحالة",
+		"active_session":  "جلسة نشطة",
+		"dark_mode":       "الوضع الداكن",
+		"light_mode":      "الوضع الفاتح",
+		"refresh":         "تحديث",
+		"system":          "النظام",
+	},
+	"es": {
+		"dashboard":       "Panel de Control",
+		"entities":        "Entidades",
+		"resources":       "Recursos",
+		"account":         "Cuenta",
+		"settings":        "Configuración",
+		"orders":          "Pedidos",
+		"billing":         "Facturación",
+		"security":        "Seguridad",
+		"biometrics":      "Biometría",
+		"devices":         "Dispositivos",
+		"telemetry":       "Telemetría",
+		"tickets":         "Tickets",
+		"firmware":        "Firmware",
+		"operators":       "Equipo",
+		"analytics":       "Métricas",
+		"theme":           "Tema",
+		"language":        "Idioma",
+		"sign_out":        "Cerrar Sesión",
+		"search":          "Buscar",
+		"add":             "Añadir",
+		"save":            "Guardar",
+		"cancel":          "Cancelar",
+		"delete":          "Eliminar",
+		"edit":            "Editar",
+		"status":          "Estado",
+		"active_session":  "Sesión Activa",
+		"dark_mode":       "Modo Oscuro",
+		"light_mode":      "Modo Claro",
+		"refresh":         "Refrescar",
+		"system":          "Sistema",
+	},
+	"de": {
+		"dashboard":       "Übersicht",
+		"entities":        "Entitäten",
+		"resources":       "Ressourcen",
+		"account":         "Konto",
+		"settings":        "Einstellungen",
+		"orders":          "Bestellungen",
+		"billing":         "Abrechnung",
+		"security":        "Sicherheit",
+		"biometrics":      "Biometrie",
+		"devices":         "Geräte",
+		"telemetry":       "Telemetrie",
+		"tickets":         "Tickets",
+		"firmware":        "Firmware",
+		"operators":       "Team",
+		"analytics":       "Metriken",
+		"theme":           "Design",
+		"language":        "Sprache",
+		"sign_out":        "Abmelden",
+		"search":          "Suchen",
+		"add":             "Hinzufügen",
+		"save":            "Speichern",
+		"cancel":          "Abbrechen",
+		"delete":          "Löschen",
+		"edit":            "Bearbeiten",
+		"status":          "Status",
+		"active_session":  "Aktive Sitzung",
+		"dark_mode":       "Dunkelmodus",
+		"light_mode":      "Hellmodus",
+		"refresh":         "Aktualisieren",
+		"system":          "System",
+	},
+}
 
 var defaultLocaleLabels = map[string]string{
 	"en": "English",
@@ -85,6 +218,50 @@ func (p *Panel) LocaleFlags(flags map[string]string) *Panel {
 		p.localeFlags[k] = v
 	}
 	return p
+}
+
+// Translations registers custom translation dictionaries for a given locale.
+// It also registers them into GoLaravel's translation engine for c.Trans() lookups.
+func (p *Panel) Translations(locale string, lines map[string]string) *Panel {
+	if p.translations == nil {
+		p.translations = make(map[string]map[string]string)
+	}
+	if p.translations[locale] == nil {
+		p.translations[locale] = make(map[string]string)
+	}
+	for k, v := range lines {
+		p.translations[locale][k] = v
+	}
+	translation.Default().AddLines(lines, locale)
+	return p
+}
+
+// GetTranslations returns the combined translation dictionary for a given locale,
+// merging panel-specific translations over built-in admin translations.
+func (p *Panel) GetTranslations(locale string) map[string]string {
+	result := make(map[string]string)
+
+	// 1. Built-in defaults
+	if def, ok := defaultAdminTranslations[locale]; ok {
+		for k, v := range def {
+			result[k] = v
+		}
+	} else if def, ok := defaultAdminTranslations["en"]; ok {
+		for k, v := range def {
+			result[k] = v
+		}
+	}
+
+	// 2. Panel-specific overrides
+	if p.translations != nil {
+		if custom, ok := p.translations[locale]; ok {
+			for k, v := range custom {
+				result[k] = v
+			}
+		}
+	}
+
+	return result
 }
 
 // GetLocales returns all configured language codes.

@@ -8,6 +8,162 @@ void main() {
   runApp(const FilamentApp());
 }
 
+// ============================================================================
+// Multi-Language & RTL/LTR Localization Support
+// ============================================================================
+class AppLocale {
+  static const Map<String, Map<String, String>> strings = {
+    'en': {
+      'dashboard': 'Dashboard',
+      'entities': 'Entities',
+      'account': 'Account',
+      'settings': 'Settings & Preferences',
+      'orders': 'Hardware Orders',
+      'billing': 'Billing & Subscriptions',
+      'security': 'Biometrics & Security',
+      'devices': 'Devices',
+      'telemetry': 'Telemetry',
+      'tickets': 'Tickets',
+      'firmware': 'Firmware',
+      'operators': 'Team',
+      'analytics': 'Metrics',
+      'language': 'Language & Direction',
+      'theme': 'Theme Mode',
+      'sign_out': 'Sign Out',
+      'search': 'Search',
+      'add': 'Add',
+      'save': 'Save',
+      'cancel': 'Cancel',
+      'delete': 'Delete',
+      'edit': 'Edit',
+      'active_session': 'Active Session • Enclave Secured',
+      'control_center': 'Control Center',
+      'language_picker': 'Select Language & Direction',
+      'theme_active_dark': 'Dark theme active',
+      'theme_active_light': 'Light theme active',
+    },
+    'ar': {
+      'dashboard': 'لوحة التحكم',
+      'entities': 'الكيانات',
+      'account': 'الحساب',
+      'settings': 'الإعدادات والتفضيلات',
+      'orders': 'طلبات الأجهزة',
+      'billing': 'الفواتير والاشتراكات',
+      'security': 'القياسات الحيوية والأمان',
+      'devices': 'الأجهزة',
+      'telemetry': 'القياس عن بُعد',
+      'tickets': 'التذاكر',
+      'firmware': 'البرامج الثابتة',
+      'operators': 'فريق العمل',
+      'analytics': 'المؤشرات',
+      'language': 'اللغة والاتجاه',
+      'theme': 'وضع المظهر',
+      'sign_out': 'تسجيل الخروج',
+      'search': 'بحث',
+      'add': 'إضافة',
+      'save': 'حفظ',
+      'cancel': 'إلغاء',
+      'delete': 'حذف',
+      'edit': 'تعديل',
+      'active_session': 'جلسة نشطة • الجيب الأمني مشفر',
+      'control_center': 'مركز التحكم',
+      'language_picker': 'اختر اللغة واتجاه الواجهة',
+      'theme_active_dark': 'الوضع الداكن مفعّل',
+      'theme_active_light': 'الوضع الفاتح مفعّل',
+    },
+    'es': {
+      'dashboard': 'Panel de Control',
+      'entities': 'Entidades',
+      'account': 'Cuenta',
+      'settings': 'Ajustes y Preferencias',
+      'orders': 'Pedidos de Hardware',
+      'billing': 'Facturación y Suscripción',
+      'security': 'Biometría y Seguridad',
+      'devices': 'Dispositivos',
+      'telemetry': 'Telemetría',
+      'tickets': 'Tickets',
+      'firmware': 'Firmware',
+      'operators': 'Equipo',
+      'analytics': 'Métricas',
+      'language': 'Idioma y Dirección',
+      'theme': 'Modo de Tema',
+      'sign_out': 'Cerrar Sesión',
+      'search': 'Buscar',
+      'add': 'Añadir',
+      'save': 'Guardar',
+      'cancel': 'Cancelar',
+      'delete': 'Eliminar',
+      'edit': 'Editar',
+      'active_session': 'Sesión Activa • Enclave Seguro',
+      'control_center': 'Centro de Control',
+      'language_picker': 'Seleccionar Idioma y Dirección',
+      'theme_active_dark': 'Tema oscuro activo',
+      'theme_active_light': 'Tema claro activo',
+    },
+    'de': {
+      'dashboard': 'Übersicht',
+      'entities': 'Entitäten',
+      'account': 'Konto',
+      'settings': 'Einstellungen',
+      'orders': 'Hardware-Bestellungen',
+      'billing': 'Abrechnung & Lizenz',
+      'security': 'Biometrie & Sicherheit',
+      'devices': 'Geräte',
+      'telemetry': 'Telemetrie',
+      'tickets': 'Tickets',
+      'firmware': 'Firmware',
+      'operators': 'Team',
+      'analytics': 'Metriken',
+      'language': 'Sprache & Ausrichtung',
+      'theme': 'Design-Modus',
+      'sign_out': 'Abmelden',
+      'search': 'Suchen',
+      'add': 'Hinzufügen',
+      'save': 'Speichern',
+      'cancel': 'Abbrechen',
+      'delete': 'Löschen',
+      'edit': 'Bearbeiten',
+      'active_session': 'Aktive Sitzung • Gesichertes Enklave',
+      'control_center': 'Leitstand',
+      'language_picker': 'Sprache und Textrichtung wählen',
+      'theme_active_dark': 'Dunkelmodus aktiv',
+      'theme_active_light': 'Hellmodus aktiv',
+    },
+  };
+
+  static String t(String locale, String key, {Map<String, String>? remoteOverrides}) {
+    if (remoteOverrides != null && remoteOverrides.containsKey(key)) {
+      return remoteOverrides[key]!;
+    }
+    final locDict = strings[locale] ?? strings['en']!;
+    return locDict[key] ?? strings['en']![key] ?? key;
+  }
+
+  static String getFlag(String loc) {
+    switch (loc.toLowerCase()) {
+      case 'ar': return '🇸🇦';
+      case 'es': return '🇪🇸';
+      case 'de': return '🇩🇪';
+      case 'fr': return '🇫🇷';
+      default: return '🇺🇸';
+    }
+  }
+
+  static String getLabel(String loc) {
+    switch (loc.toLowerCase()) {
+      case 'ar': return 'العربية';
+      case 'es': return 'Español';
+      case 'de': return 'Deutsch';
+      case 'fr': return 'Français';
+      default: return 'English';
+    }
+  }
+
+  static bool isRTL(String loc) {
+    return loc.toLowerCase() == 'ar' || loc.toLowerCase() == 'fa' || loc.toLowerCase() == 'ur' || loc.toLowerCase() == 'he';
+  }
+}
+
 class FilamentApp extends StatefulWidget {
   const FilamentApp({super.key});
 
@@ -17,10 +173,19 @@ class FilamentApp extends StatefulWidget {
 
 class _FilamentAppState extends State<FilamentApp> {
   ThemeMode _themeMode = ThemeMode.dark;
+  String _locale = 'en';
+  bool _isRTL = false;
 
   void toggleTheme() {
     setState(() {
       _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+    });
+  }
+
+  void setLocale(String locale, bool isRTL) {
+    setState(() {
+      _locale = locale;
+      _isRTL = isRTL;
     });
   }
 
@@ -30,6 +195,12 @@ class _FilamentAppState extends State<FilamentApp> {
       title: 'Pulse Admin',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
+      builder: (context, child) {
+        return Directionality(
+          textDirection: _isRTL ? TextDirection.rtl : TextDirection.ltr,
+          child: child ?? const SizedBox(),
+        );
+      },
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFFF59E0B), // Filament Amber
@@ -48,7 +219,13 @@ class _FilamentAppState extends State<FilamentApp> {
         useMaterial3: true,
         fontFamily: 'sans-serif',
       ),
-      home: AdminShellPage(onToggleTheme: toggleTheme, isDark: _themeMode == ThemeMode.dark),
+      home: AdminShellPage(
+        onToggleTheme: toggleTheme,
+        isDark: _themeMode == ThemeMode.dark,
+        currentLocale: _locale,
+        isRTL: _isRTL,
+        onLocaleChanged: setLocale,
+      ),
     );
   }
 }
@@ -56,8 +233,18 @@ class _FilamentAppState extends State<FilamentApp> {
 class AdminShellPage extends StatefulWidget {
   final VoidCallback onToggleTheme;
   final bool isDark;
+  final String currentLocale;
+  final bool isRTL;
+  final void Function(String locale, bool isRTL) onLocaleChanged;
 
-  const AdminShellPage({super.key, required this.onToggleTheme, required this.isDark});
+  const AdminShellPage({
+    super.key,
+    required this.onToggleTheme,
+    required this.isDark,
+    required this.currentLocale,
+    required this.isRTL,
+    required this.onLocaleChanged,
+  });
 
   @override
   State<AdminShellPage> createState() => _AdminShellPageState();
@@ -99,6 +286,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
         if (s['active_tenant'] != null) {
           api.activeTenant = s['active_tenant'];
         }
+        if (s['locale'] != null) {
+          final loc = s['locale'] as String;
+          final isRtl = s['is_rtl'] as bool? ?? AppLocale.isRTL(loc);
+          widget.onLocaleChanged(loc, isRtl);
+        }
         if (s['account_nav_placement'] != null && (s['account_nav_placement'] == 'header' || s['account_nav_placement'] == 'bottom_bar')) {
           _accountNavPlacement = s['account_nav_placement'];
         }
@@ -115,6 +307,101 @@ class _AdminShellPageState extends State<AdminShellPage> {
         isLoading = false;
       });
     }
+  }
+
+  void showLanguageDialog(BuildContext context) {
+    final supported = (schema?['supported_locales'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? ['en', 'ar', 'es', 'de'];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    AppLocale.t(widget.currentLocale, 'language_picker'),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              for (final code in supported) ...[
+                Builder(
+                  builder: (_) {
+                    final name = AppLocale.getLabel(code);
+                    final flag = AppLocale.getFlag(code);
+                    final isRtl = AppLocale.isRTL(code);
+                    final isSelected = code == widget.currentLocale;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: isSelected ? Colors.amber : Colors.white.withValues(alpha: 0.1),
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        leading: Text(flag, style: const TextStyle(fontSize: 24)),
+                        title: Row(
+                          children: [
+                            Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (isRtl ? Colors.amber : Colors.blueAccent).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                isRtl ? 'RTL' : 'LTR',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: isRtl ? Colors.amber : Colors.blueAccent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          isRtl ? 'Right-to-Left (RTL) • من اليمين لليسار' : 'Left-to-Right (LTR)',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        trailing: isSelected ? const Icon(Icons.check_circle, color: Color(0xFF10B981)) : null,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          widget.onLocaleChanged(code, isRtl);
+                          api.switchLocale(code);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                isRtl
+                                    ? '🇸🇦 تم تفعيل اللغة العربية والاتجاه من اليمين إلى اليسار (RTL)'
+                                    : '$flag Language set to $name (LTR)',
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -210,6 +497,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
           ),
           actions: [
             IconButton(
+              icon: const Icon(Icons.language),
+              tooltip: 'Language & Direction / اللغة',
+              onPressed: () => showLanguageDialog(context),
+            ),
+            IconButton(
               icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
               onPressed: widget.onToggleTheme,
             ),
@@ -234,6 +526,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     isDark: widget.isDark,
                     accountNavPlacement: _accountNavPlacement,
                     onAccountNavPlacementChanged: setAccountNavPlacement,
+                    currentLocale: widget.currentLocale,
+                    isRTL: widget.isRTL,
+                    onLocaleChanged: widget.onLocaleChanged,
+                    onOpenLanguagePicker: () => showLanguageDialog(context),
                   ),
                 ),
               ),
@@ -256,14 +552,34 @@ class _AdminShellPageState extends State<AdminShellPage> {
           },
           // Bottom menu account tab is shown ONLY when placement is 'bottom_bar' (never both!)
           destinations: isHeaderPlacement
-              ? const [
-                  NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-                  NavigationDestination(icon: Icon(Icons.layers_outlined), selectedIcon: Icon(Icons.layers), label: 'Entities'),
+              ? [
+                  NavigationDestination(
+                    icon: const Icon(Icons.dashboard_outlined),
+                    selectedIcon: const Icon(Icons.dashboard),
+                    label: AppLocale.t(widget.currentLocale, 'dashboard'),
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(Icons.layers_outlined),
+                    selectedIcon: const Icon(Icons.layers),
+                    label: AppLocale.t(widget.currentLocale, 'entities'),
+                  ),
                 ]
-              : const [
-                  NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-                  NavigationDestination(icon: Icon(Icons.layers_outlined), selectedIcon: Icon(Icons.layers), label: 'Entities'),
-                  NavigationDestination(icon: Icon(Icons.account_circle_outlined), selectedIcon: Icon(Icons.account_circle), label: 'Account'),
+              : [
+                  NavigationDestination(
+                    icon: const Icon(Icons.dashboard_outlined),
+                    selectedIcon: const Icon(Icons.dashboard),
+                    label: AppLocale.t(widget.currentLocale, 'dashboard'),
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(Icons.layers_outlined),
+                    selectedIcon: const Icon(Icons.layers),
+                    label: AppLocale.t(widget.currentLocale, 'entities'),
+                  ),
+                  NavigationDestination(
+                    icon: const Icon(Icons.account_circle_outlined),
+                    selectedIcon: const Icon(Icons.account_circle),
+                    label: AppLocale.t(widget.currentLocale, 'account'),
+                  ),
                 ],
         ),
       ),
@@ -281,14 +597,29 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 child: Text('⚡ ' + brandName, style: const TextStyle(fontWeight: FontWeight.bold)),
               ),
               destinations: isHeaderPlacement
-                  ? const [
-                      NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), label: Text('Dashboard')),
-                      NavigationRailDestination(icon: Icon(Icons.layers_outlined), label: Text('Resources')),
+                  ? [
+                      NavigationRailDestination(
+                        icon: const Icon(Icons.dashboard_outlined),
+                        label: Text(AppLocale.t(widget.currentLocale, 'dashboard')),
+                      ),
+                      NavigationRailDestination(
+                        icon: const Icon(Icons.layers_outlined),
+                        label: Text(AppLocale.t(widget.currentLocale, 'entities')),
+                      ),
                     ]
-                  : const [
-                      NavigationRailDestination(icon: Icon(Icons.dashboard_outlined), label: Text('Dashboard')),
-                      NavigationRailDestination(icon: Icon(Icons.layers_outlined), label: Text('Resources')),
-                      NavigationRailDestination(icon: Icon(Icons.account_circle_outlined), label: Text('Account')),
+                  : [
+                      NavigationRailDestination(
+                        icon: const Icon(Icons.dashboard_outlined),
+                        label: Text(AppLocale.t(widget.currentLocale, 'dashboard')),
+                      ),
+                      NavigationRailDestination(
+                        icon: const Icon(Icons.layers_outlined),
+                        label: Text(AppLocale.t(widget.currentLocale, 'entities')),
+                      ),
+                      NavigationRailDestination(
+                        icon: const Icon(Icons.account_circle_outlined),
+                        label: Text(AppLocale.t(widget.currentLocale, 'account')),
+                      ),
                     ],
             ),
             const VerticalDivider(thickness: 1, width: 1),
@@ -328,6 +659,19 @@ class _AdminShellPageState extends State<AdminShellPage> {
                         ),
                         Row(
                           children: [
+                            FilledButton.tonalIcon(
+                              style: FilledButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              ),
+                              icon: Text(AppLocale.getFlag(widget.currentLocale), style: const TextStyle(fontSize: 16)),
+                              label: Text(
+                                '${AppLocale.getLabel(widget.currentLocale)} (${widget.isRTL ? "RTL" : "LTR"})',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () => showLanguageDialog(context),
+                            ),
+                            const SizedBox(width: 8),
                             IconButton(
                               icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
                               onPressed: widget.onToggleTheme,
@@ -353,6 +697,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
                                   isDark: widget.isDark,
                                   accountNavPlacement: _accountNavPlacement,
                                   onAccountNavPlacementChanged: setAccountNavPlacement,
+                                  currentLocale: widget.currentLocale,
+                                  isRTL: widget.isRTL,
+                                  onLocaleChanged: widget.onLocaleChanged,
+                                  onOpenLanguagePicker: () => showLanguageDialog(context),
                                 ),
                               ),
                             ],
@@ -651,6 +999,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
                       api: api,
                       accountNavPlacement: _accountNavPlacement,
                       onAccountNavPlacementChanged: setAccountNavPlacement,
+                      currentLocale: widget.currentLocale,
+                      isRTL: widget.isRTL,
+                      onLocaleChanged: widget.onLocaleChanged,
                     ),
                   ),
                 ),
@@ -729,6 +1080,17 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     if (val != null) setAccountNavPlacement(val);
                   },
                 ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Text(AppLocale.getFlag(widget.currentLocale), style: const TextStyle(fontSize: 22)),
+                title: Text(AppLocale.t(widget.currentLocale, 'language')),
+                subtitle: Text(
+                  '${AppLocale.getLabel(widget.currentLocale)} • ${widget.isRTL ? "RTL (من اليمين لليسار)" : "LTR (Left-to-Right)"}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => showLanguageDialog(context),
               ),
               const Divider(height: 1),
               ListTile(
@@ -1581,6 +1943,10 @@ class AccountModalSheet extends StatelessWidget {
   final bool isDark;
   final String accountNavPlacement;
   final ValueChanged<String>? onAccountNavPlacementChanged;
+  final String currentLocale;
+  final bool isRTL;
+  final void Function(String locale, bool isRTL)? onLocaleChanged;
+  final VoidCallback? onOpenLanguagePicker;
 
   const AccountModalSheet({
     super.key,
@@ -1590,6 +1956,10 @@ class AccountModalSheet extends StatelessWidget {
     required this.isDark,
     this.accountNavPlacement = 'header',
     this.onAccountNavPlacementChanged,
+    this.currentLocale = 'en',
+    this.isRTL = false,
+    this.onLocaleChanged,
+    this.onOpenLanguagePicker,
   });
 
   static Future<void> show({
@@ -1600,6 +1970,10 @@ class AccountModalSheet extends StatelessWidget {
     required bool isDark,
     String accountNavPlacement = 'header',
     ValueChanged<String>? onAccountNavPlacementChanged,
+    String currentLocale = 'en',
+    bool isRTL = false,
+    void Function(String locale, bool isRTL)? onLocaleChanged,
+    VoidCallback? onOpenLanguagePicker,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -1612,6 +1986,10 @@ class AccountModalSheet extends StatelessWidget {
         isDark: isDark,
         accountNavPlacement: accountNavPlacement,
         onAccountNavPlacementChanged: onAccountNavPlacementChanged,
+        currentLocale: currentLocale,
+        isRTL: isRTL,
+        onLocaleChanged: onLocaleChanged,
+        onOpenLanguagePicker: onOpenLanguagePicker,
       ),
     );
   }
@@ -1747,10 +2125,21 @@ class AccountModalSheet extends StatelessWidget {
 
                     // Account Pages Navigation
                     _buildModalNavItem(
+                      icon: Icons.language,
+                      iconColor: Colors.purpleAccent,
+                      title: AppLocale.t(currentLocale, 'language'),
+                      subtitle: '${AppLocale.getFlag(currentLocale)} ${AppLocale.getLabel(currentLocale)} • ${isRTL ? "RTL (من اليمين لليسار)" : "LTR (Left-to-Right)"}',
+                      onTap: () {
+                        Navigator.pop(context);
+                        onOpenLanguagePicker?.call();
+                      },
+                    ),
+
+                    _buildModalNavItem(
                       icon: Icons.settings_outlined,
                       iconColor: Colors.amber,
-                      title: 'Settings & Preferences',
-                      subtitle: 'Theme, Biometrics, Auto-Lock, Notifications',
+                      title: AppLocale.t(currentLocale, 'settings'),
+                      subtitle: 'Theme, Language, Biometrics, Auto-Lock, Notifications',
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.push(
@@ -1762,6 +2151,9 @@ class AccountModalSheet extends StatelessWidget {
                               api: api,
                               accountNavPlacement: accountNavPlacement,
                               onAccountNavPlacementChanged: onAccountNavPlacementChanged,
+                              currentLocale: currentLocale,
+                              isRTL: isRTL,
+                              onLocaleChanged: onLocaleChanged,
                             ),
                           ),
                         );
@@ -1906,6 +2298,9 @@ class SettingsScreen extends StatefulWidget {
   final FilamentApiClient api;
   final String accountNavPlacement;
   final ValueChanged<String>? onAccountNavPlacementChanged;
+  final String currentLocale;
+  final bool isRTL;
+  final void Function(String locale, bool isRTL)? onLocaleChanged;
 
   const SettingsScreen({
     super.key,
@@ -1914,6 +2309,9 @@ class SettingsScreen extends StatefulWidget {
     required this.api,
     this.accountNavPlacement = 'header',
     this.onAccountNavPlacementChanged,
+    this.currentLocale = 'en',
+    this.isRTL = false,
+    this.onLocaleChanged,
   });
 
   @override
@@ -1931,6 +2329,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool firmwareBroadcasts = true;
   bool analyticsEnabled = true;
   String cacheSize = '14.8 MB';
+
+  void _showLanguagePicker(BuildContext context) {
+    final supported = ['en', 'ar', 'es', 'de'];
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    AppLocale.t(widget.currentLocale, 'language_picker'),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              for (final code in supported) ...[
+                Builder(
+                  builder: (_) {
+                    final name = AppLocale.getLabel(code);
+                    final flag = AppLocale.getFlag(code);
+                    final isRtl = AppLocale.isRTL(code);
+                    final isSelected = code == widget.currentLocale;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: isSelected ? Colors.amber : Colors.white.withValues(alpha: 0.1),
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        leading: Text(flag, style: const TextStyle(fontSize: 24)),
+                        title: Row(
+                          children: [
+                            Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (isRtl ? Colors.amber : Colors.blueAccent).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                isRtl ? 'RTL' : 'LTR',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: isRtl ? Colors.amber : Colors.blueAccent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        subtitle: Text(
+                          isRtl ? 'Right-to-Left (RTL) • من اليمين لليسار' : 'Left-to-Right (LTR)',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
+                        trailing: isSelected ? const Icon(Icons.check_circle, color: Color(0xFF10B981)) : null,
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          widget.onLocaleChanged?.call(code, isRtl);
+                          widget.api.switchLocale(code);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                isRtl
+                                    ? '🇸🇦 تم تفعيل اللغة العربية والاتجاه من اليمين إلى اليسار (RTL)'
+                                    : '$flag Language set to $name (LTR)',
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   void _testBiometricSensor() {
     showDialog(
@@ -2003,6 +2496,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   trailing: Switch(
                     value: widget.isDark,
                     onChanged: (v) => widget.onThemeToggle(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Language & Direction Section
+          const Text('LANGUAGE & DIRECTION (LTR / RTL)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.8, color: Colors.grey)),
+          const SizedBox(height: 8),
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: Text(AppLocale.getFlag(widget.currentLocale), style: const TextStyle(fontSize: 24)),
+                  title: const Text('Interface Language & Layout', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(
+                    '${AppLocale.getLabel(widget.currentLocale)} (${widget.isRTL ? "Right-to-Left (RTL) • من اليمين لليسار" : "Left-to-Right (LTR)"})',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: OutlinedButton.icon(
+                    icon: const Icon(Icons.language, size: 16),
+                    label: const Text('Change'),
+                    onPressed: () => _showLanguagePicker(context),
                   ),
                 ),
               ],
