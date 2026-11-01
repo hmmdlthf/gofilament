@@ -43,12 +43,17 @@
     .badge-online { background: rgba(16, 185, 129, 0.2); color: #34d399; }
     .badge-offline { background: rgba(239, 68, 68, 0.2); color: #f87171; }
     .badge-maint { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .badge-critical { background: rgba(239, 68, 68, 0.25); color: #f87171; font-weight: 700; }
+    .badge-warning { background: rgba(245, 158, 11, 0.25); color: #fbbf24; }
+    .badge-normal { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .badge-stable { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .badge-beta { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
     .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; transition: background 0.15s; }
     .btn-primary { background: var(--primary); color: #000; }
     .btn-primary:hover { background: var(--primary-hover); }
     .btn-danger { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); padding: 4px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
     .btn-danger:hover { background: rgba(239, 68, 68, 0.3); color: #fff; }
-    .mobile-bottom-bar { display: none; height: 56px; background: var(--card-bg); border-top: 1px solid var(--border); position: sticky; bottom: 0; align-items: center; justify-content: space-around; }
+    .mobile-bottom-bar { display: none; height: 56px; background: var(--card-bg); border-top: 1px solid var(--border); position: sticky; bottom: 0; align-items: center; justify-content: space-around; z-index: 100; overflow-x: auto; }
     
     /* Interactive Material 3 Modal */
     .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
@@ -90,7 +95,7 @@
     }
 
     @media (min-width: 641px) and (max-width: 1024px) {
-      .nav-rail { width: 64px; }
+      .nav-rail { width: 68px; }
       .content-pane { padding: 20px; }
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
 
@@ -129,9 +134,25 @@
         <span class="material-icons">router</span>
         <span>Devices</span>
       </button>
+      <button class="rail-btn" onclick="switchTab('telemetry', this)">
+        <span class="material-icons">insights</span>
+        <span>Telemetry</span>
+      </button>
+      <button class="rail-btn" onclick="switchTab('tickets', this)">
+        <span class="material-icons">confirmation_number</span>
+        <span>Tickets</span>
+      </button>
+      <button class="rail-btn" onclick="switchTab('firmware', this)">
+        <span class="material-icons">system_update</span>
+        <span>Firmware</span>
+      </button>
       <button class="rail-btn" onclick="switchTab('operators', this)">
         <span class="material-icons">badge</span>
         <span>Team</span>
+      </button>
+      <button class="rail-btn" onclick="switchTab('analytics', this)">
+        <span class="material-icons">bar_chart</span>
+        <span>Metrics</span>
       </button>
     </aside>
 
@@ -143,17 +164,18 @@
           <div id="kpi-device-sub" style="color: #34d399; font-size: 12px;">● 4 Online Devices (80%)</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Network Ping Latency</div>
-          <div class="kpi-val">18 ms</div>
-          <div style="color: var(--text-muted); font-size: 12px;">Ultra-fast edge response</div>
+          <div class="kpi-label">Telemetry Ingestion Rate</div>
+          <div class="kpi-val" id="kpi-telemetry">1.2k / sec</div>
+          <div style="color: #60a5fa; font-size: 12px;">Real-time IoT stream active</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-label">Kernel Engine</div>
-          <div class="kpi-val" style="color: var(--primary);">GoLaravel</div>
+          <div class="kpi-label">Network Ping Latency</div>
+          <div class="kpi-val">18 ms</div>
           <div style="color: var(--text-muted); font-size: 12px;">Zero-allocation Radix Router</div>
         </div>
       </div>
 
+      <!-- 1. Devices Tab -->
       <div id="pane-devices">
         <div class="section-title">
           <span>IoT Hardware Nodes</span>
@@ -182,6 +204,94 @@
         </div>
       </div>
 
+      <!-- 2. Telemetry Tab -->
+      <div id="pane-telemetry" style="display: none;">
+        <div class="section-title">
+          <span>Real-Time Sensor Telemetry</span>
+          <button class="btn btn-primary" onclick="fetchTelemetry(); showToast('Telemetry stream refreshed');">
+            <span class="material-icons" style="font-size: 16px;">refresh</span> Refresh Stream
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Metric</th>
+                  <th>Value</th>
+                  <th>Severity</th>
+                  <th>Timestamp</th>
+                  <th style="width: 80px; text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="telemetry-table-body">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading telemetry stream...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Maintenance Tickets Tab -->
+      <div id="pane-tickets" style="display: none;">
+        <div class="section-title">
+          <span>Maintenance & Incident Tickets</span>
+          <button class="btn btn-primary" onclick="openAddTicketModal()">
+            <span class="material-icons" style="font-size: 16px;">add_task</span> Open Ticket
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Incident Title</th>
+                  <th>Device Target</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Assigned To</th>
+                  <th style="width: 80px; text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="tickets-table-body">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading work tickets...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Firmware Releases Tab -->
+      <div id="pane-firmware" style="display: none;">
+        <div class="section-title">
+          <span>OTA Firmware Binary Releases</span>
+          <button class="btn btn-primary" onclick="openAddFirmwareModal()">
+            <span class="material-icons" style="font-size: 16px;">upload</span> Deploy Build
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Version</th>
+                  <th>Hardware Target</th>
+                  <th>Channel</th>
+                  <th>Rollout %</th>
+                  <th>Active</th>
+                  <th style="width: 80px; text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="firmware-table-body">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading firmware registry...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. Operators Tab -->
       <div id="pane-operators" style="display: none;">
         <div class="section-title">
           <span>Operations Engineers</span>
@@ -209,6 +319,37 @@
         </div>
       </div>
 
+      <!-- 6. Fleet Analytics & Health Tab -->
+      <div id="pane-analytics" style="display: none;">
+        <div class="section-title">
+          <span>Fleet Health & Network Analytics</span>
+          <span class="chip">Live Diagnostics</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
+          <div class="card" style="padding: 20px;">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-icons" style="color: #34d399;">check_circle</span> Hardware Availability
+            </div>
+            <div style="font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 8px;">99.85%</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">30-day continuous fleet uptime target met across Austin, Frankfurt, and Singapore clusters.</div>
+          </div>
+          <div class="card" style="padding: 20px;">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-icons" style="color: var(--primary);">memory</span> Edge Compute Load
+            </div>
+            <div style="font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 8px;">23.4%</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">Average ARM64 Cortex-A53 CPU core utilization across edge gateways.</div>
+          </div>
+          <div class="card" style="padding: 20px;">
+            <div style="font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span class="material-icons" style="color: #60a5fa;">wifi_tethering</span> Mesh Connectivity
+            </div>
+            <div style="font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 8px;">-68 dBm</div>
+            <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">Signal-to-noise ratio within optimal operating threshold for remote telemetry.</div>
+          </div>
+        </div>
+      </div>
+
       <div style="margin-top: 32px; padding: 20px; border-radius: 12px; background: rgba(0,0,0,0.3); border: 1px dashed var(--border);">
         <h4 style="margin-bottom: 8px; color: var(--primary);">🚀 Native Multiplatform Compilation</h4>
         <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
@@ -220,8 +361,12 @@
   </div>
 
   <nav class="mobile-bottom-bar">
-    <button class="rail-btn active" onclick="switchTab('devices', this)"><span class="material-icons">router</span></button>
-    <button class="rail-btn" onclick="switchTab('operators', this)"><span class="material-icons">badge</span></button>
+    <button class="rail-btn active" onclick="switchTab('devices', this)"><span class="material-icons">router</span><span>Devices</span></button>
+    <button class="rail-btn" onclick="switchTab('telemetry', this)"><span class="material-icons">insights</span><span>Telemetry</span></button>
+    <button class="rail-btn" onclick="switchTab('tickets', this)"><span class="material-icons">confirmation_number</span><span>Tickets</span></button>
+    <button class="rail-btn" onclick="switchTab('firmware', this)"><span class="material-icons">system_update</span><span>Firmware</span></button>
+    <button class="rail-btn" onclick="switchTab('operators', this)"><span class="material-icons">badge</span><span>Team</span></button>
+    <button class="rail-btn" onclick="switchTab('analytics', this)"><span class="material-icons">bar_chart</span><span>Metrics</span></button>
   </nav>
 
   <!-- Interactive Modal: Add Device -->
@@ -267,6 +412,95 @@
         <div class="modal-actions">
           <button type="button" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;" onclick="closeModal('modal-device')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save & Connect Device</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Interactive Modal: Add Ticket -->
+  <div id="modal-ticket" class="modal-backdrop" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><span class="material-icons" style="color: var(--primary);">confirmation_number</span> Create Maintenance Ticket</h3>
+        <button class="close-btn" onclick="closeModal('modal-ticket')">&times;</button>
+      </div>
+      <form id="form-add-ticket" onsubmit="handleCreateTicket(event)">
+        <div class="form-group">
+          <label>Incident Summary *</label>
+          <input type="text" id="ticket-title" required placeholder="e.g. Battery drainage anomaly on Gateway 102" class="form-input">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Target Device ID</label>
+            <input type="text" id="ticket-device" value="1" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Priority Level</label>
+            <select id="ticket-priority" class="form-input">
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Assignee Name</label>
+            <input type="text" id="ticket-assignee" value="Sarah Connor" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select id="ticket-status" class="form-input">
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;" onclick="closeModal('modal-ticket')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit Ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Interactive Modal: Add Firmware -->
+  <div id="modal-firmware" class="modal-backdrop" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><span class="material-icons" style="color: var(--primary);">system_update</span> Deploy Firmware Binary</h3>
+        <button class="close-btn" onclick="closeModal('modal-firmware')">&times;</button>
+      </div>
+      <form id="form-add-firmware" onsubmit="handleCreateFirmware(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Version Tag *</label>
+            <input type="text" id="fw-version" required placeholder="e.g. v2.5.0-rc1" class="form-input">
+          </div>
+          <div class="form-group">
+            <label>Hardware Target *</label>
+            <input type="text" id="fw-target" required value="PulseEdge v4" class="form-input">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Distribution Channel</label>
+            <select id="fw-channel" class="form-input">
+              <option value="stable">Stable</option>
+              <option value="beta">Beta</option>
+              <option value="edge">Edge</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Rollout Percentage (%)</label>
+            <input type="number" id="fw-rollout" min="0" max="100" value="25" class="form-input">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" style="background: rgba(255,255,255,0.1); color: #fff;" onclick="closeModal('modal-firmware')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Release OTA Update</button>
         </div>
       </form>
     </div>
@@ -328,6 +562,16 @@
       document.getElementById('dev-name').focus();
     }
 
+    function openAddTicketModal() {
+      document.getElementById('modal-ticket').style.display = 'flex';
+      document.getElementById('ticket-title').focus();
+    }
+
+    function openAddFirmwareModal() {
+      document.getElementById('modal-firmware').style.display = 'flex';
+      document.getElementById('fw-version').focus();
+    }
+
     function openAddOperatorModal() {
       document.getElementById('modal-operator').style.display = 'flex';
       document.getElementById('op-name').focus();
@@ -340,8 +584,15 @@
     function switchTab(name, btn) {
       document.querySelectorAll('.rail-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      document.getElementById('pane-devices').style.display = name === 'devices' ? 'block' : 'none';
-      document.getElementById('pane-operators').style.display = name === 'operators' ? 'block' : 'none';
+      const tabs = ['devices', 'telemetry', 'tickets', 'firmware', 'operators', 'analytics'];
+      tabs.forEach(t => {
+        const el = document.getElementById('pane-' + t);
+        if (el) el.style.display = t === name ? 'block' : 'none';
+      });
+      if (name === 'telemetry') fetchTelemetry();
+      if (name === 'tickets') fetchTickets();
+      if (name === 'firmware') fetchFirmware();
+      if (name === 'operators') fetchOperators();
     }
 
     async function fetchDevices() {
@@ -363,11 +614,11 @@
           tbody.innerHTML = items.map(d => {
             const badgeClass = d.status === 'online' ? 'badge-online' : d.status === 'offline' ? 'badge-offline' : 'badge-maint';
             return '<tr>' +
-              '<td data-label="Device Name" style="font-weight: 600;">' + d.name + '</td>' +
-              '<td data-label="Status"><span class="badge ' + badgeClass + '">' + d.status + '</span></td>' +
-              '<td data-label="Serial Number" style="font-family: monospace;">' + d.serial_no + '</td>' +
-              '<td data-label="Battery Level">' + d.battery_level + '%</td>' +
-              '<td data-label="Location">' + d.location + '</td>' +
+              '<td data-label="Device Name" style="font-weight: 600;">' + (d.name || '') + '</td>' +
+              '<td data-label="Status"><span class="badge ' + badgeClass + '">' + (d.status || '') + '</span></td>' +
+              '<td data-label="Serial Number" style="font-family: monospace;">' + (d.serial_no || '') + '</td>' +
+              '<td data-label="Battery Level">' + (d.battery_level || 0) + '%</td>' +
+              '<td data-label="Location">' + (d.location || '') + '</td>' +
               '<td data-label="Actions" style="text-align: right;"><button class="btn-danger" onclick="deleteDevice(\'' + d.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</span></button></td>' +
               '</tr>';
           }).join('');
@@ -420,6 +671,174 @@
       }
     }
 
+    async function fetchTelemetry() {
+      try {
+        const res = await fetch('/admin/api/resources/telemetry');
+        if (res.ok) {
+          const data = await res.json();
+          const items = data.data || [];
+          const tbody = document.getElementById('telemetry-table-body');
+          if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No telemetry logged yet.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = items.map(t => {
+            const sevBadge = t.severity === 'critical' ? 'badge-critical' : t.severity === 'warning' ? 'badge-warning' : 'badge-normal';
+            return '<tr>' +
+              '<td data-label="Device" style="font-weight: 600;">' + (t.device_name || '') + '</td>' +
+              '<td data-label="Metric">' + (t.metric || '') + '</td>' +
+              '<td data-label="Value" style="font-family: monospace; font-weight: 600;">' + (t.value || '') + '</td>' +
+              '<td data-label="Severity"><span class="badge ' + sevBadge + '">' + (t.severity || '') + '</span></td>' +
+              '<td data-label="Timestamp" style="color: var(--text-muted); font-size: 12px;">' + (t.recorded_at ? new Date(t.recorded_at).toLocaleTimeString() : 'Just now') + '</td>' +
+              '<td data-label="Action" style="text-align: right;"><button class="btn-danger" onclick="deleteTelemetry(\'' + t.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</span></button></td>' +
+              '</tr>';
+          }).join('');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function deleteTelemetry(id) {
+      try {
+        const res = await fetch('/admin/api/resources/telemetry/' + id, { method: 'DELETE' });
+        if (res.ok) {
+          await fetchTelemetry();
+          showToast('Log record pruned');
+        }
+      } catch (e) {}
+    }
+
+    async function fetchTickets() {
+      try {
+        const res = await fetch('/admin/api/resources/tickets');
+        if (res.ok) {
+          const data = await res.json();
+          const items = data.data || [];
+          const tbody = document.getElementById('tickets-table-body');
+          if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No open tickets found. Click "Open Ticket" to report one.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = items.map(t => {
+            const prioClass = t.priority === 'critical' ? 'badge-critical' : t.priority === 'high' ? 'badge-warning' : 'badge-normal';
+            return '<tr>' +
+              '<td data-label="Incident Title" style="font-weight: 600;">' + (t.title || '') + '</td>' +
+              '<td data-label="Device Target">Device #' + (t.device_id || '') + '</td>' +
+              '<td data-label="Priority"><span class="badge ' + prioClass + '">' + (t.priority || '') + '</span></td>' +
+              '<td data-label="Status"><span class="chip">' + (t.status || '') + '</span></td>' +
+              '<td data-label="Assigned To">' + (t.assigned_to || '') + '</td>' +
+              '<td data-label="Action" style="text-align: right;"><button class="btn-danger" onclick="deleteTicket(\'' + t.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">check</span></button></td>' +
+              '</tr>';
+          }).join('');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function handleCreateTicket(e) {
+      e.preventDefault();
+      const payload = {
+        title: document.getElementById('ticket-title').value.trim(),
+        device_id: document.getElementById('ticket-device').value.trim(),
+        priority: document.getElementById('ticket-priority').value,
+        assigned_to: document.getElementById('ticket-assignee').value.trim(),
+        status: document.getElementById('ticket-status').value,
+        department: 'Operations'
+      };
+      try {
+        const res = await fetch('/admin/api/resources/tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          closeModal('modal-ticket');
+          document.getElementById('form-add-ticket').reset();
+          await fetchTickets();
+          showToast('Ticket created and assigned');
+        }
+      } catch (e) {
+        alert('Failed to save ticket: ' + e.message);
+      }
+    }
+
+    async function deleteTicket(id) {
+      try {
+        const res = await fetch('/admin/api/resources/tickets/' + id, { method: 'DELETE' });
+        if (res.ok) {
+          await fetchTickets();
+          showToast('Ticket resolved and closed');
+        }
+      } catch (e) {}
+    }
+
+    async function fetchFirmware() {
+      try {
+        const res = await fetch('/admin/api/resources/firmware');
+        if (res.ok) {
+          const data = await res.json();
+          const items = data.data || [];
+          const tbody = document.getElementById('firmware-table-body');
+          if (items.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No firmware releases deployed yet.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = items.map(f => {
+            const chClass = f.channel === 'stable' ? 'badge-stable' : 'badge-beta';
+            return '<tr>' +
+              '<td data-label="Version" style="font-family: monospace; font-weight: 700; color: var(--primary);">' + (f.version || '') + '</td>' +
+              '<td data-label="Hardware Target">' + (f.hardware_target || '') + '</td>' +
+              '<td data-label="Channel"><span class="badge ' + chClass + '">' + (f.channel || '') + '</span></td>' +
+              '<td data-label="Rollout %">' + (f.rollout_pct || 0) + '%</td>' +
+              '<td data-label="Active">' + (f.is_active ? '✅ Active' : '⏸ Paused') + '</td>' +
+              '<td data-label="Action" style="text-align: right;"><button class="btn-danger" onclick="deleteFirmware(\'' + f.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</span></button></td>' +
+              '</tr>';
+          }).join('');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function handleCreateFirmware(e) {
+      e.preventDefault();
+      const payload = {
+        version: document.getElementById('fw-version').value.trim(),
+        hardware_target: document.getElementById('fw-target').value.trim(),
+        channel: document.getElementById('fw-channel').value,
+        rollout_pct: parseInt(document.getElementById('fw-rollout').value) || 50,
+        is_active: true
+      };
+      try {
+        const res = await fetch('/admin/api/resources/firmware', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          closeModal('modal-firmware');
+          document.getElementById('form-add-firmware').reset();
+          await fetchFirmware();
+          showToast('Firmware release queued for OTA broadcast');
+        }
+      } catch (e) {
+        alert('Failed to deploy firmware: ' + e.message);
+      }
+    }
+
+    async function deleteFirmware(id) {
+      if (!confirm('Deprecate and delete firmware build #' + id + '?')) return;
+      try {
+        const res = await fetch('/admin/api/resources/firmware/' + id, { method: 'DELETE' });
+        if (res.ok) {
+          await fetchFirmware();
+          showToast('Firmware build removed');
+        }
+      } catch (e) {}
+    }
+
     async function fetchOperators() {
       try {
         const res = await fetch('/admin/api/resources/users');
@@ -433,10 +852,10 @@
           }
           tbody.innerHTML = items.map(u => {
             return '<tr>' +
-              '<td data-label="Full Name" style="font-weight: 600;">' + u.name + '</td>' +
-              '<td data-label="Email">' + u.email + '</td>' +
-              '<td data-label="Role"><span class="chip">' + u.role + '</span></td>' +
-              '<td data-label="Department">' + u.department + '</td>' +
+              '<td data-label="Full Name" style="font-weight: 600;">' + (u.name || '') + '</td>' +
+              '<td data-label="Email">' + (u.email || '') + '</td>' +
+              '<td data-label="Role"><span class="chip">' + (u.role || '') + '</span></td>' +
+              '<td data-label="Department">' + (u.department || '') + '</td>' +
               '<td data-label="Actions" style="text-align: right;"><button class="btn-danger" onclick="deleteOperator(\'' + u.id + '\')"><span class="material-icons" style="font-size: 14px; vertical-align: middle;">delete</span></button></td>' +
               '</tr>';
           }).join('');

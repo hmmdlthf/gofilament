@@ -72,7 +72,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class FilamentApiClient {
-  final String baseUrl;
+  String baseUrl;
   String? activeTenant;
 
   FilamentApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl();
@@ -80,7 +80,11 @@ class FilamentApiClient {
   static String _defaultBaseUrl() {
     if (kIsWeb) {
       final origin = Uri.base.origin;
-      return '$origin/admin';
+      if (Uri.base.port == 8081 || Uri.base.port == 8080) {
+        return '$origin/admin';
+      }
+      final host = Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      return 'http://$host:8081/admin';
     }
     return '%s';
   }
@@ -278,6 +282,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   bool isLoading = true;
   int _currentIndex = 0;
   String? selectedResourceSlug;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -286,7 +291,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   Future<void> loadSchema() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
     try {
       final s = await api.fetchSchema();
       setState(() {
@@ -301,7 +309,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
         isLoading = false;
       });
     } catch (e) {
-      setState(() => isLoading = false);
+      debugPrint('Failed to load schema from ${api.baseUrl}: $e');
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
     }
   }
 
@@ -310,6 +322,75 @@ class _AdminShellPageState extends State<AdminShellPage> {
     if (isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (schema == null) {
+      final urlCtrl = TextEditingController(text: api.baseUrl);
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.cloud_off, size: 48, color: Colors.amber),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Backend Connection Required',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Could not connect to GoFilament backend at:\n${api.baseUrl}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                      if (errorMessage != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 11, color: Colors.redAccent),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: urlCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'GoFilament API URL',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Connect to Backend'),
+                        onPressed: () {
+                          api.baseUrl = urlCtrl.text.trim();
+                          loadSchema();
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
       );
     }
 
@@ -464,12 +545,47 @@ class _AdminShellPageState extends State<AdminShellPage> {
     );
   }
 
-  // --- Mobile Resource Feed with Swipe-to-Delete and Pull-to-Refresh ---
+  // --- Mobile Resource Feed with Horizontal Resource Chips Selector ---
   Widget _buildMobileResourceFeed(List<dynamic> resources) {
-    if (selectedResourceSlug == null) {
-      return const Center(child: Text('Select an entity'));
+    if (resources.isEmpty) {
+      return const Center(child: Text('No resources available. Check server connection.'));
     }
-    return ResourceRecordList(api: api, slug: selectedResourceSlug!);
+    return Column(
+      children: [
+        // Horizontal scrollable resource pill selector
+        Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+          ),
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: resources.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final r = resources[i];
+              final slug = r['slug'] as String;
+              final name = (r['model_name'] ?? slug) as String;
+              final isSel = slug == selectedResourceSlug;
+              return ChoiceChip(
+                label: Text(name),
+                selected: isSel,
+                onSelected: (val) {
+                  if (val) setState(() => selectedResourceSlug = slug);
+                },
+              );
+            },
+          ),
+        ),
+        Expanded(
+          child: selectedResourceSlug == null
+              ? const Center(child: Text('Select a resource above'))
+              : ResourceRecordList(api: api, slug: selectedResourceSlug!),
+        ),
+      ],
+    );
   }
 
   // --- Desktop Views ---

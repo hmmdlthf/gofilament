@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class FilamentApiClient {
-  final String baseUrl;
+  String baseUrl;
   String? activeTenant;
 
   FilamentApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl();
@@ -11,7 +11,14 @@ class FilamentApiClient {
   static String _defaultBaseUrl() {
     if (kIsWeb) {
       final origin = Uri.base.origin;
-      return '$origin/admin';
+      // If served directly by the Go backend (e.g. port 8081 or 8080)
+      if (Uri.base.port == 8081 || Uri.base.port == 8080) {
+        return '$origin/admin';
+      }
+      // If launched via Flutter web dev server (e.g. flutter run -d chrome on random port),
+      // automatically target the Go backend on localhost:8081!
+      final host = Uri.base.host.isNotEmpty ? Uri.base.host : 'localhost';
+      return 'http://$host:8081/admin';
     }
     return 'http://localhost:8081/admin';
   }

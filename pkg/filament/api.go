@@ -13,12 +13,35 @@ import (
 	"github.com/golaravel/golaravel/pkg/router"
 )
 
+func setCorsHeaders(c *gcontext.Context) {
+	origin := c.Header("Origin")
+	if origin == "" {
+		origin = "*"
+	}
+	c.SetHeader("Access-Control-Allow-Origin", origin)
+	c.SetHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+	c.SetHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Tenant-ID, Accept, Origin, X-Requested-With")
+	c.SetHeader("Access-Control-Allow-Credentials", "true")
+}
+
 // RegisterAPIRoutes mounts the standardized Panel JSON REST API.
 func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	apiPrefix := p.path + "/api"
 
+	corsPreflight := func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		return c.NoContent(http.StatusNoContent)
+	}
+
+	// Register CORS preflight handlers
+	r.OPTIONS(apiPrefix+"/schema", corsPreflight)
+	r.OPTIONS(apiPrefix+"/global-search", corsPreflight)
+	r.OPTIONS(apiPrefix+"/tenants", corsPreflight)
+	r.OPTIONS(apiPrefix+"/notifications", corsPreflight)
+
 	// 1. Panel Schema Endpoint
 	r.GET(apiPrefix+"/schema", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -425,8 +448,21 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 	slug := res.Slug()
 	resPath := fmt.Sprintf("%s/resources/%s", apiPrefix, slug)
 
+	corsPreflight := func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		return c.NoContent(http.StatusNoContent)
+	}
+	r.OPTIONS(resPath, corsPreflight)
+	r.OPTIONS(resPath+"/:id", corsPreflight)
+	r.OPTIONS(resPath+"/:id/cell", corsPreflight)
+	r.OPTIONS(resPath+"/export", corsPreflight)
+	r.OPTIONS(resPath+"/import", corsPreflight)
+	r.OPTIONS(resPath+"/bulk", corsPreflight)
+	r.OPTIONS(resPath+"/reorder", corsPreflight)
+
 	// GET /admin/api/resources/:slug - List
 	r.GET(resPath, func(c *gcontext.Context) error {
+		setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -686,6 +722,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// GET /admin/api/resources/:slug/:id - Find
 	r.GET(resPath+"/:id", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -709,6 +746,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// POST /admin/api/resources/:slug - Create
 	r.POST(resPath, func(c *gcontext.Context) error {
+		setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -733,6 +771,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// PUT /admin/api/resources/:slug/:id - Update
 	updateHandler := func(c *gcontext.Context) error {
+		setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -759,6 +798,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// DELETE /admin/api/resources/:slug/:id - Delete
 	deleteHandler := func(c *gcontext.Context) error {
+		setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err

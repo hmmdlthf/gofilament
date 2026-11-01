@@ -39,6 +39,9 @@ func createTestFlutterAdminApp(t *testing.T) *golaravel.Engine {
 		})
 
 	adminPanel.Resource(buildDeviceResource())
+	adminPanel.Resource(buildTelemetryResource())
+	adminPanel.Resource(buildTicketResource())
+	adminPanel.Resource(buildFirmwareResource())
 	adminPanel.Resource(buildFleetUserResource())
 
 	if err := adminPanel.Register(app); err != nil {
@@ -91,8 +94,13 @@ func TestFlutterAdmin_JSONAPISchema(t *testing.T) {
 	}
 
 	resources, ok := schema["resources"].([]any)
-	if !ok || len(resources) < 2 {
-		t.Fatalf("expected at least 2 resources in schema, got %v", schema["resources"])
+	if !ok || len(resources) < 5 {
+		t.Fatalf("expected 5 resources in schema (devices, telemetry, tickets, firmware, users), got %v", schema["resources"])
+	}
+
+	// Verify CORS headers are present on schema response
+	if w.Header().Get("Access-Control-Allow-Origin") == "" {
+		t.Errorf("expected Access-Control-Allow-Origin header on schema response")
 	}
 }
 
@@ -165,5 +173,29 @@ func TestFlutterAdmin_ResourcesJSONAPI(t *testing.T) {
 	app.ServeHTTP(wDel, reqDel)
 	if wDel.Code != http.StatusOK {
 		t.Fatalf("expected status 200 on delete, got %d", wDel.Code)
+	}
+
+	// 7. Test Telemetry, Tickets, and Firmware endpoints
+	for _, slug := range []string{"telemetry", "tickets", "firmware"} {
+		reqSlug := httptest.NewRequest("GET", "/admin/api/resources/"+slug, nil)
+		wSlug := httptest.NewRecorder()
+		app.ServeHTTP(wSlug, reqSlug)
+		if wSlug.Code != http.StatusOK {
+			t.Fatalf("expected status 200 for %s, got %d", slug, wSlug.Code)
+		}
+		if wSlug.Header().Get("Access-Control-Allow-Origin") == "" {
+			t.Errorf("expected Access-Control-Allow-Origin on %s endpoint", slug)
+		}
+	}
+
+	// 8. Test OPTIONS preflight request
+	reqOptions := httptest.NewRequest("OPTIONS", "/admin/api/resources/devices", nil)
+	wOptions := httptest.NewRecorder()
+	app.ServeHTTP(wOptions, reqOptions)
+	if wOptions.Code != http.StatusNoContent && wOptions.Code != http.StatusOK {
+		t.Fatalf("expected 204 or 200 on OPTIONS preflight, got %d", wOptions.Code)
+	}
+	if wOptions.Header().Get("Access-Control-Allow-Origin") == "" {
+		t.Errorf("expected Access-Control-Allow-Origin on preflight response")
 	}
 }
