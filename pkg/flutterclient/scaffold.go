@@ -3170,6 +3170,24 @@ class _AdminShellPageState extends State<AdminShellPage> {
     loadSchema();
   }
 
+  IconData _iconForResourceSlug(String slug, {bool isSelected = false}) {
+    final s = slug.toLowerCase();
+    if (s.contains('partner') && s.contains('branch')) return isSelected ? Icons.storefront : Icons.storefront_outlined;
+    if (s.contains('customer') && s.contains('branch')) return isSelected ? Icons.store : Icons.store_outlined;
+    if (s.contains('partner')) return isSelected ? Icons.local_gas_station : Icons.local_gas_station_outlined;
+    if (s.contains('customer')) return isSelected ? Icons.business : Icons.business_outlined;
+    if (s.contains('vehicle')) return isSelected ? Icons.local_shipping : Icons.local_shipping_outlined;
+    if (s.contains('driver')) return isSelected ? Icons.badge : Icons.badge_outlined;
+    if (s.contains('nfc') || s.contains('chip')) return isSelected ? Icons.nfc : Icons.nfc_outlined;
+    if (s.contains('device')) return isSelected ? Icons.router : Icons.router_outlined;
+    if (s.contains('telemetry')) return isSelected ? Icons.sensors : Icons.sensors_outlined;
+    if (s.contains('ticket')) return isSelected ? Icons.confirmation_number : Icons.confirmation_number_outlined;
+    if (s.contains('firmware')) return isSelected ? Icons.system_update_alt : Icons.system_update_alt_outlined;
+    if (s.contains('admin') || s.contains('user')) return isSelected ? Icons.people : Icons.people_outline;
+    if (s.contains('transaction') || s.contains('wallet')) return isSelected ? Icons.account_balance_wallet : Icons.account_balance_wallet_outlined;
+    return isSelected ? Icons.table_chart : Icons.table_chart_outlined;
+  }
+
   void setAccountNavPlacement(String placement) {
     setState(() {
       _accountNavPlacement = placement;
@@ -3762,47 +3780,83 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     icon: Icons.dashboard_outlined,
                     selectedIcon: Icons.dashboard,
                     label: AppLocale.t(widget.currentLocale, 'dashboard'),
-                    isSelected: activeMobileIndex == 0,
+                    isSelected: _currentIndex == 0,
                     onTap: () => setState(() => _currentIndex = 0),
                   ),
-                  _buildPartialNavItem(
-                    icon: Icons.layers_outlined,
-                    selectedIcon: Icons.layers,
-                    label: AppLocale.t(widget.currentLocale, 'entities'),
-                    isSelected: activeMobileIndex == 1,
-                    onTap: () => setState(() => _currentIndex = 1),
-                  ),
-                  if (!isHeaderPlacement)
+                  const Divider(height: 16, indent: 12, endIndent: 12),
+                  for (final r in resources)
+                    _buildPartialNavItem(
+                      icon: _iconForResourceSlug((r['slug'] ?? '').toString()),
+                      selectedIcon: _iconForResourceSlug((r['slug'] ?? '').toString(), isSelected: true),
+                      label: (r['model_name'] ?? r['slug'] ?? 'Resource').toString(),
+                      isSelected: _currentIndex == 1 && selectedResourceSlug == r['slug'],
+                      onTap: () => setState(() {
+                        _currentIndex = 1;
+                        selectedResourceSlug = r['slug'];
+                      }),
+                    ),
+                  if (!isHeaderPlacement) ...[
+                    const Divider(height: 16, indent: 12, endIndent: 12),
                     _buildPartialNavItem(
                       icon: Icons.account_circle_outlined,
                       selectedIcon: Icons.account_circle,
                       label: AppLocale.t(widget.currentLocale, 'account'),
-                      isSelected: activeMobileIndex == 2,
+                      isSelected: _currentIndex == 2,
                       onTap: () => setState(() => _currentIndex = 2),
                     ),
+                  ],
                 ] else ...[
                   _buildHorizontalNavItem(
                     icon: Icons.dashboard_outlined,
                     selectedIcon: Icons.dashboard,
                     label: AppLocale.t(widget.currentLocale, 'dashboard'),
-                    isSelected: activeMobileIndex == 0,
+                    isSelected: _currentIndex == 0,
                     onTap: () => setState(() => _currentIndex = 0),
                   ),
-                  _buildHorizontalNavItem(
-                    icon: Icons.layers_outlined,
-                    selectedIcon: Icons.layers,
-                    label: AppLocale.t(widget.currentLocale, 'entities'),
-                    isSelected: activeMobileIndex == 1,
-                    onTap: () => setState(() => _currentIndex = 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                    child: Text(
+                      'RESOURCES',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                      ),
+                    ),
                   ),
-                  if (!isHeaderPlacement)
+                  for (final r in resources)
+                    _buildHorizontalNavItem(
+                      icon: _iconForResourceSlug((r['slug'] ?? '').toString()),
+                      selectedIcon: _iconForResourceSlug((r['slug'] ?? '').toString(), isSelected: true),
+                      label: (r['model_name'] ?? r['slug'] ?? 'Resource').toString(),
+                      isSelected: _currentIndex == 1 && selectedResourceSlug == r['slug'],
+                      onTap: () => setState(() {
+                        _currentIndex = 1;
+                        selectedResourceSlug = r['slug'];
+                      }),
+                    ),
+                  if (!isHeaderPlacement) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                      child: Text(
+                        'PREFERENCES',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                          color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                        ),
+                      ),
+                    ),
                     _buildHorizontalNavItem(
                       icon: Icons.account_circle_outlined,
                       selectedIcon: Icons.account_circle,
                       label: AppLocale.t(widget.currentLocale, 'account'),
-                      isSelected: activeMobileIndex == 2,
+                      isSelected: _currentIndex == 2,
                       onTap: () => setState(() => _currentIndex = 2),
                     ),
+                  ],
                 ],
               ],
             ),
@@ -4095,37 +4149,16 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   Widget _buildDesktopResources(List<dynamic> resources) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 240,
-          child: ListView.builder(
-            itemCount: resources.length,
-            itemBuilder: (context, i) {
-              final r = resources[i];
-              final isSel = r['slug'] == selectedResourceSlug;
-              return ListTile(
-                selected: isSel,
-                leading: const Icon(Icons.table_chart),
-                title: Text(r['model_name']),
-                onTap: () => setState(() => selectedResourceSlug = r['slug']),
-              );
-            },
-          ),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(
-          child: selectedResourceSlug == null
-              ? const Center(child: Text('Select a resource'))
-              : Builder(builder: (_) {
-                  final cur = resources.firstWhere((r) => r['slug'] == selectedResourceSlug, orElse: () => null);
-                  final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
-                  final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
-                  return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters);
-                }),
-        ),
-      ],
-    );
+    if (selectedResourceSlug == null && resources.isNotEmpty) {
+      selectedResourceSlug = resources.first['slug'];
+    }
+    if (selectedResourceSlug == null) {
+      return const Center(child: Text('Select a resource from the menu'));
+    }
+    final cur = resources.firstWhere((r) => r['slug'] == selectedResourceSlug, orElse: () => null);
+    final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
+    final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
+    return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters);
   }
 
   Widget _buildMobileAccountHub() {
