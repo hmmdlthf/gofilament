@@ -663,17 +663,17 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 
 // Mount attaches all routes for this panel into the given GoLaravel router.
 func (p *Panel) Mount(r *router.Router) {
-	// 1. Static Assets
-	assets.RegisterRoutes(r, p.path+"/assets")
-
-	// 2. Standardized Panel REST API (powers Flutter, mobile apps, and headless integrations)
+	// 1. Standardized Panel REST API (powers Flutter, mobile apps, and headless integrations)
 	p.RegisterAPIRoutes(r)
 
-	// 3. If Flutter engine is selected, mount the Flutter Web application
+	// 2. If Flutter engine is selected, mount the Flutter Web application (handles assets & SPA)
 	if p.IsFlutter() {
 		p.mountFlutter(r)
 		return
 	}
+
+	// 3. Static Assets for Web engine
+	assets.RegisterRoutes(r, p.path+"/assets")
 
 	// Global Search Route
 	if p.hasGlobalSearch {
