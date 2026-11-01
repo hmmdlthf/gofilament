@@ -245,6 +245,68 @@ class FilamentApiClient {
     } catch (_) {}
     return {};
   }
+
+  Future<Map<String, dynamic>> fetchRelationRecords(
+    String parentSlug,
+    String parentId,
+    String relSlug, {
+    int page = 1,
+    String search = '',
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/resources/$parentSlug/$parentId/relations/$relSlug').replace(
+      queryParameters: {
+        'page': page.toString(),
+        if (search.isNotEmpty) 'search': search,
+      },
+    );
+    final res = await http.get(uri, headers: _headers);
+    if (res.statusCode == 200) {
+      return json.decode(res.body);
+    }
+    throw Exception('Failed to load relation records: ${res.statusCode}');
+  }
+
+  Future<bool> createRelationRecord(
+    String parentSlug,
+    String parentId,
+    String relSlug,
+    Map<String, dynamic> data,
+  ) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/resources/$parentSlug/$parentId/relations/$relSlug'),
+      headers: _headers,
+      body: json.encode(data),
+    );
+    return res.statusCode == 200 || res.statusCode == 201;
+  }
+
+  Future<bool> updateRelationRecord(
+    String parentSlug,
+    String parentId,
+    String relSlug,
+    String childId,
+    Map<String, dynamic> data,
+  ) async {
+    final res = await http.put(
+      Uri.parse('$baseUrl/api/resources/$parentSlug/$parentId/relations/$relSlug/$childId'),
+      headers: _headers,
+      body: json.encode(data),
+    );
+    return res.statusCode == 200;
+  }
+
+  Future<bool> deleteRelationRecord(
+    String parentSlug,
+    String parentId,
+    String relSlug,
+    String childId,
+  ) async {
+    final res = await http.delete(
+      Uri.parse('$baseUrl/api/resources/$parentSlug/$parentId/relations/$relSlug/$childId'),
+      headers: _headers,
+    );
+    return res.statusCode == 200;
+  }
 }
 `, panelPath, panelPath, apiBaseURL, apiBaseURL)
 	if err := os.WriteFile(filepath.Join(libDir, "api.dart"), []byte(apiDart), 0644); err != nil {
@@ -294,10 +356,1886 @@ class ResponsiveLayout extends StatelessWidget {
 		return err
 	}
 
-	// 5. lib/main.dart - Mobile-First Responsive Flutter Admin Application
+	// 5. lib/relation_record_screen.dart - Nested Relation Managers Screen
+	relationRecordDart := `import 'package:flutter/material.dart';
+import 'api.dart';
+
+class RelationRecordScreen extends StatefulWidget {
+  final FilamentApiClient api;
+  final String parentSlug;
+  final String parentId;
+  final String parentTitle;
+  final String relSlug;
+  final String relTitle;
+
+  const RelationRecordScreen({
+    super.key,
+    required this.api,
+    required this.parentSlug,
+    required this.parentId,
+    required this.parentTitle,
+    required this.relSlug,
+    required this.relTitle,
+  });
+
+  @override
+  State<RelationRecordScreen> createState() => _RelationRecordScreenState();
+}
+
+class _RelationRecordScreenState extends State<RelationRecordScreen> {
+  List<dynamic> records = [];
+  bool isLoading = true;
+  String search = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+  final Map<String, Set<String>> activeFilters = {};
+  bool _showRelations = true;
+  final ScrollController _horizontalScrollController = ScrollController();
+  final ScrollController _verticalScrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    loadRecords();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _horizontalScrollController.dispose();
+    _verticalScrollController.dispose();
+    super.dispose();
+  }
+
+  Future<void> loadRecords() async {
+    setState(() => isLoading = true);
+    try {
+      final res = await widget.api.fetchRelationRecords(
+        widget.parentSlug,
+        widget.parentId,
+        widget.relSlug,
+        search: search,
+      );
+      if (mounted) {
+        setState(() {
+          records = (res['data'] as List<dynamic>?) ?? [];
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load ${widget.relTitle}: $e'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  String _getChildId(dynamic item) {
+    if (item == null) return '';
+    return (item['login'] ??
+            item['id'] ??
+            item['ID'] ??
+            item['chip_serial'] ??
+            item['plate_number'] ??
+            '')
+        .toString();
+  }
+
+  String _getChildTitle(dynamic item) {
+    if (item == null) return 'Record';
+    return (item['name'] ??
+            item['Name'] ??
+            item['login'] ??
+            item['plate_number'] ??
+            item['chip_serial'] ??
+            '#${_getChildId(item)}')
+        .toString();
+  }
+
+  void _showAddEditSheet([dynamic item]) {
+    final isEdit = item != null;
+    final childId = isEdit ? _getChildId(item) : '';
+
+    if (widget.relSlug == 'admins') {
+      _showAdminSheet(isEdit, childId, item);
+    } else if (widget.relSlug == 'branches') {
+      _showBranchSheet(isEdit, childId, item);
+    } else if (widget.relSlug == 'vehicles') {
+      _showVehicleSheet(isEdit, childId, item);
+    } else {
+      _showGenericSheet(isEdit, childId, item);
+    }
+  }
+
+  // --- 1. Admins Add / Edit Sheet ---
+  void _showAdminSheet(bool isEdit, String childId, dynamic item) {
+    final loginCtrl = TextEditingController(text: isEdit ? (item['login'] ?? '') : '');
+    final nameCtrl = TextEditingController(text: isEdit ? (item['name'] ?? '') : '');
+    final emailCtrl = TextEditingController(text: isEdit ? (item['email'] ?? '') : '');
+    final passCtrl = TextEditingController();
+    String active = isEdit ? (item['active'] ?? 'Y').toString() : 'Y';
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isEdit ? 'Edit Admin: $childId' : 'Add New Admin',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                Text(
+                  'Associated with ${widget.parentTitle} (#${widget.parentId})',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: loginCtrl,
+                  enabled: !isEdit,
+                  decoration: InputDecoration(
+                    labelText: 'Username / Login',
+                    prefixIcon: const Icon(Icons.person_outline),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                    helperText: isEdit ? 'Username cannot be modified' : null,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: const Icon(Icons.badge_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email Address',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: isEdit ? 'Change Password (leave empty to keep)' : 'Password',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                    hintText: isEdit ? 'Leave blank to preserve password' : 'e.g. partner123',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: active,
+                  decoration: InputDecoration(
+                    labelText: 'Account Status',
+                    prefixIcon: const Icon(Icons.toggle_on_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Y', child: Text('Active (Can Login)')),
+                    DropdownMenuItem(value: 'N', child: Text('Suspended / Inactive')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setSheetState(() => active = val);
+                  },
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  icon: isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Icon(isEdit ? Icons.save : Icons.add),
+                  label: Text(isEdit ? 'Save Changes' : 'Create Admin Account'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.amber.shade700,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (!isEdit && loginCtrl.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Username is required')),
+                            );
+                            return;
+                          }
+                          setSheetState(() => isSaving = true);
+                          final payload = <String, dynamic>{
+                            'login': loginCtrl.text.trim(),
+                            'name': nameCtrl.text.trim(),
+                            'email': emailCtrl.text.trim(),
+                            'active': active,
+                          };
+                          if (passCtrl.text.isNotEmpty) {
+                            payload['pswd'] = passCtrl.text;
+                          }
+
+                          bool ok = false;
+                          if (isEdit) {
+                            ok = await widget.api.updateRelationRecord(
+                              widget.parentSlug,
+                              widget.parentId,
+                              widget.relSlug,
+                              childId,
+                              payload,
+                            );
+                          } else {
+                            ok = await widget.api.createRelationRecord(
+                              widget.parentSlug,
+                              widget.parentId,
+                              widget.relSlug,
+                              payload,
+                            );
+                          }
+
+                          if (!mounted) return;
+                          Navigator.pop(ctx);
+                          if (ok) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(isEdit ? 'Admin updated successfully' : 'Admin created successfully'),
+                                backgroundColor: const Color(0xFF10B981),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            loadRecords();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Operation failed. Please try again.'), backgroundColor: Colors.redAccent),
+                            );
+                          }
+                        },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- 2. Branches Add / Edit Sheet ---
+  void _showBranchSheet(bool isEdit, String childId, dynamic item) {
+    final nameCtrl = TextEditingController(text: isEdit ? (item['name'] ?? '') : '');
+    final cityCtrl = TextEditingController(text: isEdit ? (item['city'] ?? '') : '');
+    final latCtrl = TextEditingController(text: isEdit && item['lat'] != null ? '${item['lat']}' : '');
+    final lngCtrl = TextEditingController(text: isEdit && item['lng'] != null ? '${item['lng']}' : '');
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isEdit ? 'Edit Branch: $childId' : 'Add New Branch',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                Text(
+                  'Branch of ${widget.parentTitle} (#${widget.parentId})',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Branch Name',
+                    prefixIcon: const Icon(Icons.storefront_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: cityCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'City / Region',
+                    prefixIcon: const Icon(Icons.location_city_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: latCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'Latitude',
+                          prefixIcon: const Icon(Icons.map_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: lngCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          labelText: 'Longitude',
+                          prefixIcon: const Icon(Icons.navigation_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  icon: isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Icon(isEdit ? Icons.save : Icons.add),
+                  label: Text(isEdit ? 'Save Changes' : 'Create Branch'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.amber.shade700,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (nameCtrl.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Branch name is required')),
+                            );
+                            return;
+                          }
+                          setSheetState(() => isSaving = true);
+                          final payload = <String, dynamic>{
+                            'name': nameCtrl.text.trim(),
+                            'city': cityCtrl.text.trim(),
+                            if (latCtrl.text.isNotEmpty) 'lat': latCtrl.text.trim(),
+                            if (lngCtrl.text.isNotEmpty) 'lng': lngCtrl.text.trim(),
+                          };
+
+                          bool ok = false;
+                          if (isEdit) {
+                            ok = await widget.api.updateRelationRecord(
+                              widget.parentSlug,
+                              widget.parentId,
+                              widget.relSlug,
+                              childId,
+                              payload,
+                            );
+                          } else {
+                            ok = await widget.api.createRelationRecord(
+                              widget.parentSlug,
+                              widget.parentId,
+                              widget.relSlug,
+                              payload,
+                            );
+                          }
+
+                          if (!mounted) return;
+                          Navigator.pop(ctx);
+                          if (ok) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(isEdit ? 'Branch updated successfully' : 'Branch created successfully'),
+                                backgroundColor: const Color(0xFF10B981),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            loadRecords();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Operation failed. Please try again.'), backgroundColor: Colors.redAccent),
+                            );
+                          }
+                        },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- 3. Vehicles Add / Edit Sheet ---
+  void _showVehicleSheet(bool isEdit, String childId, dynamic item) {
+    final plateCtrl = TextEditingController(text: isEdit ? (item['plate_number'] ?? '') : '');
+    final odoCtrl = TextEditingController(text: isEdit ? '${item['odometer'] ?? '0'}' : '0');
+    String fuelTypeId = isEdit ? '${item['fuel_type_id'] ?? '1'}' : '1';
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isEdit ? 'Edit Vehicle: $childId' : 'Add New Vehicle',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    ),
+                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  ],
+                ),
+                Text(
+                  'Assigned to Fleet: ${widget.parentTitle} (#${widget.parentId})',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: plateCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'License Plate Number',
+                    prefixIcon: const Icon(Icons.pin_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                    hintText: 'e.g. ABC 1234',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: odoCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Odometer (km)',
+                    prefixIcon: const Icon(Icons.speed_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: ['1', '2', '3'].contains(fuelTypeId) ? fuelTypeId : '1',
+                  decoration: InputDecoration(
+                    labelText: 'Authorized Fuel Grade',
+                    prefixIcon: const Icon(Icons.local_gas_station_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: '1', child: Text('Gasoline 91 (Green)')),
+                    DropdownMenuItem(value: '2', child: Text('Gasoline 95 (Red)')),
+                    DropdownMenuItem(value: '3', child: Text('Diesel')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setSheetState(() => fuelTypeId = val);
+                  },
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  icon: isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Icon(isEdit ? Icons.save : Icons.add),
+                  label: Text(isEdit ? 'Save Changes' : 'Register Vehicle'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.amber.shade700,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (plateCtrl.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Plate number is required')),
+                            );
+                            return;
+                          }
+                          setSheetState(() => isSaving = true);
+                          final payload = <String, dynamic>{
+                            'plate_number': plateCtrl.text.trim(),
+                            'odometer': odoCtrl.text.trim(),
+                            'fuel_type_id': fuelTypeId,
+                          };
+
+                          bool ok = false;
+                          if (isEdit) {
+                            ok = await widget.api.updateRelationRecord(
+                              widget.parentSlug,
+                              widget.parentId,
+                              widget.relSlug,
+                              childId,
+                              payload,
+                            );
+                          } else {
+                            ok = await widget.api.createRelationRecord(
+                              widget.parentSlug,
+                              widget.parentId,
+                              widget.relSlug,
+                              payload,
+                            );
+                          }
+
+                          if (!mounted) return;
+                          Navigator.pop(ctx);
+                          if (ok) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(isEdit ? 'Vehicle updated successfully' : 'Vehicle registered successfully'),
+                                backgroundColor: const Color(0xFF10B981),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            loadRecords();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Operation failed. Please try again.'), backgroundColor: Colors.redAccent),
+                            );
+                          }
+                        },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- 4. Generic Add / Edit Sheet ---
+  void _showGenericSheet(bool isEdit, String childId, dynamic item) {
+    final titleCtrl = TextEditingController(text: isEdit ? _getChildTitle(item) : '');
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isEdit ? 'Edit ${widget.relTitle}: $childId' : 'Add to ${widget.relTitle}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: titleCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Name / Value',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                icon: isSaving
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Icon(isEdit ? Icons.save : Icons.add),
+                label: Text(isEdit ? 'Save Changes' : 'Create Record'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.amber.shade700,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        setSheetState(() => isSaving = true);
+                        final payload = <String, dynamic>{'name': titleCtrl.text.trim()};
+                        bool ok = false;
+                        if (isEdit) {
+                          ok = await widget.api.updateRelationRecord(
+                            widget.parentSlug,
+                            widget.parentId,
+                            widget.relSlug,
+                            childId,
+                            payload,
+                          );
+                        } else {
+                          ok = await widget.api.createRelationRecord(
+                            widget.parentSlug,
+                            widget.parentId,
+                            widget.relSlug,
+                            payload,
+                          );
+                        }
+                        if (!mounted) return;
+                        Navigator.pop(ctx);
+                        if (ok) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Saved successfully'), backgroundColor: Color(0xFF10B981)),
+                          );
+                          loadRecords();
+                        }
+                      },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(String childId, String title) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Related Record?'),
+        content: Text('Are you sure you want to remove "$title" (#$childId)? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final ok = await widget.api.deleteRelationRecord(
+        widget.parentSlug,
+        widget.parentId,
+        widget.relSlug,
+        childId,
+      );
+      if (ok) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Record deleted successfully'),
+            backgroundColor: Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        loadRecords();
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to delete record'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  int get activeFilterCount {
+    int count = 0;
+    for (final s in activeFilters.values) {
+      count += s.length;
+    }
+    return count;
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      activeFilters.clear();
+    });
+  }
+
+  void _removeFilter(String key, String val) {
+    setState(() {
+      activeFilters[key]?.remove(val);
+      if (activeFilters[key]?.isEmpty ?? false) {
+        activeFilters.remove(key);
+      }
+    });
+  }
+
+  void _toggleFilter(String key, String val) {
+    setState(() {
+      if (!activeFilters.containsKey(key)) {
+        activeFilters[key] = <String>{};
+      }
+      if (activeFilters[key]!.contains(val)) {
+        activeFilters[key]!.remove(val);
+        if (activeFilters[key]!.isEmpty) {
+          activeFilters.remove(key);
+        }
+      } else {
+        activeFilters[key]!.add(val);
+      }
+    });
+  }
+
+  String _titleCase(String s) {
+    if (s.isEmpty) return s;
+    return s.split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1)).join(' ');
+  }
+
+  List<dynamic> get filteredRecords {
+    if (activeFilters.isEmpty) return records;
+    return records.where((r) {
+      if (r is! Map) return true;
+      for (final entry in activeFilters.entries) {
+        final key = entry.key;
+        final selectedVals = entry.value;
+        if (selectedVals.isEmpty) continue;
+        final rawVal = r[key] ?? r[_titleCase(key)] ?? r[key.toLowerCase()];
+        final valStr = rawVal == null ? 'None' : rawVal.toString();
+        if (!selectedVals.contains(valStr)) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+  }
+
+  Map<String, Map<String, int>> _computeFilterStats() {
+    final stats = <String, Map<String, int>>{};
+    final cols = _extractColumns();
+    for (final col in cols) {
+      final valCounts = <String, int>{};
+      for (final r in records) {
+        if (r is! Map) continue;
+        final raw = r[col] ?? r[_titleCase(col)] ?? r[col.toLowerCase()];
+        final s = raw == null || raw.toString().isEmpty ? 'None' : raw.toString();
+        valCounts[s] = (valCounts[s] ?? 0) + 1;
+      }
+      if (valCounts.length > 1 && valCounts.length <= 20) {
+        stats[col] = valCounts;
+      }
+    }
+    return stats;
+  }
+
+  void _showFilterModal(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isDesktop = MediaQuery.of(context).size.width > 900;
+    final stats = _computeFilterStats();
+
+    Widget buildFilterContent(BuildContext ctx, StateSetter setModalState) {
+      return Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+          maxWidth: isDesktop ? 600 : double.infinity,
+        ),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.tune_rounded, color: Colors.amber.shade400, size: 20),
+                    const SizedBox(width: 8),
+                    const Text('Refined Search Filters', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ],
+                ),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+              ],
+            ),
+            const Divider(height: 20),
+            if (stats.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 30),
+                child: Center(
+                  child: Text('No categorical filter options available for these records.', style: TextStyle(color: Colors.grey)),
+                ),
+              )
+            else
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: stats.entries.map((entry) {
+                    final cat = entry.key;
+                    final options = entry.value;
+                    return Theme(
+                      data: theme.copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        initiallyExpanded: true,
+                        tilePadding: EdgeInsets.zero,
+                        title: Text(
+                          _titleCase(cat.replaceAll('_', ' ')).toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                            color: Colors.amber.shade400,
+                          ),
+                        ),
+                        children: options.entries.map((opt) {
+                          final val = opt.key;
+                          final count = opt.value;
+                          final isChecked = activeFilters[cat]?.contains(val) ?? false;
+                          return CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(val, style: const TextStyle(fontSize: 13)),
+                            secondary: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white10 : Colors.black12,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            value: isChecked,
+                            onChanged: (bool? v) {
+                              setModalState(() {
+                                _toggleFilter(cat, val);
+                              });
+                              setState(() {});
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      setModalState(() {
+                        _clearAllFilters();
+                      });
+                      setState(() {});
+                    },
+                    child: const Text('Clear All'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: Colors.amber.shade600, foregroundColor: Colors.black),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Apply', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isDesktop) {
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => StatefulBuilder(
+          builder: (ctx, setModalState) => Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: buildFilterContent(ctx, setModalState),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (bottomSheetCtx) => StatefulBuilder(
+          builder: (ctx, setModalState) => buildFilterContent(ctx, setModalState),
+        ),
+      );
+    }
+  }
+
+  List<String> _extractColumns() {
+    if (records.isEmpty) return [];
+    const excluded = {
+      'id', 'ID', '_id', 'status', 'Status', 'status_text', 'active',
+      'password', 'token', 'remember_token', 'deleted_at',
+      'created_at', 'updated_at', 'createdAt', 'updatedAt',
+      'relations', 'sub_entities', 'hash', 'salt',
+    };
+    final orderedKeys = <String>[];
+    final seen = <String>{};
+    for (final candidate in ['name', 'Name', 'title', 'Title', 'login', 'plate_number', 'city', 'role', 'email']) {
+      for (final r in records) {
+        if (r is Map && r.containsKey(candidate) && !seen.contains(candidate.toLowerCase())) {
+          orderedKeys.add(candidate);
+          seen.add(candidate.toLowerCase());
+        }
+      }
+    }
+    for (final r in records) {
+      if (r is Map) {
+        for (final k in r.keys) {
+          final ks = k.toString();
+          if (!excluded.contains(ks) && !seen.contains(ks.toLowerCase())) {
+            orderedKeys.add(ks);
+            seen.add(ks.toLowerCase());
+          }
+        }
+      }
+    }
+    return orderedKeys.take(8).toList();
+  }
+
+  double _columnWidth(String col) {
+    final lower = col.toLowerCase();
+    if (lower.contains('email') || lower.contains('address') || lower.contains('url')) return 220.0;
+    if (lower.contains('description') || lower.contains('notes') || lower.contains('message')) return 260.0;
+    if (lower.contains('title') || lower.contains('name')) return 180.0;
+    if (lower.contains('date') || lower.contains('time') || lower.contains('created')) return 160.0;
+    if (lower.contains('phone') || lower.contains('mobile')) return 140.0;
+    if (lower.contains('price') || lower.contains('amount') || lower.contains('total') || lower.contains('balance')) return 130.0;
+    return 140.0;
+  }
+
+  List<Map<String, dynamic>> _getNestedRelations(String relSlug) {
+    if (relSlug == 'branches') {
+      return [
+        {'relationship': 'operators', 'title': 'Station Operators', 'icon': 'heroicon-users'},
+        {'relationship': 'fuel-prices', 'title': 'Fuel Prices', 'icon': 'heroicon-banknotes'},
+      ];
+    }
+    if (relSlug == 'vehicles') {
+      return [
+        {'relationship': 'drivers', 'title': 'Assigned Drivers', 'icon': 'heroicon-users'},
+        {'relationship': 'chips', 'title': 'NFC Tag / Chips', 'icon': 'heroicon-cpu-chip'},
+      ];
+    }
+    if (relSlug == 'customers' || relSlug == 'partners') {
+      return [
+        {'relationship': 'admins', 'title': 'Admins', 'icon': 'heroicon-users'},
+        {'relationship': 'branches', 'title': 'Branches', 'icon': 'heroicon-building-office'},
+        {'relationship': 'vehicles', 'title': 'Vehicles', 'icon': 'heroicon-truck'},
+      ];
+    }
+    if (relSlug == 'nfc-chip-batches') {
+      return [
+        {'relationship': 'chips', 'title': 'NFC Chips', 'icon': 'heroicon-cpu-chip'},
+      ];
+    }
+    return [];
+  }
+
+  void _openRelation(BuildContext context, String id, String name, String nextSlug, String nextTitle) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RelationRecordScreen(
+          api: widget.api,
+          parentSlug: widget.relSlug,
+          parentId: id,
+          parentTitle: name,
+          relSlug: nextSlug,
+          relTitle: nextTitle,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableCell(BuildContext context, String col, dynamic item, bool isDark, IconData defaultIcon) {
+    final val = item[col] ?? item[_titleCase(col)] ?? item[col.toLowerCase()];
+    if (val == null) {
+      return Text('-', style: TextStyle(color: Colors.grey.shade600, fontSize: 13));
+    }
+    final str = val.toString();
+    return Text(
+      str,
+      style: TextStyle(fontSize: 13, color: isDark ? Colors.grey.shade300 : Colors.grey.shade800),
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  Widget _buildRecordTable(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final relations = _getNestedRelations(widget.relSlug);
+    final hasRelations = relations.isNotEmpty;
+    final columns = _extractColumns();
+    final items = filteredRecords;
+
+    double totalColsWidth = 70.0 + 130.0 + 140.0 + 80.0; // ID + STATUS + ACTIONS + clearance
+    for (final col in columns) {
+      totalColsWidth += _columnWidth(col);
+    }
+
+    return Scrollbar(
+      controller: _verticalScrollController,
+      thumbVisibility: true,
+      trackVisibility: true,
+      interactive: true,
+      thickness: 10,
+      radius: const Radius.circular(5),
+      notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical,
+      child: SingleChildScrollView(
+        controller: _verticalScrollController,
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1600),
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+                ),
+              ),
+              color: theme.colorScheme.surface,
+              clipBehavior: Clip.antiAlias,
+              child: LayoutBuilder(
+                builder: (ctx, constraints) {
+                  final tableWidth = constraints.maxWidth > totalColsWidth ? constraints.maxWidth : totalColsWidth;
+                  return Scrollbar(
+                    controller: _horizontalScrollController,
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    interactive: true,
+                    thickness: 10,
+                    radius: const Radius.circular(5),
+                    notificationPredicate: (notif) => notif.metrics.axis == Axis.horizontal,
+                    child: SingleChildScrollView(
+                      controller: _horizontalScrollController,
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: tableWidth,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Table Header
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 70,
+                                    child: Text(
+                                      'ID',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                    ),
+                                  ),
+                                  for (final col in columns)
+                                    SizedBox(
+                                      width: _columnWidth(col),
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(right: 12),
+                                        child: Text(
+                                          _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(
+                                    width: 130,
+                                    child: Text(
+                                      'STATUS',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                    ),
+                                  ),
+                                  const SizedBox(
+                                    width: 140,
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        'ACTIONS',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                ],
+                              ),
+                            ),
+
+                            // Table Rows
+                            for (int i = 0; i < items.length; i++)
+                              _buildTableRow(
+                                context,
+                                items[i],
+                                _getChildId(items[i]),
+                                _getChildTitle(items[i]),
+                                columns,
+                                hasRelations,
+                                relations,
+                                i == items.length - 1,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableRow(
+    BuildContext context,
+    dynamic item,
+    String id,
+    String name,
+    List<String> columns,
+    bool hasRelations,
+    List<Map<String, dynamic>> relations,
+    bool isLast,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    IconData headerIcon = Icons.account_tree_outlined;
+    if (widget.relSlug == 'admins') headerIcon = Icons.person_outline;
+    if (widget.relSlug == 'branches') headerIcon = Icons.storefront_outlined;
+    if (widget.relSlug == 'vehicles') headerIcon = Icons.local_shipping_outlined;
+    if (widget.relSlug == 'chips') headerIcon = Icons.nfc_outlined;
+
+    final status = (item['Status'] ?? item['status'] ?? item['status_text'] ?? (item['active'] == 'Y' ? 'active' : (item['active'] == 'N' ? 'inactive' : 'online'))).toString();
+    Color statusColor = const Color(0xFF10B981);
+    final stLower = status.toLowerCase();
+    if (stLower == 'inactive' || stLower == 'offline' || stLower == 'critical' || stLower == 'rejected' || stLower == 'overdue' || stLower == 'n') {
+      statusColor = Colors.redAccent;
+    } else if (stLower == 'pending' || stLower == 'warning' || stLower == 'draft' || stLower == 'partial') {
+      statusColor = Colors.amber;
+    }
+
+    final isRelationsVisible = hasRelations && _showRelations;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: isLast && !isRelationsVisible
+            ? null
+            : Border(bottom: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Main Columns Row
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              hoverColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
+              onTap: () => _showAddEditSheet(item),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                child: Row(
+                  children: [
+                    // ID Column
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        '#$id',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ),
+
+                    // Discovered Columns
+                    for (final col in columns)
+                      SizedBox(
+                        width: _columnWidth(col),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: _buildTableCell(context, col, item, isDark, headerIcon),
+                        ),
+                      ),
+
+                    // Status Badge Column
+                    SizedBox(
+                      width: 130,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                              const SizedBox(width: 6),
+                              Text(
+                                status.toUpperCase(),
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Actions Column
+                    SizedBox(
+                      width: 140,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, size: 18),
+                            tooltip: 'Edit Record',
+                            onPressed: () => _showAddEditSheet(item),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                            tooltip: 'Delete Record',
+                            onPressed: () => _confirmDelete(id, name),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Nested Relationship Managers
+          if (isRelationsVisible)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.7) : const Color(0xFFF1F5F9).withValues(alpha: 0.9),
+                border: Border(
+                  top: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.04)),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 50),
+                  Icon(Icons.account_tree_outlined, size: 14, color: Colors.amber.shade400),
+                  const SizedBox(width: 8),
+                  Text(
+                    'RELATIONS:',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber.shade400,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: relations.map((rel) {
+                        final relTitle = (rel['title'] ?? rel['relationship'] ?? 'Related').toString();
+                        final nextSlug = (rel['relationship'] ?? '').toString();
+                        return ActionChip(
+                          avatar: Icon(Icons.account_tree_outlined, size: 14, color: Colors.amber.shade400),
+                          label: Text(relTitle, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          backgroundColor: Colors.amber.withValues(alpha: 0.1),
+                          side: BorderSide(color: Colors.amber.withValues(alpha: 0.3)),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            _openRelation(context, id, name, nextSlug, relTitle);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFieldBadge(String label, String value, {IconData? icon, Color? color}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade400,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 13, color: color ?? Colors.grey.shade300),
+              const SizedBox(width: 4),
+            ],
+            Flexible(
+              child: Text(
+                value,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecordCard(BuildContext context, dynamic item) {
+    final childId = _getChildId(item);
+    final childTitle = _getChildTitle(item);
+    final relations = _getNestedRelations(widget.relSlug);
+    final hasRelations = relations.isNotEmpty;
+
+    IconData leadingIcon = Icons.account_tree_outlined;
+    if (widget.relSlug == 'admins') leadingIcon = Icons.person_outline;
+    if (widget.relSlug == 'branches') leadingIcon = Icons.storefront_outlined;
+    if (widget.relSlug == 'vehicles') leadingIcon = Icons.local_shipping_outlined;
+    if (widget.relSlug == 'chips') leadingIcon = Icons.nfc_outlined;
+
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      color: Theme.of(context).colorScheme.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Header: Leading icon + Title + Status badges
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  child: Icon(leadingIcon, size: 20, color: Theme.of(context).colorScheme.primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        childTitle,
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'ID: $childId',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.relSlug == 'admins') ...[
+                  Builder(
+                    builder: (_) {
+                      final isActive = (item['active'] ?? 'Y') == 'Y';
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (isActive ? const Color(0xFF10B981) : Colors.redAccent).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          isActive ? 'ACTIVE' : 'INACTIVE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isActive ? const Color(0xFF10B981) : Colors.redAccent,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ] else if (widget.relSlug == 'vehicles') ...[
+                  Builder(
+                    builder: (_) {
+                      final fuelId = '${item['fuel_type_id'] ?? '1'}';
+                      String fuelName = 'Gasoline 91';
+                      Color fuelColor = const Color(0xFF10B981);
+                      if (fuelId == '2') {
+                        fuelName = 'Gasoline 95';
+                        fuelColor = Colors.redAccent;
+                      } else if (fuelId == '3') {
+                        fuelName = 'Diesel';
+                        fuelColor = Colors.amber;
+                      }
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: fuelColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          fuelName.toUpperCase(),
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: fuelColor),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Divider(height: 1, thickness: 0.5),
+            const SizedBox(height: 12),
+
+            // Attributes Grid
+            if (widget.relSlug == 'admins') ...[
+              Row(
+                children: [
+                  Expanded(child: _buildFieldBadge('Username', '${item['login'] ?? 'N/A'}', icon: Icons.alternate_email)),
+                  Expanded(child: _buildFieldBadge('Email', '${item['email'] ?? 'N/A'}', icon: Icons.email_outlined)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _buildFieldBadge('Role', '${item['role'] ?? 'admin'}', icon: Icons.shield_outlined)),
+                  Expanded(child: _buildFieldBadge('Full Name', '${item['name'] ?? 'N/A'}', icon: Icons.badge_outlined)),
+                ],
+              ),
+            ] else if (widget.relSlug == 'branches') ...[
+              Row(
+                children: [
+                  Expanded(child: _buildFieldBadge('Branch Name', '${item['name'] ?? 'N/A'}', icon: Icons.storefront)),
+                  Expanded(child: _buildFieldBadge('City / Region', '${item['city'] ?? 'Saudi Arabia'}', icon: Icons.location_on_outlined)),
+                ],
+              ),
+              if (item['lat'] != null || item['lng'] != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: _buildFieldBadge('GPS Coordinates', '${item['lat'] ?? '-'}, ${item['lng'] ?? '-'}', icon: Icons.map_outlined)),
+                  ],
+                ),
+              ],
+            ] else if (widget.relSlug == 'vehicles') ...[
+              Row(
+                children: [
+                  Expanded(child: _buildFieldBadge('Plate Number', '${item['plate_number'] ?? 'N/A'}', icon: Icons.pin)),
+                  Expanded(child: _buildFieldBadge('Odometer', '${item['odometer'] ?? '0'} km', icon: Icons.speed)),
+                ],
+              ),
+            ] else ...[
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: (item as Map<String, dynamic>).entries.take(4).map((e) {
+                  return _buildFieldBadge(e.key, '${e.value}');
+                }).toList(),
+              ),
+            ],
+
+            // Nested Relations Chips in Card
+            if (hasRelations && _showRelations) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1, thickness: 0.5),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(Icons.hub_outlined, size: 14, color: Colors.amber.shade400),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'SUB-ENTITIES & RELATIONS',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: relations.map((rel) {
+                  final relTitle = (rel['title'] ?? rel['relationship'] ?? 'Related').toString();
+                  final nextSlug = (rel['relationship'] ?? '').toString();
+                  return ActionChip(
+                    avatar: Icon(Icons.account_tree_outlined, size: 14, color: Colors.amber.shade400),
+                    label: Text(relTitle, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    backgroundColor: Colors.amber.withValues(alpha: 0.1),
+                    side: BorderSide(color: Colors.amber.withValues(alpha: 0.3)),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      _openRelation(context, childId, childTitle, nextSlug, relTitle);
+                    },
+                  );
+                }).toList(),
+              ),
+            ],
+
+            const SizedBox(height: 12),
+            const Divider(height: 1, thickness: 0.5),
+            const SizedBox(height: 8),
+
+            // Card Footer Actions: Edit & Delete
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.edit_outlined, size: 15),
+                  label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                  onPressed: () => _showAddEditSheet(item),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  icon: const Icon(Icons.delete_outline, size: 15, color: Colors.redAccent),
+                  label: const Text('Delete', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                  onPressed: () => _confirmDelete(childId, childTitle),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecordCards(BuildContext context) {
+    final items = filteredRecords;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isTabletOrWide = constraints.maxWidth >= 720;
+        if (isTabletOrWide) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int i = 0; i < items.length; i += 2)
+                        _buildRecordCard(context, items[i]),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int i = 1; i < items.length; i += 2)
+                        _buildRecordCard(context, items[i]),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.only(top: 8, bottom: 24),
+          itemCount: items.length,
+          itemBuilder: (context, i) => _buildRecordCard(context, items[i]),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.folder_open_outlined, size: 64, color: Colors.grey.shade500),
+            const SizedBox(height: 16),
+            Text(
+              'No ${widget.relTitle} found',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'No matching nested records under "${widget.parentTitle}".',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            ),
+            const SizedBox(height: 20),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.amber.shade700,
+                foregroundColor: Colors.black,
+              ),
+              icon: const Icon(Icons.add),
+              label: Text('Add First ${widget.relTitle.replaceAll('s', '')}'),
+              onPressed: () => _showAddEditSheet(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = filteredRecords;
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.relTitle,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            Text(
+              'Parent: ${widget.parentTitle} (#${widget.parentId})',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade400, fontWeight: FontWeight.normal),
+            ),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.amber.shade700,
+                foregroundColor: Colors.black,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              onPressed: () => _showAddEditSheet(),
+            ),
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(activeFilterCount > 0 ? 102 : 56),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchCtrl,
+                        decoration: InputDecoration(
+                          hintText: 'Search ${widget.relTitle.toLowerCase()}...',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: search.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    _searchCtrl.clear();
+                                    setState(() => search = '');
+                                    loadRecords();
+                                  },
+                                )
+                              : null,
+                          isDense: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onChanged: (v) {
+                          search = v.trim();
+                          loadRecords();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: _showRelations ? 'Hide Related Entities' : 'Show Related Entities',
+                      style: IconButton.styleFrom(
+                        backgroundColor: _showRelations ? Colors.amber.withValues(alpha: 0.2) : null,
+                        foregroundColor: _showRelations ? Colors.amber.shade400 : null,
+                      ),
+                      icon: Icon(_showRelations ? Icons.account_tree : Icons.account_tree_outlined),
+                      onPressed: () {
+                        setState(() {
+                          _showRelations = !_showRelations;
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Badge(
+                      isLabelVisible: activeFilterCount > 0,
+                      label: Text('$activeFilterCount'),
+                      backgroundColor: Colors.amber,
+                      textColor: Colors.black,
+                      child: IconButton.filledTonal(
+                        tooltip: 'Refined Search Filters',
+                        icon: const Icon(Icons.tune_rounded),
+                        onPressed: () => _showFilterModal(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (activeFilterCount > 0)
+                Container(
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.close, size: 14),
+                        label: const Text('Clear All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: _clearAllFilters,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      const SizedBox(width: 6),
+                      ...activeFilters.entries.expand((entry) {
+                        final cat = entry.key;
+                        return entry.value.map((val) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: InputChip(
+                              label: Text('${_titleCase(cat)}: $val', style: const TextStyle(fontSize: 11)),
+                              onDeleted: () => _removeFilter(cat, val),
+                              visualDensity: VisualDensity.compact,
+                              deleteIconColor: Colors.amber,
+                            ),
+                          );
+                        });
+                      }),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : items.isEmpty
+              ? _buildEmptyState()
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isDesktop = constraints.maxWidth > 900;
+                    if (isDesktop) {
+                      return _buildRecordTable(context);
+                    }
+                    return _buildRecordCards(context);
+                  },
+                ),
+    );
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(libDir, "relation_record_screen.dart"), []byte(relationRecordDart), 0644); err != nil {
+		return err
+	}
+
+	// 6. lib/main.dart - Mobile-First Responsive Flutter Admin Application
 	mainDartTemplate := `import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'api.dart';
+import 'relation_record_screen.dart';
 import 'responsive.dart';
 
 void main() {
@@ -3135,8 +5073,18 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   }
 
   void _openRelation(BuildContext context, String id, String name, String relSlug, String relTitle) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Opening $relTitle for #$id')),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RelationRecordScreen(
+          api: widget.api,
+          parentSlug: widget.slug,
+          parentId: id,
+          parentTitle: name,
+          relSlug: relSlug,
+          relTitle: relTitle,
+        ),
+      ),
     );
   }
 
@@ -3147,7 +5095,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     final hasRelations = relations.isNotEmpty;
     final columns = _extractColumns();
 
-    double totalColsWidth = 70.0 + 130.0 + 110.0; // ID + STATUS + ACTIONS
+    double totalColsWidth = 70.0 + 130.0 + 140.0 + 80.0; // ID + STATUS + ACTIONS + clearance
     for (final col in columns) {
       totalColsWidth += _columnWidth(col);
     }
@@ -3162,7 +5110,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
       notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical,
       child: SingleChildScrollView(
         controller: _verticalScrollController,
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1600),
@@ -3231,7 +5179,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                     ),
                                   ),
                                   const SizedBox(
-                                    width: 110,
+                                    width: 140,
                                     child: Align(
                                       alignment: Alignment.centerRight,
                                       child: Text(
@@ -3240,6 +5188,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                       ),
                                     ),
                                   ),
+                                  const SizedBox(width: 16),
                                 ],
                               ),
                             ),
@@ -3386,7 +5335,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
                     // Actions Column
                     SizedBox(
-                      width: 110,
+                      width: 140,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
@@ -3422,6 +5371,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         ],
                       ),
                     ),
+                    const SizedBox(width: 16),
                   ],
                 ),
               ),
