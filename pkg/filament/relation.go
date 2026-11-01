@@ -15,6 +15,7 @@ import (
 type RelationManager interface {
 	Relationship() string
 	Title() string
+	GetIcon() string
 	GetRecordTitleAttribute() string
 	Render(ctx *Context, parentBasePath, parentID string) string
 
@@ -32,6 +33,7 @@ type RelationManager interface {
 type BaseRelationManager[T any] struct {
 	relationship         string
 	title                string
+	icon                 string
 	recordTitleAttribute string
 	tableDef             *tables.Table[T]
 	formDef              *forms.Form
@@ -64,6 +66,18 @@ func (rm *BaseRelationManager[T]) Relationship() string {
 
 func (rm *BaseRelationManager[T]) Title() string {
 	return rm.title
+}
+
+func (rm *BaseRelationManager[T]) Icon(i string) *BaseRelationManager[T] {
+	rm.icon = i
+	return rm
+}
+
+func (rm *BaseRelationManager[T]) GetIcon() string {
+	if rm.icon != "" {
+		return rm.icon
+	}
+	return "heroicon-rectangle-stack"
 }
 
 func (rm *BaseRelationManager[T]) RecordTitleAttribute(attr ...string) *BaseRelationManager[T] {
@@ -346,6 +360,7 @@ func (rm *BaseRelationManager[T]) GetAPISchema() map[string]any {
 	return map[string]any{
 		"relationship":           rm.relationship,
 		"title":                  rm.title,
+		"icon":                   rm.GetIcon(),
 		"record_title_attribute": rm.recordTitleAttribute,
 	}
 }

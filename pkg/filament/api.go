@@ -155,24 +155,40 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			navDTOs = append(navDTOs, groupDTO)
 		}
 
+		type relationMetaDTO struct {
+			Relationship string `json:"relationship"`
+			Title        string `json:"title"`
+			Icon         string `json:"icon"`
+		}
+
 		type resourceDTO struct {
-			Slug            string `json:"slug"`
-			ModelName       string `json:"model_name"`
-			PluralModelName string `json:"plural_model_name"`
-			NavIcon         string `json:"icon"`
-			NavGroup        string `json:"group"`
+			Slug            string            `json:"slug"`
+			ModelName       string            `json:"model_name"`
+			PluralModelName string            `json:"plural_model_name"`
+			NavIcon         string            `json:"icon"`
+			NavGroup        string            `json:"group"`
+			Relations       []relationMetaDTO `json:"relations,omitempty"`
 		}
 
 		var resourceDTOs []resourceDTO
 		for _, res := range p.resources {
 			item := res.NavigationItem(ctx)
 			if item != nil {
+				var relsDTO []relationMetaDTO
+				for _, rel := range res.GetRelations() {
+					relsDTO = append(relsDTO, relationMetaDTO{
+						Relationship: rel.Relationship(),
+						Title:        rel.Title(),
+						Icon:         rel.GetIcon(),
+					})
+				}
 				resourceDTOs = append(resourceDTOs, resourceDTO{
 					Slug:            res.Slug(),
 					ModelName:       item.Label,
 					PluralModelName: item.Label,
 					NavIcon:         item.Icon,
 					NavGroup:        item.Group,
+					Relations:       relsDTO,
 				})
 			}
 		}
@@ -844,8 +860,13 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			if err != nil {
 				return c.JSON(http.StatusNotFound, map[string]string{"error": "Record not found"})
 			}
+			var relationsMeta []map[string]any
+			for _, rel := range res.GetRelations() {
+				relationsMeta = append(relationsMeta, rel.GetAPISchema())
+			}
 			return c.JSON(http.StatusOK, map[string]any{
-				"data": record,
+				"data":      record,
+				"relations": relationsMeta,
 			})
 		}
 
@@ -971,6 +992,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// GET /admin/api/resources/:slug/:id/relations
 	r.GET(resPath+"/:id/relations", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -996,6 +1018,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// GET /admin/api/resources/:slug/:id/relations/:rel - List
 		r.GET(relPath, func(c *gcontext.Context) error {
+			setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -1023,6 +1046,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// POST /admin/api/resources/:slug/:id/relations/:rel - Create
 		r.POST(relPath, func(c *gcontext.Context) error {
+			setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -1041,6 +1065,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// PUT /admin/api/resources/:slug/:id/relations/:rel/:child_id - Update
 		updateRelHandler := func(c *gcontext.Context) error {
+			setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -1062,6 +1087,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// DELETE /admin/api/resources/:slug/:id/relations/:rel/:child_id - Delete
 		deleteRelHandler := func(c *gcontext.Context) error {
+			setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
