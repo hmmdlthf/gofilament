@@ -2233,10 +2233,14 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   String search = '';
   final Map<String, Set<String>> activeFilters = {};
   bool _showRelations = true;
-  final Set<String> _toggledRecordIds = {};
+  final ScrollController _horizontalScrollController = ScrollController();
+  final ScrollController _verticalScrollController = ScrollController();
 
-  bool _isRelationsVisible(String id) {
-    return _showRelations ? !_toggledRecordIds.contains(id) : _toggledRecordIds.contains(id);
+  @override
+  void dispose() {
+    _horizontalScrollController.dispose();
+    _verticalScrollController.dispose();
+    super.dispose();
   }
 
   int get activeFilterCount {
@@ -2690,7 +2694,6 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   void didUpdateWidget(covariant ResourceRecordList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.slug != widget.slug) {
-      _toggledRecordIds.clear();
       loadRecords();
     }
   }
@@ -3144,136 +3147,121 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     final hasRelations = relations.isNotEmpty;
     final columns = _extractColumns();
 
-    double totalColsWidth = 70.0 + 130.0 + 150.0; // ID + STATUS + ACTIONS
+    double totalColsWidth = 70.0 + 130.0 + 110.0; // ID + STATUS + ACTIONS
     for (final col in columns) {
       totalColsWidth += _columnWidth(col);
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1600),
-          child: Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+    return Scrollbar(
+      controller: _verticalScrollController,
+      thumbVisibility: true,
+      trackVisibility: true,
+      interactive: true,
+      thickness: 10,
+      radius: const Radius.circular(5),
+      notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical,
+      child: SingleChildScrollView(
+        controller: _verticalScrollController,
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1600),
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(
+                  color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+                ),
               ),
-            ),
-            color: theme.colorScheme.surface,
-            clipBehavior: Clip.antiAlias,
-            child: LayoutBuilder(
-              builder: (ctx, constraints) {
-                final tableWidth = constraints.maxWidth > totalColsWidth ? constraints.maxWidth : totalColsWidth;
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: tableWidth,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Table Header
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                            border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
-                          ),
-                          child: Row(
-                            children: [
-                              const SizedBox(
-                                width: 70,
-                                child: Text(
-                                  'ID',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                ),
+              color: theme.colorScheme.surface,
+              clipBehavior: Clip.antiAlias,
+              child: LayoutBuilder(
+                builder: (ctx, constraints) {
+                  final tableWidth = constraints.maxWidth > totalColsWidth ? constraints.maxWidth : totalColsWidth;
+                  return Scrollbar(
+                    controller: _horizontalScrollController,
+                    thumbVisibility: true,
+                    trackVisibility: true,
+                    interactive: true,
+                    thickness: 10,
+                    radius: const Radius.circular(5),
+                    notificationPredicate: (notif) => notif.metrics.axis == Axis.horizontal,
+                    child: SingleChildScrollView(
+                      controller: _horizontalScrollController,
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: tableWidth,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Table Header
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                                border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
                               ),
-                              for (final col in columns)
-                                SizedBox(
-                                  width: _columnWidth(col),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(right: 12),
+                              child: Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 70,
                                     child: Text(
-                                      _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ),
-                              const SizedBox(
-                                width: 130,
-                                child: Text(
-                                  'STATUS',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                ),
-                              ),
-                              SizedBox(
-                                width: 150,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    if (hasRelations)
-                                      Tooltip(
-                                        message: _showRelations ? 'Hide All Relations' : 'Show All Relations',
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.circular(6),
-                                          onTap: () {
-                                            setState(() {
-                                              _showRelations = !_showRelations;
-                                              _toggledRecordIds.clear();
-                                            });
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: _showRelations ? Colors.amber.withValues(alpha: 0.15) : Colors.transparent,
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: _showRelations ? Colors.amber.withValues(alpha: 0.4) : Colors.grey.withValues(alpha: 0.3)),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.account_tree_outlined, size: 12, color: _showRelations ? Colors.amber.shade400 : Colors.grey),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  _showRelations ? 'Hide' : 'Relations',
-                                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _showRelations ? Colors.amber.shade400 : Colors.grey),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'ACTIONS',
+                                      'ID',
                                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                  for (final col in columns)
+                                    SizedBox(
+                                      width: _columnWidth(col),
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(right: 12),
+                                        child: Text(
+                                          _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(
+                                    width: 130,
+                                    child: Text(
+                                      'STATUS',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                    ),
+                                  ),
+                                  const SizedBox(
+                                    width: 110,
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        'ACTIONS',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                        ),
+                            ),
 
-                        // Table Rows
-                        for (int i = 0; i < records.length; i++)
-                          _buildTableRow(
-                            context,
-                            records[i],
-                            (records[i]['ID'] ?? records[i]['id'] ?? '$i').toString(),
-                            columns,
-                            hasRelations,
-                            relations,
-                            i == records.length - 1,
-                          ),
-                      ],
+                            // Table Rows
+                            for (int i = 0; i < records.length; i++)
+                              _buildTableRow(
+                                context,
+                                records[i],
+                                (records[i]['ID'] ?? records[i]['id'] ?? '$i').toString(),
+                                columns,
+                                hasRelations,
+                                relations,
+                                i == records.length - 1,
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -3325,7 +3313,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
       statusColor = Colors.amber;
     }
 
-    final isRelationsVisible = hasRelations && _isRelationsVisible(id);
+    final isRelationsVisible = hasRelations && _showRelations;
 
     return Container(
       decoration: BoxDecoration(
@@ -3398,28 +3386,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
                     // Actions Column
                     SizedBox(
-                      width: 150,
+                      width: 110,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          if (hasRelations)
-                            IconButton(
-                              icon: Icon(
-                                isRelationsVisible ? Icons.account_tree : Icons.account_tree_outlined,
-                                size: 18,
-                                color: isRelationsVisible ? Colors.amber.shade400 : Colors.grey,
-                              ),
-                              tooltip: isRelationsVisible ? 'Hide Relations' : 'View Relations',
-                              onPressed: () {
-                                setState(() {
-                                  if (_toggledRecordIds.contains(id)) {
-                                    _toggledRecordIds.remove(id);
-                                  } else {
-                                    _toggledRecordIds.add(id);
-                                  }
-                                });
-                              },
-                            ),
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, size: 18),
                             tooltip: 'Edit Record',
@@ -3458,7 +3428,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
             ),
           ),
 
-          // Relationship Managers (at the bottom of every record, same like for the card)
+          // Relationship Managers (at the bottom of every record, controlled universally)
           if (isRelationsVisible)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
@@ -3515,6 +3485,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
   @override
   Widget build(BuildContext context) {
+    final hasRelations = _getRelations().isNotEmpty;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.slug.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -3548,6 +3519,22 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         },
                       ),
                     ),
+                    if (hasRelations) ...[
+                      const SizedBox(width: 8),
+                      IconButton.filledTonal(
+                        tooltip: _showRelations ? 'Hide Related Entities' : 'Show Related Entities',
+                        style: IconButton.styleFrom(
+                          backgroundColor: _showRelations ? Colors.amber.withValues(alpha: 0.2) : null,
+                          foregroundColor: _showRelations ? Colors.amber.shade400 : null,
+                        ),
+                        icon: Icon(_showRelations ? Icons.account_tree : Icons.account_tree_outlined),
+                        onPressed: () {
+                          setState(() {
+                            _showRelations = !_showRelations;
+                          });
+                        },
+                      ),
+                    ],
                     const SizedBox(width: 8),
                     Badge(
                       isLabelVisible: activeFilterCount > 0,
