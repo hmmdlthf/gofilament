@@ -3485,7 +3485,6 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
   @override
   Widget build(BuildContext context) {
-    final hasRelations = _getRelations().isNotEmpty;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.slug.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -3519,22 +3518,20 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         },
                       ),
                     ),
-                    if (hasRelations) ...[
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        tooltip: _showRelations ? 'Hide Related Entities' : 'Show Related Entities',
-                        style: IconButton.styleFrom(
-                          backgroundColor: _showRelations ? Colors.amber.withValues(alpha: 0.2) : null,
-                          foregroundColor: _showRelations ? Colors.amber.shade400 : null,
-                        ),
-                        icon: Icon(_showRelations ? Icons.account_tree : Icons.account_tree_outlined),
-                        onPressed: () {
-                          setState(() {
-                            _showRelations = !_showRelations;
-                          });
-                        },
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: _showRelations ? 'Hide Related Entities' : 'Show Related Entities',
+                      style: IconButton.styleFrom(
+                        backgroundColor: _showRelations ? Colors.amber.withValues(alpha: 0.2) : null,
+                        foregroundColor: _showRelations ? Colors.amber.shade400 : null,
                       ),
-                    ],
+                      icon: Icon(_showRelations ? Icons.account_tree : Icons.account_tree_outlined),
+                      onPressed: () {
+                        setState(() {
+                          _showRelations = !_showRelations;
+                        });
+                      },
+                    ),
                     const SizedBox(width: 8),
                     Badge(
                       isLabelVisible: activeFilterCount > 0,
