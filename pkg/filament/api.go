@@ -330,10 +330,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// Locale switch REST endpoint
 	r.POST(apiPrefix+"/locale/switch", func(c *gcontext.Context) error {
-		ctx, err := p.AuthorizeAccess(c)
-		if err != nil {
-			return err
-		}
+		ctx := NewContext(c, p)
 
 		targetLocale := c.Query("locale")
 		if targetLocale == "" {
@@ -401,10 +398,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// Translations REST API endpoint
 	r.GET(apiPrefix+"/translations", func(c *gcontext.Context) error {
-		ctx, err := p.AuthorizeAccess(c)
-		if err != nil {
-			return err
-		}
+		ctx := NewContext(c, p)
 		loc := c.Query("locale")
 		if loc == "" {
 			loc = c.Query("lang")

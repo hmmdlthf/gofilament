@@ -160,6 +160,28 @@ class FilamentApiClient {
     } catch (_) {}
   }
 
+  Future<void> saveLocale(String locale, bool isRTL) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefix = _storageKeyPrefix;
+      await prefs.setString('${prefix}_locale', locale);
+      await prefs.setBool('${prefix}_is_rtl', isRTL);
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> restoreLocale() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefix = _storageKeyPrefix;
+      final loc = prefs.getString('${prefix}_locale');
+      if (loc != null && loc.isNotEmpty) {
+        final rtl = prefs.getBool('${prefix}_is_rtl') ?? (loc.toLowerCase() == 'ar');
+        return {'locale': loc, 'is_rtl': rtl};
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<Map<String, dynamic>> login(String username, String password, {bool remember = false}) async {
     final res = await http.post(
       Uri.parse('$baseUrl/api/login'),
@@ -485,9 +507,271 @@ class ResponsiveLayout extends StatelessWidget {
 		return err
 	}
 
+	// 4b. lib/locale.dart - Multi-Language & RTL/LTR Localization Support
+	localeDart := `// ============================================================================
+// Multi-Language & RTL/LTR Localization Support
+// ============================================================================
+class AppLocale {
+  static const Map<String, Map<String, String>> strings = {
+    'en': {
+      // Navigation & Sections
+      'dashboard': 'Dashboard',
+      'entities': 'Entities',
+      'resources': 'Resources',
+      'account': 'Account',
+      'settings': 'Settings & Preferences',
+      'orders': 'Hardware Orders',
+      'billing': 'Billing & Subscriptions',
+      'security': 'Biometrics & Security',
+      'devices': 'Devices',
+      'telemetry': 'Telemetry',
+      'tickets': 'Tickets',
+      'firmware': 'Firmware',
+      'operators': 'Team',
+      'analytics': 'Metrics',
+      'language': 'Language & Direction',
+      'theme': 'Theme Mode',
+      'sign_out': 'Sign Out',
+      'search': 'Search',
+      'add': 'Add',
+      'save': 'Save',
+      'save_changes': 'Save Changes',
+      'cancel': 'Cancel',
+      'delete': 'Delete',
+      'edit': 'Edit',
+      'close': 'Close',
+      'apply': 'Apply',
+      'back': 'Back',
+      'status': 'Status',
+      'active_session': 'Active Session • Enclave Secured',
+      'control_center': 'Control Center',
+      'language_picker': 'Select Language & Direction',
+      'theme_active_dark': 'Dark theme active',
+      'theme_active_light': 'Light theme active',
+      'dark_mode': 'Dark Mode',
+      'light_mode': 'Light Mode',
+      'refresh': 'Refresh',
+
+      // Authentication / Login
+      'sign_in': 'Sign In',
+      'sign_in_title': 'Sign In to Your Workspace',
+      'sign_in_subtitle': 'Enter your authorized credentials to access this administration panel.',
+      'username_or_email': 'Username or Email',
+      'password': 'Password',
+      'remember_me': 'Remember me',
+      'enter_credentials': 'Please enter both username and password',
+      'quick_demo_roles': 'QUICK DEMO ROLES (CLICK TO AUTOFILL)',
+      'enclave_secured': 'Enclave Secured • GoFilament & GoLaravel Engine',
+      'switch_to_arabic': '🇸🇦 العربية (RTL)',
+      'switch_to_english': '🇺🇸 English (LTR)',
+
+      // Records & Tables
+      'search_records': 'Search records...',
+      'filters': 'Filters',
+      'filter': 'Filter',
+      'clear_all': 'Clear All',
+      'select_all': 'Select All',
+      'deselect_all': 'Deselect All',
+      'bulk_actions': 'Bulk Actions',
+      'bulk_delete': 'Bulk Delete',
+      'export_selected': 'Export Selected',
+      'clear_selection': 'Clear Selection',
+      'no_records_found': 'No records found.',
+      'rows_per_page': 'Rows per page',
+      'page': 'Page',
+      'of': 'of',
+      'actions': 'Actions',
+      'create_record': 'Create Record',
+      'edit_record': 'Edit Record',
+      'delete_record': 'Delete Record',
+      'delete_selected': 'Delete Selected',
+      'delete_confirm_title': 'Delete Record?',
+      'delete_records_title': 'Delete Records?',
+      'delete_confirm': 'Are you sure you want to delete this record? This action cannot be undone.',
+      'delete_records_confirm': 'Are you sure you want to delete these selected records? This action cannot be undone.',
+      'record_created': 'Record created successfully',
+      'record_updated': 'Record updated successfully',
+      'record_deleted': 'Record deleted successfully',
+      'records_deleted': 'records deleted successfully',
+      'operation_failed': 'Operation failed. Please try again.',
+      'show_relations': 'Show Related Entities',
+      'hide_relations': 'Hide Related Entities',
+      'toggle_relations': 'Toggle Relations',
+      'relations': 'Relations',
+      'attributes': 'Attributes',
+      'manage': 'Manage',
+      'related_records': 'Related Records',
+
+      // Dashboard
+      'operational_dashboard': 'Operational Dashboard',
+      'admin_dashboard': 'Admin Dashboard',
+      'performance_overview': 'Performance Overview',
+      'dashboard_subtitle': 'Live operational metrics, telematics & hardware analytics',
+      'refresh_dashboard': 'Refresh Dashboard',
+      'active_entities': 'Active Entities',
+      'system_status': 'System Status',
+      'operational': 'Operational',
+      'multi_tenancy': 'Multi-Tenancy',
+      'quick_access_entities': 'Quick Access Entities',
+
+      // Direction & Languages
+      'direction': 'Direction',
+      'rtl': 'Right-to-Left (RTL)',
+      'ltr': 'Left-to-Right (LTR)',
+      'english': 'English',
+      'arabic': 'العربية',
+    },
+    'ar': {
+      // Navigation & Sections
+      'dashboard': 'لوحة التحكم',
+      'entities': 'الكيانات',
+      'resources': 'الموارد',
+      'account': 'الحساب',
+      'settings': 'الإعدادات والتفضيلات',
+      'orders': 'طلبات الأجهزة',
+      'billing': 'الفواتير والاشتراكات',
+      'security': 'القياسات الحيوية والأمان',
+      'devices': 'الأجهزة',
+      'telemetry': 'القياس عن بُعد',
+      'tickets': 'التذاكر',
+      'firmware': 'البرامج الثابتة',
+      'operators': 'فريق العمل',
+      'analytics': 'المؤشرات',
+      'language': 'اللغة والاتجاه',
+      'theme': 'وضع المظهر',
+      'sign_out': 'تسجيل الخروج',
+      'search': 'بحث',
+      'add': 'إضافة',
+      'save': 'حفظ',
+      'save_changes': 'حفظ التغييرات',
+      'cancel': 'إلغاء',
+      'delete': 'حذف',
+      'edit': 'تعديل',
+      'close': 'إغلاق',
+      'apply': 'تطبيق',
+      'back': 'رجوع',
+      'status': 'الحالة',
+      'active_session': 'جلسة نشطة • الجيب الأمني مشفر',
+      'control_center': 'مركز التحكم',
+      'language_picker': 'اختر اللغة واتجاه الواجهة',
+      'theme_active_dark': 'الوضع الداكن مفعّل',
+      'theme_active_light': 'الوضع الفاتح مفعّل',
+      'dark_mode': 'الوضع الداكن',
+      'light_mode': 'الوضع الفاتح',
+      'refresh': 'تحديث',
+
+      // Authentication / Login
+      'sign_in': 'تسجيل الدخول',
+      'sign_in_title': 'تسجيل الدخول إلى مساحة العمل',
+      'sign_in_subtitle': 'أدخل بيانات الاعتماد المصرح بها للوصول إلى لوحة الإدارة.',
+      'username_or_email': 'اسم المستخدم أو البريد الإلكتروني',
+      'password': 'كلمة المرور',
+      'remember_me': 'تذكرني',
+      'enter_credentials': 'يرجى إدخال اسم المستخدم وكلمة المرور معاً',
+      'quick_demo_roles': 'أدوار العرض السريع (انقر للتعبئة التلقائية)',
+      'enclave_secured': 'محمي بالجيب الأمني • محرك GoFilament و GoLaravel',
+      'switch_to_arabic': '🇸🇦 العربية (RTL)',
+      'switch_to_english': '🇺🇸 English (LTR)',
+
+      // Records & Tables
+      'search_records': 'البحث في السجلات...',
+      'filters': 'عوامل التصفية',
+      'filter': 'تصفية',
+      'clear_all': 'مسح الكل',
+      'select_all': 'تحديد الكل',
+      'deselect_all': 'إلغاء تحديد الكل',
+      'bulk_actions': 'إجراءات جماعية',
+      'bulk_delete': 'حذف جماعي',
+      'export_selected': 'تصدير المحدد',
+      'clear_selection': 'مسح التحديد',
+      'no_records_found': 'لم يتم العثور على سجلات.',
+      'rows_per_page': 'الصفوف لكل صفحة',
+      'page': 'صفحة',
+      'of': 'من',
+      'actions': 'إجراءات',
+      'create_record': 'إنشاء سجل جديد',
+      'edit_record': 'تعديل السجل',
+      'delete_record': 'حذف السجل',
+      'delete_selected': 'حذف المحدد',
+      'delete_confirm_title': 'حذف السجل؟',
+      'delete_records_title': 'حذف السجلات؟',
+      'delete_confirm': 'هل أنت متأكد من حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء.',
+      'delete_records_confirm': 'هل أنت متأكد من حذف السجلات المحددة؟ لا يمكن التراجع عن هذا الإجراء.',
+      'record_created': 'تم إنشاء السجل بنجاح',
+      'record_updated': 'تم تحديث السجل بنجاح',
+      'record_deleted': 'تم حذف السجل بنجاح',
+      'records_deleted': 'سجلات تم حذفها بنجاح',
+      'operation_failed': 'فشلت العملية. يرجى المحاولة مرة أخرى.',
+      'show_relations': 'عرض الكيانات المرتبطة',
+      'hide_relations': 'إخفاء الكيانات المرتبطة',
+      'toggle_relations': 'تبديل الكيانات المرتبطة',
+      'relations': 'العلاقات',
+      'attributes': 'الخصائص',
+      'manage': 'إدارة',
+      'related_records': 'الكيانات المرتبطة',
+
+      // Dashboard
+      'operational_dashboard': 'لوحة العمليات التشغيلية',
+      'admin_dashboard': 'لوحة الإدارة',
+      'performance_overview': 'نظرة عامة على الأداء',
+      'dashboard_subtitle': 'مؤشرات تشغيلية حية، القياس عن بُعد وتحليلات الأجهزة',
+      'refresh_dashboard': 'تحديث لوحة التحكم',
+      'active_entities': 'الكيانات النشطة',
+      'system_status': 'حالة النظام',
+      'operational': 'يعمل بكفاءة',
+      'multi_tenancy': 'تعدد المستأجرين',
+      'quick_access_entities': 'الوصول السريع للكيانات',
+
+      // Direction & Languages
+      'direction': 'الاتجاه',
+      'rtl': 'من اليمين إلى اليسار (RTL)',
+      'ltr': 'من اليسار إلى اليمين (LTR)',
+      'english': 'English',
+      'arabic': 'العربية',
+    },
+  };
+
+  static String t(String locale, String key, {Map<String, String>? remoteOverrides}) {
+    if (remoteOverrides != null && remoteOverrides.containsKey(key)) {
+      return remoteOverrides[key]!;
+    }
+    final locDict = strings[locale] ?? strings['en']!;
+    return locDict[key] ?? strings['en']![key] ?? key;
+  }
+
+  static String getFlag(String loc) {
+    switch (loc.toLowerCase()) {
+      case 'ar': return '🇸🇦';
+      case 'es': return '🇪🇸';
+      case 'de': return '🇩🇪';
+      case 'fr': return '🇫🇷';
+      default: return '🇺🇸';
+    }
+  }
+
+  static String getLabel(String loc) {
+    switch (loc.toLowerCase()) {
+      case 'ar': return 'العربية';
+      case 'es': return 'Español';
+      case 'de': return 'Deutsch';
+      case 'fr': return 'Français';
+      default: return 'English';
+    }
+  }
+
+  static bool isRTL(String loc) {
+    return loc.toLowerCase() == 'ar' || loc.toLowerCase() == 'fa' || loc.toLowerCase() == 'ur' || loc.toLowerCase() == 'he';
+  }
+}
+`
+	if err := os.WriteFile(filepath.Join(libDir, "locale.dart"), []byte(localeDart), 0644); err != nil {
+		return err
+	}
+
 	// 5. lib/relation_record_screen.dart - Nested Relation Managers Screen
 	relationRecordDart := `import 'package:flutter/material.dart';
 import 'api.dart';
+import 'locale.dart';
 
 class RelationRecordScreen extends StatefulWidget {
   final FilamentApiClient api;
@@ -496,6 +780,7 @@ class RelationRecordScreen extends StatefulWidget {
   final String parentTitle;
   final String relSlug;
   final String relTitle;
+  final String currentLocale;
 
   const RelationRecordScreen({
     super.key,
@@ -505,6 +790,7 @@ class RelationRecordScreen extends StatefulWidget {
     required this.parentTitle,
     required this.relSlug,
     required this.relTitle,
+    this.currentLocale = 'en',
   });
 
   @override
@@ -568,16 +854,16 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Delete Records?"),
-        content: Text("Are you sure you want to delete $count selected records? This action cannot be undone."),
+        title: Text(AppLocale.t(widget.currentLocale, "delete_records_title")),
+        content: Text(AppLocale.t(widget.currentLocale, "delete_records_confirm")),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel"),
+            child: Text(AppLocale.t(widget.currentLocale, "cancel")),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Delete Selected", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            child: Text(AppLocale.t(widget.currentLocale, "delete_selected"), style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -593,7 +879,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("$count records deleted successfully"),
+              content: Text("$count ${AppLocale.t(widget.currentLocale, "records_deleted")}"),
               backgroundColor: Colors.green.shade700,
             ),
           );
@@ -1298,14 +1584,14 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Related Record?'),
+        title: Text(AppLocale.t(widget.currentLocale, 'delete_confirm_title')),
         content: Text('Are you sure you want to remove "$title" (#$childId)? This action cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(AppLocale.t(widget.currentLocale, 'cancel'))),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: Text(AppLocale.t(widget.currentLocale, 'delete')),
           ),
         ],
       ),
@@ -1524,7 +1810,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                       });
                       setState(() {});
                     },
-                    child: const Text('Clear All'),
+                    child: Text(AppLocale.t(widget.currentLocale, 'clear_all')),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1532,7 +1818,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: Colors.amber.shade600, foregroundColor: Colors.black),
                     onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Apply', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(AppLocale.t(widget.currentLocale, 'apply'), style: const TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -1795,7 +2081,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                                     const Spacer(),
                                     TextButton(
                                       style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                                      child: const Text('Deselect All', style: TextStyle(fontSize: 12)),
+                                      child: Text(AppLocale.t(widget.currentLocale, 'deselect_all'), style: const TextStyle(fontSize: 12)),
                                       onPressed: _deselectAll,
                                     ),
                                     const SizedBox(width: 16),
@@ -2325,13 +2611,13 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
               children: [
                 TextButton.icon(
                   icon: const Icon(Icons.edit_outlined, size: 15),
-                  label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                  label: Text(AppLocale.t(widget.currentLocale, 'edit'), style: const TextStyle(fontSize: 12)),
                   onPressed: () => _showAddEditSheet(item),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   icon: const Icon(Icons.delete_outline, size: 15, color: Colors.redAccent),
-                  label: const Text('Delete', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                  label: Text(AppLocale.t(widget.currentLocale, 'delete'), style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
                   onPressed: () => _confirmDelete(childId, childTitle),
                 ),
               ],
@@ -2367,7 +2653,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                 const Spacer(),
                 TextButton.icon(
                   icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.redAccent),
-                  label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                  label: Text(AppLocale.t(widget.currentLocale, 'delete'), style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                   onPressed: () => _executeBulkDelete(context),
                 ),
                 IconButton(
@@ -2591,39 +2877,39 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                             children: [
                               Icon(isAllSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 20),
                               const SizedBox(width: 10),
-                              Text(isAllSelected ? 'Deselect All' : 'Select All (${filteredRecords.length})'),
+                              Text(isAllSelected ? AppLocale.t(widget.currentLocale, 'deselect_all') : "${AppLocale.t(widget.currentLocale, 'select_all')} (${filteredRecords.length})"),
                             ],
                           ),
                         ),
                         if (selectedRecordIds.isNotEmpty) ...[
                           PopupMenuItem(
                             value: 'delete',
-                            child: const Row(
+                            child: Row(
                               children: [
-                                Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
-                                SizedBox(width: 10),
-                                Text('Bulk Delete', style: TextStyle(color: Colors.redAccent)),
+                                const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
+                                const SizedBox(width: 10),
+                                Text(AppLocale.t(widget.currentLocale, 'bulk_delete'), style: const TextStyle(color: Colors.redAccent)),
                               ],
                             ),
                           ),
                           PopupMenuItem(
                             value: 'export',
-                            child: const Row(
+                            child: Row(
                               children: [
-                                Icon(Icons.download_rounded, size: 20),
-                                SizedBox(width: 10),
-                                Text('Export Selected'),
+                                const Icon(Icons.download_rounded, size: 20),
+                                const SizedBox(width: 10),
+                                Text(AppLocale.t(widget.currentLocale, 'export_selected')),
                               ],
                             ),
                           ),
                           const PopupMenuDivider(),
-                          const PopupMenuItem(
+                          PopupMenuItem(
                             value: 'deselect',
                             child: Row(
                               children: [
-                                Icon(Icons.close_rounded, size: 20),
-                                SizedBox(width: 10),
-                                Text('Clear Selection'),
+                                const Icon(Icons.close_rounded, size: 20),
+                                const SizedBox(width: 10),
+                                Text(AppLocale.t(widget.currentLocale, 'clear_selection')),
                               ],
                             ),
                           ),
@@ -2642,7 +2928,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                     children: [
                       ActionChip(
                         avatar: const Icon(Icons.close, size: 14),
-                        label: const Text('Clear All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        label: Text(AppLocale.t(widget.currentLocale, 'clear_all'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         onPressed: _clearAllFilters,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -2693,168 +2979,13 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
 	mainDartTemplate := `import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'api.dart';
+import 'locale.dart';
 import 'relation_record_screen.dart';
 import 'responsive.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const FilamentApp());
-}
-
-// ============================================================================
-// Multi-Language & RTL/LTR Localization Support
-// ============================================================================
-class AppLocale {
-  static const Map<String, Map<String, String>> strings = {
-    'en': {
-      'dashboard': 'Dashboard',
-      'entities': 'Entities',
-      'account': 'Account',
-      'settings': 'Settings & Preferences',
-      'orders': 'Hardware Orders',
-      'billing': 'Billing & Subscriptions',
-      'security': 'Biometrics & Security',
-      'devices': 'Devices',
-      'telemetry': 'Telemetry',
-      'tickets': 'Tickets',
-      'firmware': 'Firmware',
-      'operators': 'Team',
-      'analytics': 'Metrics',
-      'language': 'Language & Direction',
-      'theme': 'Theme Mode',
-      'sign_out': 'Sign Out',
-      'search': 'Search',
-      'add': 'Add',
-      'save': 'Save',
-      'cancel': 'Cancel',
-      'delete': 'Delete',
-      'edit': 'Edit',
-      'active_session': 'Active Session • Enclave Secured',
-      'control_center': 'Control Center',
-      'language_picker': 'Select Language & Direction',
-      'theme_active_dark': 'Dark theme active',
-      'theme_active_light': 'Light theme active',
-    },
-    'ar': {
-      'dashboard': 'لوحة التحكم',
-      'entities': 'الكيانات',
-      'account': 'الحساب',
-      'settings': 'الإعدادات والتفضيلات',
-      'orders': 'طلبات الأجهزة',
-      'billing': 'الفواتير والاشتراكات',
-      'security': 'القياسات الحيوية والأمان',
-      'devices': 'الأجهزة',
-      'telemetry': 'القياس عن بُعد',
-      'tickets': 'التذاكر',
-      'firmware': 'البرامج الثابتة',
-      'operators': 'فريق العمل',
-      'analytics': 'المؤشرات',
-      'language': 'اللغة والاتجاه',
-      'theme': 'وضع المظهر',
-      'sign_out': 'تسجيل الخروج',
-      'search': 'بحث',
-      'add': 'إضافة',
-      'save': 'حفظ',
-      'cancel': 'إلغاء',
-      'delete': 'حذف',
-      'edit': 'تعديل',
-      'active_session': 'جلسة نشطة • الجيب الأمني مشفر',
-      'control_center': 'مركز التحكم',
-      'language_picker': 'اختر اللغة واتجاه الواجهة',
-      'theme_active_dark': 'الوضع الداكن مفعّل',
-      'theme_active_light': 'الوضع الفاتح مفعّل',
-    },
-    'es': {
-      'dashboard': 'Panel de Control',
-      'entities': 'Entidades',
-      'account': 'Cuenta',
-      'settings': 'Ajustes y Preferencias',
-      'orders': 'Pedidos de Hardware',
-      'billing': 'Facturación y Suscripción',
-      'security': 'Biometría y Seguridad',
-      'devices': 'Dispositivos',
-      'telemetry': 'Telemetría',
-      'tickets': 'Tickets',
-      'firmware': 'Firmware',
-      'operators': 'Equipo',
-      'analytics': 'Métricas',
-      'language': 'Idioma y Dirección',
-      'theme': 'Modo de Tema',
-      'sign_out': 'Cerrar Sesión',
-      'search': 'Buscar',
-      'add': 'Añadir',
-      'save': 'Guardar',
-      'cancel': 'Cancelar',
-      'delete': 'Eliminar',
-      'edit': 'Editar',
-      'active_session': 'Sesión Activa • Enclave Seguro',
-      'control_center': 'Centro de Control',
-      'language_picker': 'Seleccionar Idioma y Dirección',
-      'theme_active_dark': 'Tema oscuro activo',
-      'theme_active_light': 'Tema claro activo',
-    },
-    'de': {
-      'dashboard': 'Übersicht',
-      'entities': 'Entitäten',
-      'account': 'Konto',
-      'settings': 'Einstellungen',
-      'orders': 'Hardware-Bestellungen',
-      'billing': 'Abrechnung & Lizenz',
-      'security': 'Biometrie & Sicherheit',
-      'devices': 'Geräte',
-      'telemetry': 'Telemetrie',
-      'tickets': 'Tickets',
-      'firmware': 'Firmware',
-      'operators': 'Team',
-      'analytics': 'Metriken',
-      'language': 'Sprache & Ausrichtung',
-      'theme': 'Design-Modus',
-      'sign_out': 'Abmelden',
-      'search': 'Suchen',
-      'add': 'Hinzufügen',
-      'save': 'Speichern',
-      'cancel': 'Abbrechen',
-      'delete': 'Löschen',
-      'edit': 'Bearbeiten',
-      'active_session': 'Aktive Sitzung • Gesichertes Enklave',
-      'control_center': 'Leitstand',
-      'language_picker': 'Sprache und Textrichtung wählen',
-      'theme_active_dark': 'Dunkelmodus aktiv',
-      'theme_active_light': 'Hellmodus aktiv',
-    },
-  };
-
-  static String t(String locale, String key, {Map<String, String>? remoteOverrides}) {
-    if (remoteOverrides != null && remoteOverrides.containsKey(key)) {
-      return remoteOverrides[key]!;
-    }
-    final locDict = strings[locale] ?? strings['en']!;
-    return locDict[key] ?? strings['en']![key] ?? key;
-  }
-
-  static String getFlag(String loc) {
-    switch (loc.toLowerCase()) {
-      case 'ar': return '🇸🇦';
-      case 'es': return '🇪🇸';
-      case 'de': return '🇩🇪';
-      case 'fr': return '🇫🇷';
-      default: return '🇺🇸';
-    }
-  }
-
-  static String getLabel(String loc) {
-    switch (loc.toLowerCase()) {
-      case 'ar': return 'العربية';
-      case 'es': return 'Español';
-      case 'de': return 'Deutsch';
-      case 'fr': return 'Français';
-      default: return 'English';
-    }
-  }
-
-  static bool isRTL(String loc) {
-    return loc.toLowerCase() == 'ar' || loc.toLowerCase() == 'fa' || loc.toLowerCase() == 'ur' || loc.toLowerCase() == 'he';
-  }
 }
 
 class FilamentApp extends StatefulWidget {
@@ -2879,6 +3010,11 @@ class _FilamentAppState extends State<FilamentApp> {
   }
 
   Future<void> _restoreSession() async {
+    final savedLoc = await api.restoreLocale();
+    if (savedLoc != null) {
+      _locale = savedLoc['locale'] as String? ?? 'en';
+      _isRTL = savedLoc['is_rtl'] as bool? ?? false;
+    }
     final authenticated = await api.restoreSession();
     if (mounted) {
       setState(() {
@@ -2899,6 +3035,8 @@ class _FilamentAppState extends State<FilamentApp> {
       _locale = locale;
       _isRTL = isRTL;
     });
+    api.saveLocale(locale, isRTL);
+    api.switchLocale(locale);
   }
 
   @override
@@ -2962,6 +3100,8 @@ class _FilamentAppState extends State<FilamentApp> {
                   panelTitle: '{{TITLE}}',
                   isDark: _themeMode == ThemeMode.dark,
                   onToggleTheme: toggleTheme,
+                  currentLocale: _locale,
+                  onLocaleChanged: setLocale,
                   onLoginSuccess: (user) {
                     setState(() {
                       _isAuthenticated = true;
@@ -2978,6 +3118,8 @@ class LoginScreen extends StatefulWidget {
   final bool isDark;
   final VoidCallback onToggleTheme;
   final ValueChanged<Map<String, dynamic>> onLoginSuccess;
+  final String currentLocale;
+  final void Function(String locale, bool isRTL) onLocaleChanged;
 
   const LoginScreen({
     super.key,
@@ -2986,6 +3128,8 @@ class LoginScreen extends StatefulWidget {
     required this.isDark,
     required this.onToggleTheme,
     required this.onLoginSuccess,
+    this.currentLocale = 'en',
+    required this.onLocaleChanged,
   });
 
   @override
@@ -3007,12 +3151,20 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _fillDemo(String username, String password) {
+    setState(() {
+      _usernameController.text = username;
+      _passwordController.text = password;
+      _errorMessage = null;
+    });
+  }
+
   Future<void> _handleLogin() async {
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
     if (username.isEmpty || password.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter both username and password';
+        _errorMessage = AppLocale.t(widget.currentLocale, 'enter_credentials');
       });
       return;
     }
@@ -3094,21 +3246,39 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
-                        IconButton(
-                          onPressed: widget.onToggleTheme,
-                          icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-                          tooltip: 'Toggle Theme',
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ActionChip(
+                              avatar: Text(widget.currentLocale == 'ar' ? '🇺🇸' : '🇸🇦', style: const TextStyle(fontSize: 14)),
+                              label: Text(
+                                widget.currentLocale == 'ar' ? 'English' : 'العربية',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () {
+                                final nextLoc = widget.currentLocale == 'ar' ? 'en' : 'ar';
+                                widget.onLocaleChanged(nextLoc, nextLoc == 'ar');
+                              },
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: widget.onToggleTheme,
+                              icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+                              tooltip: AppLocale.t(widget.currentLocale, 'theme'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                     const SizedBox(height: 28),
-                    const Text(
-                      'Sign In to Your Workspace',
+                    Text(
+                      AppLocale.t(widget.currentLocale, 'sign_in_title'),
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'Enter your authorized credentials to access this administration panel.',
+                    Text(
+                      AppLocale.t(widget.currentLocale, 'sign_in_subtitle'),
                       style: TextStyle(fontSize: 13, color: Colors.grey),
                     ),
                     const SizedBox(height: 20),
@@ -3138,7 +3308,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextField(
                       controller: _usernameController,
                       decoration: InputDecoration(
-                        labelText: 'Username or Email',
+                        labelText: AppLocale.t(widget.currentLocale, 'username_or_email'),
                         prefixIcon: const Icon(Icons.person_outline),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         filled: true,
@@ -3151,7 +3321,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
-                        labelText: 'Password',
+                        labelText: AppLocale.t(widget.currentLocale, 'password'),
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
@@ -3209,12 +3379,48 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
                             )
-                          : const Text('Sign In', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                          : Text(AppLocale.t(widget.currentLocale, 'sign_in'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                    Text(
+                      AppLocale.t(widget.currentLocale, 'quick_demo_roles'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        ActionChip(
+                          avatar: const Icon(Icons.security, size: 16, color: Color(0xFFF59E0B)),
+                          label: const Text('Super Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          onPressed: () => _fillDemo('admin', 'admin123'),
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.admin_panel_settings_outlined, size: 16, color: Color(0xFF38BDF8)),
+                          label: const Text('Operations Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          onPressed: () => _fillDemo('admin', 'admin123'),
+                        ),
+                        ActionChip(
+                          avatar: const Icon(Icons.account_balance_outlined, size: 16, color: Color(0xFF10B981)),
+                          label: const Text('Finance Auditor', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          onPressed: () => _fillDemo('admin', 'admin123'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     Center(
                       child: Text(
-                        'Enclave Secured • GoFilament & GoLaravel Engine',
+                        AppLocale.t(widget.currentLocale, 'enclave_secured'),
                         style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                       ),
                     ),
@@ -3846,9 +4052,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              BrandLogoWidget(
+              const BrandLogoWidget(
                 isCompact: true,
-                brandName: brandName,
+                brandName: 'Benzat',
+                imageAsset: 'assets/images/app_logo.png',
               ),
               const SizedBox(width: 10),
               Flexible(
@@ -3882,7 +4089,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 child: CircularAccountButton(
                   initial: (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
                   name: api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
-                  email: api.currentUser?['email'] ?? 'admin@filament.local',
+                  email: api.currentUser?['email'] ?? 'admin@benzat.com',
                   role: (api.currentUser?['role'] ?? 'OPERATIONS LEAD').toString().toUpperCase(),
                   onTap: () => AccountModalSheet.show(
                     context: context,
@@ -4023,9 +4230,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
                   onPressed: () => setState(() => _sidebarMode = SidebarCollapseMode.expanded),
                 ),
                 const SizedBox(width: 8),
-                BrandLogoWidget(
+                const BrandLogoWidget(
                   isCompact: true,
-                  brandName: brandName,
+                  brandName: 'Benzat',
+                  imageAsset: 'assets/images/app_logo.png',
                 ),
                 const SizedBox(width: 10),
               ],
@@ -4077,7 +4285,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 CircularAccountButton(
                   initial: (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
                   name: api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
-                  email: api.currentUser?['email'] ?? 'admin@filament.local',
+                  email: api.currentUser?['email'] ?? 'admin@benzat.com',
                   role: (api.currentUser?['role'] ?? 'OPERATIONS LEAD').toString().toUpperCase(),
                   onTap: () => AccountModalSheet.show(
                     context: context,
@@ -4124,9 +4332,10 @@ class _AdminShellPageState extends State<AdminShellPage> {
               decoration: BoxDecoration(
                 border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
               ),
-              child: BrandLogoWidget(
+              child: const BrandLogoWidget(
                 isCompact: true,
-                brandName: brandName,
+                brandName: 'Benzat',
+                imageAsset: 'assets/images/app_logo.png',
               ),
             ),
             Padding(
@@ -4163,6 +4372,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                       isCompact: false,
                       brandName: brandName,
                       subtitle: 'Control Center',
+                      imageAsset: 'assets/images/app_logo.png',
                     ),
                   ),
                   IconButton(
@@ -4241,7 +4451,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                     child: Text(
-                      'RESOURCES',
+                      AppLocale.t(widget.currentLocale, 'resources').toUpperCase(),
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -4424,8 +4634,6 @@ class _AdminShellPageState extends State<AdminShellPage> {
       ),
     );
   }
-    );
-  }
 
   // --- Dynamic Dashboard Views (Mobile & Desktop) ---
   Widget _buildMobileDashboard() {
@@ -4456,7 +4664,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Operational Dashboard',
+                    AppLocale.t(widget.currentLocale, 'operational_dashboard'),
                     style: TextStyle(
                       fontSize: isMobile ? 20 : 26,
                       fontWeight: FontWeight.bold,
@@ -4465,7 +4673,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Live operational metrics, telematics & hardware analytics',
+                    AppLocale.t(widget.currentLocale, 'dashboard_subtitle'),
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
@@ -4474,7 +4682,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 ],
               ),
               IconButton.filledTonal(
-                tooltip: 'Refresh Dashboard',
+                tooltip: AppLocale.t(widget.currentLocale, 'refresh_dashboard'),
                 icon: const Icon(Icons.refresh_rounded, size: 20),
                 onPressed: loadSchema,
               ),
@@ -4499,23 +4707,23 @@ class _AdminShellPageState extends State<AdminShellPage> {
         padding: EdgeInsets.all(isMobile ? 16 : 24),
         children: [
           Text(
-            isMobile ? 'Performance Overview' : 'Admin Dashboard',
+            isMobile ? AppLocale.t(widget.currentLocale, 'performance_overview') : AppLocale.t(widget.currentLocale, 'admin_dashboard'),
             style: TextStyle(fontSize: isMobile ? 20 : 28, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _kpiCard('Active Entities', '${schema?['resources']?.length ?? 0}', Colors.indigo, Icons.layers)),
+              Expanded(child: _kpiCard(AppLocale.t(widget.currentLocale, 'active_entities'), '${schema?['resources']?.length ?? 0}', Colors.indigo, Icons.layers)),
               const SizedBox(width: 12),
-              Expanded(child: _kpiCard('System Status', 'Operational', const Color(0xFF10B981), Icons.check_circle)),
+              Expanded(child: _kpiCard(AppLocale.t(widget.currentLocale, 'system_status'), AppLocale.t(widget.currentLocale, 'operational'), const Color(0xFF10B981), Icons.check_circle)),
               if (!isMobile) ...[
                 const SizedBox(width: 12),
-                Expanded(child: _kpiCard('Multi-Tenancy', schema?['active_tenant'] ?? 'Global', Colors.amber, Icons.business)),
+                Expanded(child: _kpiCard(AppLocale.t(widget.currentLocale, 'multi_tenancy'), schema?['active_tenant'] ?? 'Global', Colors.amber, Icons.business)),
               ],
             ],
           ),
           const SizedBox(height: 24),
-          const Text('Quick Access Entities', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(AppLocale.t(widget.currentLocale, 'quick_access_entities'), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           for (final res in (schema?['resources'] as List<dynamic>? ?? []))
             Card(
@@ -5394,7 +5602,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                   final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
                   final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
                   final tabs = cur != null ? (cur['tabs'] as List<dynamic>?) : null;
-                  return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters, tabs: tabs);
+                  return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters, tabs: tabs, currentLocale: widget.currentLocale);
                 }),
         ),
       ],
@@ -5413,7 +5621,8 @@ class _AdminShellPageState extends State<AdminShellPage> {
     final cur = resources.firstWhere((r) => r['slug'] == selectedResourceSlug, orElse: () => null);
     final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
     final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
-    return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters);
+    final tabs = cur != null ? (cur['tabs'] as List<dynamic>?) : null;
+    return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters, tabs: tabs, currentLocale: widget.currentLocale);
   }
 
   Widget _buildMobileAccountHub() {
@@ -5441,11 +5650,8 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     ),
                     border: Border.all(color: Colors.amber.withValues(alpha: 0.4), width: 2),
                   ),
-                  child: Center(
-                    child: Text(
-                      (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
-                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 22),
-                    ),
+                  child: const Center(
+                    child: Text('S', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 22)),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -5455,9 +5661,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
-                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                          const Text(
+                            'Sarah Connor',
+                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(width: 8),
                           Container(
@@ -5474,9 +5680,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        '${api.currentUser?['email'] ?? "admin@filament.local"} • ${(api.currentUser?['role'] ?? "OPERATIONS LEAD").toString().toUpperCase()}',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      const Text(
+                        'sarah@fleetpulse.io • Operations Lead',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                       const SizedBox(height: 6),
                       const Row(
@@ -5732,6 +5938,8 @@ class ResourceRecordList extends StatefulWidget {
   final String slug;
   final List<dynamic>? relations;
   final List<dynamic>? filters;
+  final List<dynamic>? tabs;
+  final String currentLocale;
 
   const ResourceRecordList({
     super.key,
@@ -5739,6 +5947,8 @@ class ResourceRecordList extends StatefulWidget {
     required this.slug,
     this.relations,
     this.filters,
+    this.tabs,
+    this.currentLocale = 'en',
   });
 
   @override
@@ -5750,6 +5960,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   bool isLoading = true;
   String search = '';
   final Map<String, Set<String>> activeFilters = {};
+  String? _activeTabKey;
   bool _showRelations = true;
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _verticalScrollController = ScrollController();
@@ -5816,16 +6027,16 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Delete Records?"),
-        content: Text("Are you sure you want to delete $count selected records? This action cannot be undone."),
+        title: Text(AppLocale.t(widget.currentLocale, 'delete_records_title')),
+        content: Text(AppLocale.t(widget.currentLocale, 'delete_records_confirm')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text("Cancel"),
+            child: Text(AppLocale.t(widget.currentLocale, 'cancel')),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text("Delete Selected", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            child: Text(AppLocale.t(widget.currentLocale, 'delete_selected'), style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -5839,7 +6050,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text("$count records deleted successfully"),
+              content: Text("$count ${AppLocale.t(widget.currentLocale, 'records_deleted')}"),
               backgroundColor: Colors.green.shade700,
             ),
           );
@@ -6040,6 +6251,59 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     return count;
   }
 
+  List<Map<String, dynamic>> _getTabs() {
+    if (widget.tabs != null && widget.tabs!.isNotEmpty) {
+      return widget.tabs!.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    final hasStatusOrActive = (widget.filters?.any((f) {
+      final name = (f['name'] ?? f['column'] ?? '').toString().toLowerCase();
+      return name == 'status' || name == 'active' || name == 'is_active';
+    }) ?? false) || (allRecords.isNotEmpty && (
+      allRecords.first.containsKey('status') ||
+      allRecords.first.containsKey('Status') ||
+      allRecords.first.containsKey('active') ||
+      allRecords.first.containsKey('Active') ||
+      allRecords.first.containsKey('is_active')
+    ));
+
+    if (hasStatusOrActive) {
+      return [
+        {'key': 'all', 'label': 'All'},
+        {'key': 'active', 'label': 'Active', 'query': {'status': 'active'}},
+        {'key': 'inactive', 'label': 'Inactive', 'query': {'status': 'inactive'}},
+      ];
+    }
+    return [];
+  }
+
+  int _getTabCount(Map<String, dynamic> tab) {
+    final key = tab['key'];
+    if (key == 'all') {
+      if (search.isEmpty) return allRecords.length;
+      return allRecords.where((r) => _recordMatchesSearch(r, search)).length;
+    }
+    final query = tab['query'] as Map<String, dynamic>?;
+    if (query == null || query.isEmpty) return 0;
+
+    return allRecords.where((r) {
+      if (search.isNotEmpty && !_recordMatchesSearch(r, search)) {
+        return false;
+      }
+      for (final qe in query.entries) {
+        final expectedVal = qe.value.toString().toLowerCase();
+        final recVal = _getRecordValue(r, qe.key)?.toLowerCase() ?? '';
+        if (expectedVal == 'active' || expectedVal == 'true') {
+          if (recVal != 'active' && recVal != 'true' && recVal != '1') return false;
+        } else if (expectedVal == 'inactive' || expectedVal == 'false') {
+          if (recVal != 'inactive' && recVal != 'false' && recVal != '0') return false;
+        } else if (recVal != expectedVal) {
+          return false;
+        }
+      }
+      return true;
+    }).length;
+  }
+
   List<dynamic> get filteredRecords {
     return allRecords.where((r) {
       if (search.isNotEmpty && !_recordMatchesSearch(r, search)) {
@@ -6050,6 +6314,27 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
         final recVal = _getRecordValue(r, entry.key)?.toLowerCase();
         if (recVal == null || !entry.value.any((v) => v.toLowerCase() == recVal)) {
           return false;
+        }
+      }
+      if (_activeTabKey != null && _activeTabKey != 'all') {
+        final tabs = _getTabs();
+        final currentTab = tabs.firstWhere(
+          (t) => t['key'] == _activeTabKey,
+          orElse: () => <String, dynamic>{},
+        );
+        final query = currentTab['query'] as Map<String, dynamic>?;
+        if (query != null && query.isNotEmpty) {
+          for (final qe in query.entries) {
+            final expectedVal = qe.value.toString().toLowerCase();
+            final recVal = _getRecordValue(r, qe.key)?.toLowerCase() ?? '';
+            if (expectedVal == 'active' || expectedVal == 'true') {
+              if (recVal != 'active' && recVal != 'true' && recVal != '1') return false;
+            } else if (expectedVal == 'inactive' || expectedVal == 'false') {
+              if (recVal != 'inactive' && recVal != 'false' && recVal != '0') return false;
+            } else if (recVal != expectedVal) {
+              return false;
+            }
+          }
         }
       }
       return true;
@@ -6316,6 +6601,47 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     }
   }
 
+  List<Map<String, dynamic>> _getRelations() {
+    if (widget.relations != null && widget.relations!.isNotEmpty) {
+      return widget.relations!.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    if (widget.slug == 'partners') {
+      return [
+        {'relationship': 'admins', 'title': 'Station Admins', 'icon': 'heroicon-users'},
+        {'relationship': 'branches', 'title': 'Station Branches', 'icon': 'heroicon-building-office'},
+      ];
+    }
+    if (widget.slug == 'customers') {
+      return [
+        {'relationship': 'admins', 'title': 'Fleet Admins', 'icon': 'heroicon-users'},
+        {'relationship': 'branches', 'title': 'Fleet Branches', 'icon': 'heroicon-building-office'},
+        {'relationship': 'vehicles', 'title': 'Fleet Vehicles', 'icon': 'heroicon-truck'},
+      ];
+    }
+    if (widget.slug == 'nfc-chip-batches') {
+      return [
+        {'relationship': 'chips', 'title': 'Batch NFC Chips', 'icon': 'heroicon-cpu-chip'},
+      ];
+    }
+    return [];
+  }
+
+  IconData _iconForRelation(String icon) {
+    if (icon.contains('user') || icon.contains('admin') || icon.contains('person')) {
+      return Icons.people_alt_outlined;
+    }
+    if (icon.contains('building') || icon.contains('office') || icon.contains('branch')) {
+      return Icons.business_outlined;
+    }
+    if (icon.contains('truck') || icon.contains('car') || icon.contains('vehicle')) {
+      return Icons.local_shipping_outlined;
+    }
+    if (icon.contains('chip') || icon.contains('cpu') || icon.contains('tag')) {
+      return Icons.nfc_outlined;
+    }
+    return Icons.account_tree_outlined;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -6326,6 +6652,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   void didUpdateWidget(covariant ResourceRecordList oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.slug != widget.slug) {
+      _activeTabKey = null;
       loadRecords();
     }
   }
@@ -6408,6 +6735,11 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     if (isTelemetry) headerIcon = Icons.sensors;
     if (isTicket) headerIcon = Icons.confirmation_number_outlined;
     if (isFirmware) headerIcon = Icons.system_update_alt;
+    if (widget.slug == 'partners') headerIcon = Icons.local_gas_station_outlined;
+    if (widget.slug == 'customers') headerIcon = Icons.business_outlined;
+    if (widget.slug == 'partner-branches' || widget.slug == 'customer-branches') headerIcon = Icons.storefront_outlined;
+    if (widget.slug == 'vehicles') headerIcon = Icons.local_shipping_outlined;
+    if (widget.slug.contains('nfc')) headerIcon = Icons.nfc_outlined;
 
     final status = (item['Status'] ?? item['status'] ?? 'online').toString().toLowerCase();
     Color statusColor = const Color(0xFF10B981);
@@ -6433,6 +6765,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header: Icon + Title + Status/Badge
@@ -6600,12 +6933,120 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                   Expanded(child: _buildFieldItem('Active Binary', '${item['IsActive'] ?? item['is_active'] ?? true ? "Yes" : "Archived"}', icon: Icons.check_circle_outline)),
                 ],
               ),
+            ] else if (widget.slug == 'partners') ...[
+              Row(
+                children: [
+                  Expanded(child: _buildFieldItem('Company Name', '${item['name'] ?? item['Name'] ?? 'N/A'}', icon: Icons.local_gas_station_outlined)),
+                  Expanded(child: _buildFieldItem('Arabic Name', '${item['name_ar'] ?? item['NameAr'] ?? 'N/A'}', icon: Icons.translate)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _buildFieldItem('CR Number', '${item['cr_number'] ?? item['CrNumber'] ?? 'N/A'}', icon: Icons.badge_outlined)),
+                  Expanded(child: _buildFieldItem('Phone / Contact', '${item['phone'] ?? item['Phone'] ?? item['email'] ?? 'N/A'}', icon: Icons.phone_outlined)),
+                ],
+              ),
+            ] else if (widget.slug == 'customers') ...[
+              Row(
+                children: [
+                  Expanded(child: _buildFieldItem('Fleet Code', '${item['code'] ?? item['Code'] ?? 'N/A'}', icon: Icons.tag)),
+                  Expanded(child: _buildFieldItem('Fleet Name', '${item['name'] ?? item['Name'] ?? 'N/A'}', icon: Icons.business)),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(child: _buildFieldItem('Phone', '${item['phone'] ?? item['Phone'] ?? 'N/A'}', icon: Icons.phone)),
+                  Expanded(child: _buildFieldItem('Credit Limit', 'SAR ${item['credit_limit'] ?? item['CreditLimit'] ?? '0.00'}', icon: Icons.account_balance_wallet_outlined, valueColor: const Color(0xFF10B981))),
+                ],
+              ),
+            ] else if (widget.slug == 'customer-branches' || widget.slug == 'partner-branches') ...[
+              Row(
+                children: [
+                  Expanded(child: _buildFieldItem('Branch Name', '${item['name'] ?? item['Name'] ?? 'N/A'}', icon: Icons.storefront)),
+                  Expanded(child: _buildFieldItem('City / Location', '${item['city'] ?? item['City'] ?? 'Saudi Arabia'}', icon: Icons.location_on_outlined)),
+                ],
+              ),
+            ] else if (widget.slug == 'vehicles') ...[
+              Row(
+                children: [
+                  Expanded(child: _buildFieldItem('Plate Number', '${item['plate_number'] ?? item['PlateNumber'] ?? 'N/A'}', icon: Icons.pin)),
+                  Expanded(child: _buildFieldItem('Odometer', '${item['odometer'] ?? item['Odometer'] ?? '0'} km', icon: Icons.speed)),
+                ],
+              ),
+            ] else if (widget.slug == 'nfc-chips') ...[
+              Row(
+                children: [
+                  Expanded(child: _buildFieldItem('Chip Serial', '${item['chip_serial'] ?? item['ChipSerial'] ?? 'N/A'}', icon: Icons.nfc)),
+                  Expanded(child: _buildFieldItem('Fleet', '${item['customer_name'] ?? item['CustomerName'] ?? 'Unassigned'}', icon: Icons.business)),
+                ],
+              ),
             ] else ...[
               Row(
                 children: [
                   Expanded(child: _buildFieldItem('Email Address', '${item['Email'] ?? item['email'] ?? 'N/A'}', icon: Icons.email_outlined)),
                   Expanded(child: _buildFieldItem('Department', '${item['Department'] ?? item['department'] ?? 'General'}', icon: Icons.business)),
                 ],
+              ),
+            ],
+
+            // Nested Relation Managers (Mobile-friendly link to open related resources)
+            if (_getRelations().isNotEmpty && _showRelations) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1, thickness: 0.5),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(Icons.hub_outlined, size: 14, color: Colors.amber.shade400),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'SUB-ENTITIES & RELATIONS',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _getRelations().map((rel) {
+                  final relTitle = (rel['title'] ?? rel['relationship'] ?? 'Related').toString();
+                  final relSlug = (rel['relationship'] ?? '').toString();
+                  final iconName = (rel['icon'] ?? '').toString();
+                  return ActionChip(
+                    avatar: Icon(_iconForRelation(iconName), size: 15, color: Colors.amber.shade400),
+                    label: Text(
+                      relTitle,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    backgroundColor: Colors.amber.withValues(alpha: 0.1),
+                    side: BorderSide(color: Colors.amber.withValues(alpha: 0.3)),
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RelationRecordScreen(
+                            api: widget.api,
+                            parentSlug: widget.slug,
+                            parentId: id,
+                            parentTitle: name,
+                            relSlug: relSlug,
+                            relTitle: relTitle,
+                            currentLocale: widget.currentLocale,
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                }).toList(),
               ),
             ],
 
@@ -6619,13 +7060,13 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
               children: [
                 TextButton.icon(
                   icon: const Icon(Icons.edit_outlined, size: 15),
-                  label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                  label: Text(AppLocale.t(widget.currentLocale, 'edit'), style: const TextStyle(fontSize: 12)),
                   onPressed: () => showEditSheet(context, id, item),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   icon: const Icon(Icons.delete_outline, size: 15, color: Colors.redAccent),
-                  label: const Text('Delete', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                  label: Text(AppLocale.t(widget.currentLocale, 'delete'), style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
                   onPressed: () async {
                     final confirm = await showDialog<bool>(
                       context: context,
@@ -6653,29 +7094,6 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
         ),
       ),
     );
-  }
-
-  List<Map<String, dynamic>> _getRelations() {
-    if (widget.relations != null && widget.relations!.isNotEmpty) {
-      return widget.relations!.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-    }
-    return [];
-  }
-
-  IconData _iconForRelation(String icon) {
-    if (icon.contains('user') || icon.contains('admin') || icon.contains('person')) {
-      return Icons.people_alt_outlined;
-    }
-    if (icon.contains('building') || icon.contains('office') || icon.contains('branch')) {
-      return Icons.business_outlined;
-    }
-    if (icon.contains('truck') || icon.contains('car') || icon.contains('vehicle')) {
-      return Icons.local_shipping_outlined;
-    }
-    if (icon.contains('chip') || icon.contains('cpu') || icon.contains('tag')) {
-      return Icons.nfc_outlined;
-    }
-    return Icons.account_tree_outlined;
   }
 
   List<String> _extractColumns() {
@@ -6801,6 +7219,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
           parentTitle: name,
           relSlug: relSlug,
           relTitle: relTitle,
+          currentLocale: widget.currentLocale,
         ),
       ),
     );
@@ -7040,6 +7459,12 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     if (isTelemetry) headerIcon = Icons.sensors;
     if (isTicket) headerIcon = Icons.confirmation_number_outlined;
     if (isFirmware) headerIcon = Icons.system_update_alt;
+    if (widget.slug == 'partners') headerIcon = Icons.local_gas_station_outlined;
+    if (widget.slug == 'customers') headerIcon = Icons.business_outlined;
+    if (widget.slug.contains('branch')) headerIcon = Icons.storefront_outlined;
+    if (widget.slug.contains('vehicle')) headerIcon = Icons.local_shipping_outlined;
+    if (widget.slug.contains('nfc') || widget.slug.contains('chip')) headerIcon = Icons.nfc_outlined;
+    if (widget.slug.contains('expense') || widget.slug.contains('invoice') || widget.slug.contains('account')) headerIcon = Icons.account_balance_wallet_outlined;
 
     final status = (item['Status'] ?? item['status'] ?? item['status_text'] ?? (item['active'] == 'Y' ? 'active' : (item['active'] == 'N' ? 'inactive' : 'online'))).toString();
     Color statusColor = const Color(0xFF10B981);
@@ -7238,11 +7663,18 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final tabs = _getTabs();
+    double bottomHeight = 56.0;
+    if (tabs.isNotEmpty) bottomHeight += 44.0;
+    if (activeFilterCount > 0) bottomHeight += 44.0;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.slug.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         bottom: PreferredSize(
-          preferredSize: Size.fromHeight(activeFilterCount > 0 ? 102 : 56),
+          preferredSize: Size.fromHeight(bottomHeight),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -7253,7 +7685,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                     Expanded(
                       child: TextField(
                         decoration: InputDecoration(
-                          hintText: 'Search ${widget.slug}...',
+                          hintText: '${AppLocale.t(widget.currentLocale, "search")} ${widget.slug}...',
                           prefixIcon: const Icon(Icons.search, size: 20),
                           suffixIcon: search.isNotEmpty
                               ? IconButton(
@@ -7273,7 +7705,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                     ),
                     const SizedBox(width: 8),
                     IconButton.filledTonal(
-                      tooltip: _showRelations ? 'Hide Related Entities' : 'Show Related Entities',
+                      tooltip: _showRelations ? AppLocale.t(widget.currentLocale, 'hide_relations') : AppLocale.t(widget.currentLocale, 'show_relations'),
                       style: IconButton.styleFrom(
                         backgroundColor: _showRelations ? Colors.amber.withValues(alpha: 0.2) : null,
                         foregroundColor: _showRelations ? Colors.amber.shade400 : null,
@@ -7292,7 +7724,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                       backgroundColor: Colors.amber,
                       textColor: Colors.black,
                       child: IconButton.filledTonal(
-                        tooltip: 'Refined Search Filters',
+                        tooltip: AppLocale.t(widget.currentLocale, 'filters'),
                         icon: const Icon(Icons.tune_rounded),
                         onPressed: () => _showFilterModal(context),
                       ),
@@ -7335,7 +7767,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                             children: [
                               Icon(isAllSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 20),
                               const SizedBox(width: 10),
-                              Text(isAllSelected ? 'Deselect All' : 'Select All (${records.length})'),
+                              Text(isAllSelected ? AppLocale.t(widget.currentLocale, 'deselect_all') : '${AppLocale.t(widget.currentLocale, "select_all")} (${records.length})'),
                             ],
                           ),
                         ),
@@ -7377,6 +7809,64 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                   ],
                 ),
               ),
+              if (tabs.isNotEmpty)
+                Container(
+                  height: 38,
+                  margin: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: tabs.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (ctx, idx) {
+                      final tab = tabs[idx];
+                      final isSelected = (_activeTabKey ?? tabs.first['key']) == tab['key'];
+                      final count = _getTabCount(tab);
+                      return ChoiceChip(
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(tab['label'] ?? 'Tab'),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.amber.shade700
+                                    : (isDark ? Colors.white12 : Colors.black12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '$count',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? Colors.black : (isDark ? Colors.white70 : Colors.black87),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        selected: isSelected,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _activeTabKey = tab['key'];
+                              selectedRecordIds.clear();
+                            });
+                          }
+                        },
+                        selectedColor: Colors.amber.withValues(alpha: 0.25),
+                        backgroundColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: isSelected ? Colors.amber : (isDark ? Colors.white24 : Colors.black26),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               if (activeFilterCount > 0)
                 Container(
                   height: 42,
@@ -7386,7 +7876,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                     children: [
                       ActionChip(
                         avatar: const Icon(Icons.close, size: 14),
-                        label: const Text('Clear All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        label: Text(AppLocale.t(widget.currentLocale, 'clear_all'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         onPressed: _clearAllFilters,
                         visualDensity: VisualDensity.compact,
                       ),
@@ -7424,7 +7914,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                       Text(
                         activeFilterCount > 0 || search.isNotEmpty
                             ? 'No records match the applied filters or search.'
-                            : 'No records found.',
+                            : AppLocale.t(widget.currentLocale, 'no_records_found'),
                         style: const TextStyle(color: Colors.grey),
                       ),
                       if (activeFilterCount > 0 || search.isNotEmpty) ...[
@@ -7668,6 +8158,104 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   }
 
   void showEditSheet(BuildContext context, String id, dynamic item) {
+    if (widget.slug == 'partners') {
+      final nameCtrl = TextEditingController(text: item['name'] ?? item['Name'] ?? '');
+      final nameArCtrl = TextEditingController(text: item['name_ar'] ?? item['NameAr'] ?? '');
+      final crCtrl = TextEditingController(text: item['cr_number'] ?? item['CrNumber'] ?? '');
+      final phoneCtrl = TextEditingController(text: item['phone'] ?? item['Phone'] ?? '');
+
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Edit Station Partner #$id', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 16),
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Company Name', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: nameArCtrl, decoration: const InputDecoration(labelText: 'Arabic Name', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: crCtrl, decoration: const InputDecoration(labelText: 'CR Number', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.save),
+                label: const Text('Update Partner Details'),
+                onPressed: () async {
+                  await widget.api.updateRecord(widget.slug, id, {
+                    'name': nameCtrl.text,
+                    'name_ar': nameArCtrl.text,
+                    'cr_number': crCtrl.text,
+                    'phone': phoneCtrl.text,
+                  });
+                  if (!mounted) return;
+                  Navigator.pop(ctx);
+                  loadRecords();
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (widget.slug == 'customers') {
+      final codeCtrl = TextEditingController(text: item['code'] ?? item['Code'] ?? '');
+      final nameCtrl = TextEditingController(text: item['name'] ?? item['Name'] ?? '');
+      final nameArCtrl = TextEditingController(text: item['name_ar'] ?? item['NameAr'] ?? '');
+      final phoneCtrl = TextEditingController(text: item['phone'] ?? item['Phone'] ?? '');
+      final limitCtrl = TextEditingController(text: '${item['credit_limit'] ?? item['CreditLimit'] ?? '0.00'}');
+
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Edit Fleet Company #$id', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const SizedBox(height: 16),
+              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Fleet Code', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Company Name', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: nameArCtrl, decoration: const InputDecoration(labelText: 'Arabic Name', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 12),
+              TextField(controller: limitCtrl, decoration: const InputDecoration(labelText: 'Credit Limit (SAR)', border: OutlineInputBorder(), isDense: true)),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.save),
+                label: const Text('Update Fleet Company'),
+                onPressed: () async {
+                  await widget.api.updateRecord(widget.slug, id, {
+                    'code': codeCtrl.text,
+                    'name': nameCtrl.text,
+                    'name_ar': nameArCtrl.text,
+                    'phone': phoneCtrl.text,
+                    'credit_limit': limitCtrl.text,
+                  });
+                  if (!mounted) return;
+                  Navigator.pop(ctx);
+                  loadRecords();
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+      return;
+    }
+
     final titleCtrl = TextEditingController(text: item['Name'] ?? item['Title'] ?? item['name'] ?? '');
     final locCtrl = TextEditingController(text: item['Location'] ?? item['location'] ?? item['Department'] ?? item['department'] ?? '');
     String status = item['Status'] ?? item['status'] ?? 'online';
@@ -7992,7 +8580,7 @@ class AccountModalSheet extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  api.currentUser?['email'] ?? 'admin@filament.local',
+                                  api.currentUser?['email'] ?? 'admin@benzat.com',
                                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                                 ),
                                 const SizedBox(height: 8),
