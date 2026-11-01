@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/notifications"
+	"github.com/golaravel/gofilament/pkg/tables"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/router"
 	"github.com/golaravel/golaravel/pkg/translation"
@@ -166,8 +167,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			ModelName       string            `json:"model_name"`
 			PluralModelName string            `json:"plural_model_name"`
 			NavIcon         string            `json:"icon"`
-			NavGroup        string            `json:"group"`
-			Relations       []relationMetaDTO `json:"relations,omitempty"`
+			NavGroup        string              `json:"group"`
+			Relations       []relationMetaDTO   `json:"relations,omitempty"`
+			Filters         []tables.FilterDTO  `json:"filters,omitempty"`
 		}
 
 		var resourceDTOs []resourceDTO
@@ -182,6 +184,10 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 						Icon:         rel.GetIcon(),
 					})
 				}
+				var filtersDTO []tables.FilterDTO
+				if hf, ok := res.(interface{ GetFilters() []tables.FilterDTO }); ok {
+					filtersDTO = hf.GetFilters()
+				}
 				resourceDTOs = append(resourceDTOs, resourceDTO{
 					Slug:            res.Slug(),
 					ModelName:       item.Label,
@@ -189,6 +195,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					NavIcon:         item.Icon,
 					NavGroup:        item.Group,
 					Relations:       relsDTO,
+					Filters:         filtersDTO,
 				})
 			}
 		}

@@ -20,6 +20,9 @@ type BaseColumn[T any] struct {
 	editable               bool
 	toggleable             bool
 	toggledHiddenByDefault bool
+	filterable             bool
+	refinedFilter          bool
+	filterOptions          map[string]string
 	valueFunc              func(record T) any
 }
 
@@ -92,9 +95,43 @@ func (c *BaseColumn[T]) IsToggledHiddenByDefault() bool {
 	return c.toggledHiddenByDefault
 }
 
+func (c *BaseColumn[T]) Filterable(enabled ...bool) *BaseColumn[T] {
+	c.filterable = len(enabled) == 0 || enabled[0]
+	return c
+}
+
+func (c *BaseColumn[T]) RefinedFilter(enabled ...bool) *BaseColumn[T] {
+	c.refinedFilter = len(enabled) == 0 || enabled[0]
+	if c.refinedFilter {
+		c.filterable = true
+	}
+	return c
+}
+
+func (c *BaseColumn[T]) FilterOptions(opts map[string]string) *BaseColumn[T] {
+	c.filterOptions = opts
+	return c
+}
+
+func (c *BaseColumn[T]) IsFilterable() bool {
+	return c.filterable
+}
+
+func (c *BaseColumn[T]) IsRefinedFilter() bool {
+	return c.refinedFilter
+}
+
+func (c *BaseColumn[T]) GetFilterOptions() map[string]string {
+	return c.filterOptions
+}
+
 func (c *BaseColumn[T]) Value(fn func(record T) any) *BaseColumn[T] {
 	c.valueFunc = fn
 	return c
+}
+
+func (c *BaseColumn[T]) GetLabel() string {
+	return c.FormatLabel()
 }
 
 func (c *BaseColumn[T]) FormatLabel() string {
@@ -185,6 +222,21 @@ func (c *TextColumnDef[T]) Value(fn func(record T) any) *TextColumnDef[T] {
 
 func (c *TextColumnDef[T]) Editable(e ...bool) *TextColumnDef[T] {
 	c.BaseColumn.Editable(e...)
+	return c
+}
+
+func (c *TextColumnDef[T]) Filterable(enabled ...bool) *TextColumnDef[T] {
+	c.BaseColumn.Filterable(enabled...)
+	return c
+}
+
+func (c *TextColumnDef[T]) RefinedFilter(enabled ...bool) *TextColumnDef[T] {
+	c.BaseColumn.RefinedFilter(enabled...)
+	return c
+}
+
+func (c *TextColumnDef[T]) FilterOptions(opts map[string]string) *TextColumnDef[T] {
+	c.BaseColumn.FilterOptions(opts)
 	return c
 }
 
@@ -286,6 +338,21 @@ func (c *BadgeColumnDef[T]) Colors(colors map[string]string) *BadgeColumnDef[T] 
 
 func (c *BadgeColumnDef[T]) Value(fn func(record T) any) *BadgeColumnDef[T] {
 	c.BaseColumn.Value(fn)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) Filterable(enabled ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.Filterable(enabled...)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) RefinedFilter(enabled ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.RefinedFilter(enabled...)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) FilterOptions(opts map[string]string) *BadgeColumnDef[T] {
+	c.BaseColumn.FilterOptions(opts)
 	return c
 }
 

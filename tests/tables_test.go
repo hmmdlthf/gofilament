@@ -101,3 +101,72 @@ func TestTableBuilderRendering(t *testing.T) {
 		t.Errorf("Expected bulk action button 'Delete Selected'")
 	}
 }
+
+func TestRefinedFilterAndColumnAutoResolve(t *testing.T) {
+	// 1. RefinedFilter with options and live counts
+	rf := tables.RefinedFilter("type").
+		Label("Partner Type").
+		Options(map[string]string{
+			"station": "Station Partner",
+			"fleet":   "Fleet Company",
+			"dealer":  "Fuel Dealer",
+		}).
+		Counts(map[string]int{
+			"station": 24,
+			"fleet":   18,
+			"dealer":  5,
+		})
+
+	if rf.GetType() != tables.FilterTypeRefined {
+		t.Fatalf("expected FilterTypeRefined, got %s", rf.GetType())
+	}
+	if !rf.IsMultiple() {
+		t.Fatalf("expected RefinedFilter to be multiple-selection by default")
+	}
+
+	dto := rf.ToDTO()
+	if dto.Name != "type" || dto.Label != "Partner Type" {
+		t.Errorf("unexpected DTO: %+v", dto)
+	}
+	if len(dto.Options) != 3 {
+		t.Fatalf("expected 3 options in DTO, got %d", len(dto.Options))
+	}
+	// Check count in options
+	var stationOpt *tables.FilterOption
+	for i := range dto.Options {
+		if dto.Options[i].Value == "station" {
+			stationOpt = &dto.Options[i]
+		}
+	}
+	if stationOpt == nil || stationOpt.Count != 24 {
+		t.Errorf("expected station option count 24, got %+v", stationOpt)
+	}
+
+	rendered := rf.Render("station,dealer")
+	if !strings.Contains(rendered, "checked") {
+		t.Errorf("expected checked checkbox in rendered HTML, got: %s", rendered)
+	}
+	if !strings.Contains(rendered, "(24)") || !strings.Contains(rendered, "(18)") {
+		t.Errorf("expected count badges (24) and (18) in rendered HTML, got: %s", rendered)
+	}
+
+	// 2. Test Column auto-resolve into table filters
+	tbl := tables.New[*TestUser]().
+		Columns(
+			tables.TextColumn[*TestUser]("name").Searchable(),
+			tables.TextColumn[*TestUser]("category").Filterable(),
+			tables.TextColumn[*TestUser]("type").RefinedFilter(),
+		)
+
+	filters := tbl.GetFilters()
+	if len(filters) != 2 {
+		t.Fatalf("expected 2 auto-resolved filters from columns, got %d", len(filters))
+	}
+
+	if filters[0].GetName() != "category" || filters[0].GetType() != tables.FilterTypeSelect {
+		t.Errorf("expected select filter for category, got: %+v", filters[0])
+	}
+	if filters[1].GetName() != "type" || filters[1].GetType() != tables.FilterTypeRefined {
+		t.Errorf("expected refined filter for type, got: %+v", filters[1])
+	}
+}

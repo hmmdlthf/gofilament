@@ -121,9 +121,56 @@ func (t *Table[T]) HasFilter(name string) bool {
 	return false
 }
 
-// GetFilters returns registered filters.
+// ResolveFilters combines explicitly registered filters with auto-generated column filters.
+func (t *Table[T]) ResolveFilters() []FilterInterface {
+	allFilters := make([]FilterInterface, 0, len(t.filters))
+	existing := make(map[string]bool)
+
+	// Add explicit filters first
+	for _, f := range t.filters {
+		allFilters = append(allFilters, f)
+		existing[f.GetName()] = true
+		if f.GetColumn() != "" {
+			existing[f.GetColumn()] = true
+		}
+	}
+
+	// Auto-create filters for columns marked Filterable() or RefinedFilter()
+	for _, col := range t.columns {
+		if c, ok := any(col).(interface {
+			GetName() string
+			GetLabel() string
+			IsFilterable() bool
+			IsRefinedFilter() bool
+			GetFilterOptions() map[string]string
+		}); ok {
+			colName := c.GetName()
+			if c.IsFilterable() && !existing[colName] {
+				label := c.GetLabel()
+				if c.IsRefinedFilter() {
+					rf := RefinedFilter(colName).Label(label).Column(colName)
+					if opts := c.GetFilterOptions(); len(opts) > 0 {
+						rf.Options(opts)
+					}
+					allFilters = append(allFilters, rf)
+				} else {
+					sf := SelectFilter(colName).Label(label).Column(colName)
+					if opts := c.GetFilterOptions(); len(opts) > 0 {
+						sf.Options(opts)
+					}
+					allFilters = append(allFilters, sf)
+				}
+				existing[colName] = true
+			}
+		}
+	}
+
+	return allFilters
+}
+
+// GetFilters returns registered and column-resolved filters.
 func (t *Table[T]) GetFilters() []FilterInterface {
-	return t.filters
+	return t.ResolveFilters()
 }
 
 // Columns registers table columns.

@@ -155,11 +155,24 @@ class FilamentApiClient {
     throw Exception('Failed to load panel schema: ${res.statusCode}');
   }
 
-  Future<Map<String, dynamic>> fetchResourceRecords(String slug, {int page = 1, String search = ''}) async {
-    final uri = Uri.parse('$baseUrl/api/resources/$slug').replace(queryParameters: {
+  Future<Map<String, dynamic>> fetchResourceRecords(String slug, {int page = 1, String search = '', Map<String, dynamic>? filters}) async {
+    final queryParams = <String, String>{
       'page': page.toString(),
       if (search.isNotEmpty) 'search': search,
-    });
+    };
+    if (filters != null) {
+      filters.forEach((key, val) {
+        if (val != null) {
+          if (val is Iterable) {
+            final joined = val.map((e) => e.toString()).where((e) => e.isNotEmpty).join(',');
+            if (joined.isNotEmpty) queryParams['filter_$key'] = joined;
+          } else if (val.toString().isNotEmpty) {
+            queryParams['filter_$key'] = val.toString();
+          }
+        }
+      });
+    }
+    final uri = Uri.parse('$baseUrl/api/resources/$slug').replace(queryParameters: queryParams);
     final res = await http.get(uri, headers: _headers);
     if (res.statusCode == 200) {
       return json.decode(res.body);
@@ -1817,7 +1830,12 @@ class _AdminShellPageState extends State<AdminShellPage> {
         Expanded(
           child: selectedResourceSlug == null
               ? const Center(child: Text('Select a resource above'))
-              : ResourceRecordList(api: api, slug: selectedResourceSlug!),
+              : Builder(builder: (_) {
+                  final cur = resources.firstWhere((r) => r['slug'] == selectedResourceSlug, orElse: () => null);
+                  final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
+                  final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
+                  return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters);
+                }),
         ),
       ],
     );
@@ -1869,7 +1887,12 @@ class _AdminShellPageState extends State<AdminShellPage> {
         Expanded(
           child: selectedResourceSlug == null
               ? const Center(child: Text('Select a resource'))
-              : ResourceRecordList(api: api, slug: selectedResourceSlug!),
+              : Builder(builder: (_) {
+                  final cur = resources.firstWhere((r) => r['slug'] == selectedResourceSlug, orElse: () => null);
+                  final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
+                  final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
+                  return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters);
+                }),
         ),
       ],
     );
@@ -2189,17 +2212,435 @@ class _AdminShellPageState extends State<AdminShellPage> {
 class ResourceRecordList extends StatefulWidget {
   final FilamentApiClient api;
   final String slug;
+  final List<dynamic>? relations;
+  final List<dynamic>? filters;
 
-  const ResourceRecordList({super.key, required this.api, required this.slug});
+  const ResourceRecordList({
+    super.key,
+    required this.api,
+    required this.slug,
+    this.relations,
+    this.filters,
+  });
 
   @override
   State<ResourceRecordList> createState() => _ResourceRecordListState();
 }
 
 class _ResourceRecordListState extends State<ResourceRecordList> {
-  List<dynamic> records = [];
+  List<dynamic> allRecords = [];
   bool isLoading = true;
   String search = '';
+  final Map<String, Set<String>> activeFilters = {};
+
+  int get activeFilterCount {
+    int count = 0;
+    for (final s in activeFilters.values) {
+      count += s.length;
+    }
+    return count;
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      activeFilters.clear();
+    });
+  }
+
+  void _removeFilter(String key, String val) {
+    setState(() {
+      activeFilters[key]?.remove(val);
+      if (activeFilters[key]?.isEmpty ?? false) {
+        activeFilters.remove(key);
+      }
+    });
+  }
+
+  void _toggleFilter(String key, String val) {
+    setState(() {
+      if (!activeFilters.containsKey(key)) {
+        activeFilters[key] = <String>{};
+      }
+      if (activeFilters[key]!.contains(val)) {
+        activeFilters[key]!.remove(val);
+        if (activeFilters[key]!.isEmpty) {
+          activeFilters.remove(key);
+        }
+      } else {
+        activeFilters[key]!.add(val);
+      }
+    });
+  }
+
+  String _titleCase(String s) {
+    if (s.isEmpty) return s;
+    return s.split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1)).join(' ');
+  }
+
+  String _snakeToCamel(String s) {
+    final parts = s.split('_');
+    return parts.first + parts.skip(1).map((p) => p.isEmpty ? '' : p[0].toUpperCase() + p.substring(1)).join('');
+  }
+
+  String? _getRecordValue(dynamic r, String col) {
+    if (r is! Map) return null;
+    final val = r[col] ?? r[col.toLowerCase()] ?? r[col.toUpperCase()] ?? r[_snakeToCamel(col)];
+    return val?.toString();
+  }
+
+  List<Map<String, dynamic>> _getAvailableFilters() {
+    final list = <Map<String, dynamic>>[];
+    final seenKeys = <String>{};
+
+    if (widget.filters != null && widget.filters!.isNotEmpty) {
+      for (final f in widget.filters!) {
+        if (f is Map) {
+          final m = Map<String, dynamic>.from(f);
+          final col = (m['column'] ?? m['name'] ?? '').toString();
+          if (col.isNotEmpty) {
+            seenKeys.add(col.toLowerCase());
+            list.add(m);
+          }
+        }
+      }
+    }
+
+    final candidateKeys = ['status', 'status_text', 'type', 'customer_type', 'role', 'city', 'priority', 'category', 'method', 'channel'];
+    for (final k in candidateKeys) {
+      if (seenKeys.contains(k.toLowerCase())) continue;
+      bool hasField = false;
+      for (final r in allRecords) {
+        if (r is Map && (r.containsKey(k) || r.containsKey(k.toUpperCase()) || r.containsKey(_snakeToCamel(k)))) {
+          hasField = true;
+          break;
+        }
+      }
+      if (hasField) {
+        seenKeys.add(k.toLowerCase());
+        list.add({
+          'name': k,
+          'column': k,
+          'label': _titleCase(k.replaceAll('_', ' ')),
+          'type': 'refined',
+          'multiple': true,
+        });
+      }
+    }
+    return list;
+  }
+
+  List<String> _getOptionsForFilter(Map<String, dynamic> filterDef) {
+    final col = (filterDef['column'] ?? filterDef['name'] ?? '').toString();
+    final set = <String>{};
+
+    if (filterDef['options'] != null && filterDef['options'] is List) {
+      for (final opt in filterDef['options'] as List) {
+        if (opt is Map) {
+          final v = opt['value']?.toString() ?? '';
+          if (v.isNotEmpty) set.add(v);
+        } else if (opt != null) {
+          final v = opt.toString();
+          if (v.isNotEmpty) set.add(v);
+        }
+      }
+    }
+
+    for (final r in allRecords) {
+      final v = _getRecordValue(r, col);
+      if (v != null && v.trim().isNotEmpty) {
+        set.add(v.trim());
+      }
+    }
+
+    final res = set.toList();
+    res.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return res;
+  }
+
+  bool _recordMatchesSearch(dynamic r, String query) {
+    if (r is! Map) return false;
+    final q = query.toLowerCase();
+    for (final v in r.values) {
+      if (v != null && v.toString().toLowerCase().contains(q)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int _calculateFacetCount(String catKey, String optVal) {
+    int count = 0;
+    final optLower = optVal.toLowerCase();
+
+    for (final r in allRecords) {
+      if (search.isNotEmpty && !_recordMatchesSearch(r, search)) {
+        continue;
+      }
+
+      bool matchesOtherFilters = true;
+      for (final entry in activeFilters.entries) {
+        if (entry.key == catKey) continue;
+        if (entry.value.isEmpty) continue;
+        final recVal = _getRecordValue(r, entry.key)?.toLowerCase();
+        if (recVal == null || !entry.value.any((v) => v.toLowerCase() == recVal)) {
+          matchesOtherFilters = false;
+          break;
+        }
+      }
+
+      if (!matchesOtherFilters) continue;
+
+      final recVal = _getRecordValue(r, catKey)?.toLowerCase();
+      if (recVal != null && recVal == optLower) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  List<dynamic> get filteredRecords {
+    return allRecords.where((r) {
+      if (search.isNotEmpty && !_recordMatchesSearch(r, search)) {
+        return false;
+      }
+      for (final entry in activeFilters.entries) {
+        if (entry.value.isEmpty) continue;
+        final recVal = _getRecordValue(r, entry.key)?.toLowerCase();
+        if (recVal == null || !entry.value.any((v) => v.toLowerCase() == recVal)) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+  }
+
+  List<dynamic> get records => filteredRecords;
+
+  void _showFilterModal(BuildContext context) {
+    final availableFilters = _getAvailableFilters();
+    if (availableFilters.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No filterable attributes found for this resource.')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setModalState) {
+            final theme = Theme.of(ctx);
+            final isDark = theme.brightness == Brightness.dark;
+            final bg = isDark ? const Color(0xFF1E293B) : Colors.white;
+
+            return Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+                maxWidth: 600,
+              ),
+              margin: EdgeInsets.only(
+                left: MediaQuery.of(ctx).size.width > 600 ? (MediaQuery.of(ctx).size.width - 600) / 2 : 0,
+                right: MediaQuery.of(ctx).size.width > 600 ? (MediaQuery.of(ctx).size.width - 600) / 2 : 0,
+              ),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 20)],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 8),
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Refined Search Filters',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        if (activeFilterCount > 0)
+                          TextButton.icon(
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('Reset All', style: TextStyle(fontSize: 13)),
+                            onPressed: () {
+                              _clearAllFilters();
+                              setModalState(() {});
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      itemCount: availableFilters.length,
+                      itemBuilder: (c, idx) {
+                        final f = availableFilters[idx];
+                        final colKey = (f['column'] ?? f['name'] ?? '').toString();
+                        final label = (f['label'] ?? colKey).toString();
+                        final options = _getOptionsForFilter(f);
+                        if (options.isEmpty) return const SizedBox.shrink();
+
+                        final selectedSet = activeFilters[colKey] ?? <String>{};
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                          ),
+                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      label.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.8,
+                                        color: theme.colorScheme.primary,
+                                      ),
+                                    ),
+                                    if (selectedSet.isNotEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Text(
+                                          '${selectedSet.length} selected',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: theme.colorScheme.primary,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                ...options.map((optVal) {
+                                  final isChecked = selectedSet.contains(optVal);
+                                  final count = _calculateFacetCount(colKey, optVal);
+
+                                  return InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () {
+                                      _toggleFilter(colKey, optVal);
+                                      setModalState(() {});
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                                      child: Row(
+                                        children: [
+                                          Checkbox(
+                                            value: isChecked,
+                                            activeColor: theme.colorScheme.primary,
+                                            onChanged: (val) {
+                                              _toggleFilter(colKey, optVal);
+                                              setModalState(() {});
+                                            },
+                                          ),
+                                          Expanded(
+                                            child: Text(
+                                              optVal,
+                                              style: TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                                                color: (count == 0 && !isChecked) ? Colors.grey : null,
+                                              ),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: isChecked
+                                                  ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                                                  : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              '$count',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: isChecked
+                                                    ? theme.colorScheme.primary
+                                                    : ((count == 0 && !isChecked) ? Colors.grey : null),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+                    ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text(
+                          'Show ${filteredRecords.length} Results',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   @override
   void initState() {
@@ -2220,7 +2661,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     try {
       final res = await widget.api.fetchResourceRecords(widget.slug, search: search);
       setState(() {
-        records = (res['data'] as List<dynamic>?) ?? [];
+        allRecords = (res['data'] as List<dynamic>?) ?? [];
         isLoading = false;
       });
     } catch (e) {
@@ -2522,28 +2963,116 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
       appBar: AppBar(
         title: Text(widget.slug.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search ${widget.slug}...',
-                prefixIcon: const Icon(Icons.search),
-                isDense: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+          preferredSize: Size.fromHeight(activeFilterCount > 0 ? 102 : 56),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Search ${widget.slug}...',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          suffixIcon: search.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 18),
+                                  onPressed: () {
+                                    setState(() => search = '');
+                                  },
+                                )
+                              : null,
+                          isDense: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onChanged: (v) {
+                          setState(() => search = v);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Badge(
+                      isLabelVisible: activeFilterCount > 0,
+                      label: Text('$activeFilterCount'),
+                      backgroundColor: Colors.amber,
+                      textColor: Colors.black,
+                      child: IconButton.filledTonal(
+                        tooltip: 'Refined Search Filters',
+                        icon: const Icon(Icons.tune_rounded),
+                        onPressed: () => _showFilterModal(context),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              onChanged: (v) {
-                search = v;
-                loadRecords();
-              },
-            ),
+              if (activeFilterCount > 0)
+                Container(
+                  height: 42,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      ActionChip(
+                        avatar: const Icon(Icons.close, size: 14),
+                        label: const Text('Clear All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        onPressed: _clearAllFilters,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      const SizedBox(width: 6),
+                      ...activeFilters.entries.expand((entry) {
+                        final cat = entry.key;
+                        return entry.value.map((val) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: InputChip(
+                              label: Text('${_titleCase(cat)}: $val', style: const TextStyle(fontSize: 11)),
+                              onDeleted: () => _removeFilter(cat, val),
+                              visualDensity: VisualDensity.compact,
+                              deleteIconColor: Colors.amber,
+                            ),
+                          );
+                        });
+                      }),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ),
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : records.isEmpty
-              ? const Center(child: Text('No records found.'))
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      Text(
+                        activeFilterCount > 0 || search.isNotEmpty
+                            ? 'No records match the applied filters or search.'
+                            : 'No records found.',
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                      if (activeFilterCount > 0 || search.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Reset All Filters'),
+                          onPressed: () {
+                            setState(() {
+                              search = '';
+                              _clearAllFilters();
+                            });
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                )
               : RefreshIndicator(
                   onRefresh: loadRecords,
                   child: LayoutBuilder(

@@ -42,11 +42,24 @@ class FilamentApiClient {
     throw Exception('Failed to load panel schema: ${res.statusCode}');
   }
 
-  Future<Map<String, dynamic>> fetchResourceRecords(String slug, {int page = 1, String search = ''}) async {
-    final uri = Uri.parse('$baseUrl/api/resources/$slug').replace(queryParameters: {
+  Future<Map<String, dynamic>> fetchResourceRecords(String slug, {int page = 1, String search = '', Map<String, dynamic>? filters}) async {
+    final queryParams = <String, String>{
       'page': page.toString(),
       if (search.isNotEmpty) 'search': search,
-    });
+    };
+    if (filters != null) {
+      filters.forEach((key, val) {
+        if (val != null) {
+          if (val is Iterable) {
+            final joined = val.map((e) => e.toString()).where((e) => e.isNotEmpty).join(',');
+            if (joined.isNotEmpty) queryParams['filter_$key'] = joined;
+          } else if (val.toString().isNotEmpty) {
+            queryParams['filter_$key'] = val.toString();
+          }
+        }
+      });
+    }
+    final uri = Uri.parse('$baseUrl/api/resources/$slug').replace(queryParameters: queryParams);
     final res = await http.get(uri, headers: _headers);
     if (res.statusCode == 200) {
       return json.decode(res.body);

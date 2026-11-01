@@ -449,6 +449,19 @@ func (r *BaseResource[T]) GetRelations() []RelationManager {
 	return r.relations
 }
 
+func (r *BaseResource[T]) GetFilters() []tables.FilterDTO {
+	if r.tableBuilder == nil {
+		return nil
+	}
+	tbl := tables.New[T]()
+	tbl = r.tableBuilder(tbl)
+	var dtos []tables.FilterDTO
+	for _, f := range tbl.GetFilters() {
+		dtos = append(dtos, f.ToDTO())
+	}
+	return dtos
+}
+
 // Handlers binding
 func (r *BaseResource[T]) OnList(fn ListHandlerFunc[T]) *BaseResource[T] {
 	r.onList = fn
