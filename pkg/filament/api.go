@@ -764,6 +764,14 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 					ids = append(ids, fmt.Sprintf("%v", it))
 				}
 			}
+		} else if rawIDs, ok := data["ids"]; ok {
+			if slice, ok := rawIDs.([]string); ok {
+				ids = slice
+			} else if sliceAny, ok := rawIDs.([]any); ok {
+				for _, it := range sliceAny {
+					ids = append(ids, fmt.Sprintf("%v", it))
+				}
+			}
 		}
 
 		if action == "delete_bulk" && len(ids) > 0 {
@@ -772,6 +780,16 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			}); ok {
 				if err := invoker.InvokeDeleteBulk(ctx, ids); err != nil {
 					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				}
+				return c.JSON(http.StatusOK, map[string]any{
+					"success": true,
+					"message": fmt.Sprintf("%d records deleted successfully", len(ids)),
+				})
+			} else if singleInvoker, ok := res.(interface {
+				InvokeDelete(ctx *Context, id string) error
+			}); ok {
+				for _, id := range ids {
+					_ = singleInvoker.InvokeDelete(ctx, id)
 				}
 				return c.JSON(http.StatusOK, map[string]any{
 					"success": true,

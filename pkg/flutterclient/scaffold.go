@@ -211,6 +211,32 @@ class FilamentApiClient {
     return res.statusCode == 200;
   }
 
+  Future<bool> executeBulkAction(String slug, String action, List<String> ids) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$baseUrl/api/resources/$slug/bulk'),
+        headers: _headers,
+        body: json.encode({
+          'bulk_action': action,
+          'ids': ids,
+        }),
+      );
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> bulkDeleteRecords(String slug, List<String> ids) async {
+    final ok = await executeBulkAction(slug, 'delete_bulk', ids);
+    if (!ok) {
+      for (final id in ids) {
+        await deleteRecord(slug, id);
+      }
+    }
+    return true;
+  }
+
   Future<List<dynamic>> fetchTenants() async {
     final res = await http.get(Uri.parse('$baseUrl/api/tenants'), headers: _headers);
     if (res.statusCode == 200) {
@@ -307,6 +333,13 @@ class FilamentApiClient {
     );
     return res.statusCode == 200;
   }
+
+  Future<bool> bulkDeleteRelationRecords(String parentSlug, String parentId, String relSlug, List<String> childIds) async {
+    for (final childId in childIds) {
+      await deleteRelationRecord(parentSlug, parentId, relSlug, childId);
+    }
+    return true;
+  }
 }
 `, panelPath, panelPath, apiBaseURL, apiBaseURL)
 	if err := os.WriteFile(filepath.Join(libDir, "api.dart"), []byte(apiDart), 0644); err != nil {
@@ -391,6 +424,100 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
   bool _showRelations = true;
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _verticalScrollController = ScrollController();
+  Set<String> selectedRecordIds = <String>{};
+
+  bool get isAllSelected =>
+      filteredRecords.isNotEmpty && selectedRecordIds.length == filteredRecords.length;
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (isAllSelected) {
+        selectedRecordIds.clear();
+      } else {
+        selectedRecordIds = filteredRecords
+            .map((r) => _getChildId(r))
+            .where((id) => id.isNotEmpty)
+            .toSet();
+      }
+    });
+  }
+
+  void _toggleSelectRecord(String id) {
+    if (id.isEmpty) return;
+    setState(() {
+      if (selectedRecordIds.contains(id)) {
+        selectedRecordIds.remove(id);
+      } else {
+        selectedRecordIds.add(id);
+      }
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      selectedRecordIds.clear();
+    });
+  }
+
+  Future<void> _executeBulkDelete(BuildContext context) async {
+    if (selectedRecordIds.isEmpty) return;
+    final count = selectedRecordIds.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Records?"),
+        content: Text("Are you sure you want to delete $count selected records? This action cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Delete Selected", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      final success = await widget.api.bulkDeleteRelationRecords(
+        widget.parentSlug,
+        widget.parentId,
+        widget.relSlug,
+        selectedRecordIds.toList(),
+      );
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("$count records deleted successfully"),
+              backgroundColor: Colors.green.shade700,
+            ),
+          );
+          _deselectAll();
+          loadRecords();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Failed to perform bulk delete"),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _exportSelectedRecords(BuildContext context) {
+    if (selectedRecordIds.isEmpty) return;
+    final count = selectedRecordIds.length;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Exported $count selected records."),
+        backgroundColor: Colors.amber.shade800,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -407,7 +534,10 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
   }
 
   Future<void> loadRecords() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      selectedRecordIds.clear();
+    });
     try {
       final res = await widget.api.fetchRelationRecords(
         widget.parentSlug,
@@ -1437,7 +1567,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
     final columns = _extractColumns();
     final items = filteredRecords;
 
-    double totalColsWidth = 70.0 + 130.0 + 140.0 + 80.0; // ID + STATUS + ACTIONS + clearance
+    double totalColsWidth = 48.0 + 70.0 + 130.0 + 140.0 + 80.0; // Checkbox + ID + STATUS + ACTIONS + clearance
     for (final col in columns) {
       totalColsWidth += _columnWidth(col);
     }
@@ -1494,6 +1624,17 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                               ),
                               child: Row(
                                 children: [
+                                  SizedBox(
+                                    width: 48,
+                                    child: Checkbox(
+                                      value: isAllSelected,
+                                      tristate: selectedRecordIds.isNotEmpty && !isAllSelected,
+                                      activeColor: Colors.amber.shade600,
+                                      checkColor: Colors.black,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                      onChanged: (_) => _toggleSelectAll(),
+                                    ),
+                                  ),
                                   const SizedBox(
                                     width: 70,
                                     child: Text(
@@ -1590,9 +1731,13 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
     }
 
     final isRelationsVisible = hasRelations && _showRelations;
+    final isSelected = selectedRecordIds.contains(id);
 
     return Container(
       decoration: BoxDecoration(
+        color: isSelected
+            ? (isDark ? Colors.amber.withValues(alpha: 0.12) : Colors.amber.withValues(alpha: 0.08))
+            : null,
         border: isLast && !isRelationsVisible
             ? null
             : Border(bottom: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05))),
@@ -1610,6 +1755,17 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 child: Row(
                   children: [
+                    // Select Checkbox Column
+                    SizedBox(
+                      width: 48,
+                      child: Checkbox(
+                        value: isSelected,
+                        activeColor: Colors.amber.shade600,
+                        checkColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        onChanged: (_) => _toggleSelectRecord(id),
+                      ),
+                    ),
                     // ID Column
                     SizedBox(
                       width: 70,
@@ -1790,14 +1946,23 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
     if (widget.relSlug == 'vehicles') leadingIcon = Icons.local_shipping_outlined;
     if (widget.relSlug == 'chips') leadingIcon = Icons.nfc_outlined;
 
+    final isSelected = selectedRecordIds.contains(childId);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Card(
-      elevation: 0,
+      elevation: isSelected ? 2 : 0,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        side: BorderSide(
+          color: isSelected ? Colors.amber.shade400 : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
+          width: isSelected ? 1.5 : 1,
+        ),
       ),
-      color: Theme.of(context).colorScheme.surface,
+      color: isSelected
+          ? (isDark ? Colors.amber.withValues(alpha: 0.08) : Colors.amber.withValues(alpha: 0.05))
+          : theme.colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -1807,6 +1972,18 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
             // Top Header: Leading icon + Title + Status badges
             Row(
               children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Checkbox(
+                    value: isSelected,
+                    activeColor: Colors.amber.shade600,
+                    checkColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    onChanged: (_) => _toggleSelectRecord(childId),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: Theme.of(context).colorScheme.primaryContainer,
@@ -2001,8 +2178,43 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
 
   Widget _buildRecordCards(BuildContext context) {
     final items = filteredRecords;
-    return LayoutBuilder(
-      builder: (context, constraints) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (selectedRecordIds.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline, color: Colors.amber.shade400, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  '${selectedRecordIds.length} Selected',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.redAccent),
+                  label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                  onPressed: () => _executeBulkDelete(context),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  tooltip: 'Deselect all',
+                  onPressed: _deselectAll,
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
         final isTabletOrWide = constraints.maxWidth >= 720;
         if (isTabletOrWide) {
           return SingleChildScrollView(
@@ -2039,7 +2251,10 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
           itemBuilder: (context, i) => _buildRecordCard(context, items[i]),
         );
       },
-    );
+    ),
+  ),
+],
+);
   }
 
   Widget _buildEmptyState() {
@@ -2171,6 +2386,83 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                         icon: const Icon(Icons.tune_rounded),
                         onPressed: () => _showFilterModal(context),
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    PopupMenuButton<String>(
+                      tooltip: selectedRecordIds.isNotEmpty
+                          ? 'Bulk Actions (${selectedRecordIds.length} selected)'
+                          : 'Bulk Selection & Actions',
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      icon: Badge(
+                        isLabelVisible: selectedRecordIds.isNotEmpty,
+                        label: Text('${selectedRecordIds.length}'),
+                        backgroundColor: Colors.amber.shade700,
+                        textColor: Colors.black,
+                        child: IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.withValues(alpha: 0.2) : null,
+                            foregroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.shade400 : null,
+                          ),
+                          icon: const Icon(Icons.checklist_rtl_rounded),
+                          onPressed: null,
+                        ),
+                      ),
+                      onSelected: (val) {
+                        if (val == 'select_all') {
+                          _toggleSelectAll();
+                        } else if (val == 'deselect') {
+                          _deselectAll();
+                        } else if (val == 'delete') {
+                          _executeBulkDelete(context);
+                        } else if (val == 'export') {
+                          _exportSelectedRecords(context);
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        PopupMenuItem(
+                          value: 'select_all',
+                          child: Row(
+                            children: [
+                              Icon(isAllSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 20),
+                              const SizedBox(width: 10),
+                              Text(isAllSelected ? 'Deselect All' : 'Select All (${filteredRecords.length})'),
+                            ],
+                          ),
+                        ),
+                        if (selectedRecordIds.isNotEmpty) ...[
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: const Row(
+                              children: [
+                                Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
+                                SizedBox(width: 10),
+                                Text('Bulk Delete', style: TextStyle(color: Colors.redAccent)),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'export',
+                            child: const Row(
+                              children: [
+                                Icon(Icons.download_rounded, size: 20),
+                                SizedBox(width: 10),
+                                Text('Export Selected'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'deselect',
+                            child: Row(
+                              children: [
+                                Icon(Icons.close_rounded, size: 20),
+                                SizedBox(width: 10),
+                                Text('Clear Selection'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -4173,6 +4465,103 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   bool _showRelations = true;
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _verticalScrollController = ScrollController();
+  Set<String> selectedRecordIds = <String>{};
+
+  String _getRecordId(dynamic item) {
+    if (item == null) return "";
+    return (item["ID"] ?? item["id"] ?? item["login"] ?? item["uuid"] ?? "").toString();
+  }
+
+  bool get isAllSelected =>
+      records.isNotEmpty && selectedRecordIds.length == records.length;
+
+  void _toggleSelectAll() {
+    setState(() {
+      if (isAllSelected) {
+        selectedRecordIds.clear();
+      } else {
+        selectedRecordIds = records
+            .map((r) => _getRecordId(r))
+            .where((id) => id.isNotEmpty)
+            .toSet();
+      }
+    });
+  }
+
+  void _toggleSelectRecord(String id) {
+    if (id.isEmpty) return;
+    setState(() {
+      if (selectedRecordIds.contains(id)) {
+        selectedRecordIds.remove(id);
+      } else {
+        selectedRecordIds.add(id);
+      }
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      selectedRecordIds.clear();
+    });
+  }
+
+  Future<void> _executeBulkDelete(BuildContext context) async {
+    if (selectedRecordIds.isEmpty) return;
+    final count = selectedRecordIds.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Records?"),
+        content: Text("Are you sure you want to delete $count selected records? This action cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Delete Selected", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      final success = await widget.api.bulkDeleteRecords(
+        widget.slug,
+        selectedRecordIds.toList(),
+      );
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("$count records deleted successfully"),
+              backgroundColor: Colors.green.shade700,
+            ),
+          );
+          _deselectAll();
+          loadRecords();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Failed to perform bulk delete"),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  void _exportSelectedRecords(BuildContext context) {
+    if (selectedRecordIds.isEmpty) return;
+    final count = selectedRecordIds.length;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Exported $count selected records."),
+        backgroundColor: Colors.amber.shade800,
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -4637,7 +5026,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   }
 
   Future<void> loadRecords() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+      selectedRecordIds.clear();
+    });
     try {
       final res = await widget.api.fetchResourceRecords(widget.slug, search: search);
       setState(() {
@@ -4717,13 +5109,22 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     if (status == 'offline' || status == 'critical') statusColor = Colors.redAccent;
     if (status == 'maintenance' || status == 'warning' || status == 'in_progress') statusColor = Colors.amber;
 
+    final isSelected = selectedRecordIds.contains(id);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Card(
-      elevation: 0,
+      elevation: isSelected ? 2 : 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        side: BorderSide(
+          color: isSelected ? Colors.amber.shade400 : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
+          width: isSelected ? 1.5 : 1,
+        ),
       ),
-      color: Theme.of(context).colorScheme.surface,
+      color: isSelected
+          ? (isDark ? Colors.amber.withValues(alpha: 0.08) : Colors.amber.withValues(alpha: 0.05))
+          : theme.colorScheme.surface,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -4732,6 +5133,18 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
             // Header: Icon + Title + Status/Badge
             Row(
               children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Checkbox(
+                    value: isSelected,
+                    activeColor: Colors.amber.shade600,
+                    checkColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    onChanged: (_) => _toggleSelectRecord(id),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: Theme.of(context).colorScheme.primaryContainer,
@@ -5095,7 +5508,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     final hasRelations = relations.isNotEmpty;
     final columns = _extractColumns();
 
-    double totalColsWidth = 70.0 + 130.0 + 140.0 + 80.0; // ID + STATUS + ACTIONS + clearance
+    double totalColsWidth = 48.0 + 70.0 + 130.0 + 140.0 + 80.0; // Checkbox + ID + STATUS + ACTIONS + clearance
     for (final col in columns) {
       totalColsWidth += _columnWidth(col);
     }
@@ -5152,6 +5565,17 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                               ),
                               child: Row(
                                 children: [
+                                  SizedBox(
+                                    width: 48,
+                                    child: Checkbox(
+                                      value: isAllSelected,
+                                      tristate: selectedRecordIds.isNotEmpty && !isAllSelected,
+                                      activeColor: Colors.amber.shade600,
+                                      checkColor: Colors.black,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                      onChanged: (_) => _toggleSelectAll(),
+                                    ),
+                                  ),
                                   const SizedBox(
                                     width: 70,
                                     child: Text(
@@ -5263,9 +5687,13 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     }
 
     final isRelationsVisible = hasRelations && _showRelations;
+    final isSelected = selectedRecordIds.contains(id);
 
     return Container(
       decoration: BoxDecoration(
+        color: isSelected
+            ? (isDark ? Colors.amber.withValues(alpha: 0.12) : Colors.amber.withValues(alpha: 0.08))
+            : null,
         border: isLast && !isRelationsVisible
             ? null
             : Border(bottom: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05))),
@@ -5283,6 +5711,17 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 child: Row(
                   children: [
+                    // Select Checkbox Column
+                    SizedBox(
+                      width: 48,
+                      child: Checkbox(
+                        value: isSelected,
+                        activeColor: Colors.amber.shade600,
+                        checkColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        onChanged: (_) => _toggleSelectRecord(id),
+                      ),
+                    ),
                     // ID Column
                     SizedBox(
                       width: 70,
@@ -5494,6 +5933,83 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         onPressed: () => _showFilterModal(context),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    PopupMenuButton<String>(
+                      tooltip: selectedRecordIds.isNotEmpty
+                          ? 'Bulk Actions (${selectedRecordIds.length} selected)'
+                          : 'Bulk Selection & Actions',
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      icon: Badge(
+                        isLabelVisible: selectedRecordIds.isNotEmpty,
+                        label: Text('${selectedRecordIds.length}'),
+                        backgroundColor: Colors.amber.shade700,
+                        textColor: Colors.black,
+                        child: IconButton.filledTonal(
+                          style: IconButton.styleFrom(
+                            backgroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.withValues(alpha: 0.2) : null,
+                            foregroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.shade400 : null,
+                          ),
+                          icon: const Icon(Icons.checklist_rtl_rounded),
+                          onPressed: null,
+                        ),
+                      ),
+                      onSelected: (val) {
+                        if (val == 'select_all') {
+                          _toggleSelectAll();
+                        } else if (val == 'deselect') {
+                          _deselectAll();
+                        } else if (val == 'delete') {
+                          _executeBulkDelete(context);
+                        } else if (val == 'export') {
+                          _exportSelectedRecords(context);
+                        }
+                      },
+                      itemBuilder: (ctx) => [
+                        PopupMenuItem(
+                          value: 'select_all',
+                          child: Row(
+                            children: [
+                              Icon(isAllSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 20),
+                              const SizedBox(width: 10),
+                              Text(isAllSelected ? 'Deselect All' : 'Select All (${records.length})'),
+                            ],
+                          ),
+                        ),
+                        if (selectedRecordIds.isNotEmpty) ...[
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: const Row(
+                              children: [
+                                Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
+                                SizedBox(width: 10),
+                                Text('Bulk Delete', style: TextStyle(color: Colors.redAccent)),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'export',
+                            child: const Row(
+                              children: [
+                                Icon(Icons.download_rounded, size: 20),
+                                SizedBox(width: 10),
+                                Text('Export Selected'),
+                              ],
+                            ),
+                          ),
+                          const PopupMenuDivider(),
+                          const PopupMenuItem(
+                            value: 'deselect',
+                            child: Row(
+                              children: [
+                                Icon(Icons.close_rounded, size: 20),
+                                SizedBox(width: 10),
+                                Text('Clear Selection'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -5576,17 +6092,55 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
                       // Mobile (bottom menu active, width <= 900):
                       // Render 1-column stacked card records (no horizontal scrolling needed)
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(12),
-                        itemCount: records.length,
-                        itemBuilder: (context, i) {
-                          final item = records[i];
-                          final id = (item['ID'] ?? item['id'] ?? '$i').toString();
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: _buildRecordCard(context, item, id),
-                          );
-                        },
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (selectedRecordIds.isNotEmpty)
+                            Container(
+                              margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.check_circle_outline, color: Colors.amber.shade400, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${selectedRecordIds.length} Selected',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  const Spacer(),
+                                  TextButton.icon(
+                                    icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.redAccent),
+                                    label: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                                    onPressed: () => _executeBulkDelete(context),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    tooltip: 'Deselect all',
+                                    onPressed: _deselectAll,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(12),
+                              itemCount: records.length,
+                              itemBuilder: (context, i) {
+                                final item = records[i];
+                                final id = (item['ID'] ?? item['id'] ?? '$i').toString();
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _buildRecordCard(context, item, id),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       );
                     },
                   ),
