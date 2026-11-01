@@ -265,8 +265,8 @@ func TestFlutterClientScaffoldGenerator(t *testing.T) {
 	if !strings.Contains(mainStr, "showModalBottomSheet") {
 		t.Fatalf("expected mobile bottom sheet forms in main.dart")
 	}
-	if !strings.Contains(mainStr, "NavigationRail") {
-		t.Fatalf("expected desktop NavigationRail in main.dart")
+	if !strings.Contains(mainStr, "_buildDesktopSidebar") {
+		t.Fatalf("expected desktop _buildDesktopSidebar in main.dart")
 	}
 
 	apiDartPath := filepath.Join(tmpDir, "lib", "api.dart")

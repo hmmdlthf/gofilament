@@ -254,23 +254,21 @@ class ResponsiveLayout extends StatelessWidget {
   });
 
   static bool isMobile(BuildContext context) =>
-      MediaQuery.of(context).size.width < 640;
+      MediaQuery.of(context).size.width <= 900;
 
   static bool isTablet(BuildContext context) =>
-      MediaQuery.of(context).size.width >= 640 &&
-      MediaQuery.of(context).size.width < 1024;
+      MediaQuery.of(context).size.width > 600 &&
+      MediaQuery.of(context).size.width <= 900;
 
   static bool isDesktop(BuildContext context) =>
-      MediaQuery.of(context).size.width >= 1024;
+      MediaQuery.of(context).size.width > 900;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth >= 1024) {
+        if (constraints.maxWidth > 900) {
           return desktop;
-        } else if (constraints.maxWidth >= 640) {
-          return tablet ?? desktop;
         } else {
           return mobile;
         }
@@ -768,6 +766,127 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+enum SidebarCollapseMode {
+  expanded,
+  partialCollapse,
+  hidden,
+}
+
+class BrandLogoWidget extends StatelessWidget {
+  final bool isCompact;
+  final String brandName;
+  final String? subtitle;
+  final String? imageAsset;
+
+  const BrandLogoWidget({
+    super.key,
+    required this.isCompact,
+    required this.brandName,
+    this.subtitle,
+    this.imageAsset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    Widget iconWidget;
+    if (imageAsset != null) {
+      iconWidget = Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(9),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Image.asset(
+          imageAsset!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildFallbackIcon(theme),
+        ),
+      );
+    } else {
+      iconWidget = _buildFallbackIcon(theme);
+    }
+
+    if (isCompact) {
+      return Tooltip(
+        message: brandName,
+        child: Center(child: iconWidget),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        iconWidget,
+        const SizedBox(width: 10),
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                brandName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
+                  letterSpacing: -0.2,
+                  color: isDark ? Colors.white : Colors.grey.shade900,
+                ),
+              ),
+              if (subtitle != null && subtitle!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    subtitle!.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFallbackIcon(ThemeData theme) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: const Center(
+        child: Icon(Icons.bolt_rounded, color: Colors.black, size: 22),
+      ),
+    );
+  }
+}
+
 class AdminShellPage extends StatefulWidget {
   final FilamentApiClient api;
   final VoidCallback onToggleTheme;
@@ -799,6 +918,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   int _currentIndex = 0;
   String? selectedResourceSlug;
   String _accountNavPlacement = 'header'; // 'header' (top circle button) or 'bottom_bar' (bottom menu tab)
+  SidebarCollapseMode _sidebarMode = SidebarCollapseMode.expanded;
   String? errorMessage;
 
   @override
@@ -1037,9 +1157,23 @@ class _AdminShellPageState extends State<AdminShellPage> {
       // 📱 Mobile-First Layout: One-thumb bottom navigation, pull-to-refresh, cards
       mobile: Scaffold(
         appBar: AppBar(
-          title: Text(
-            !isHeaderPlacement && _currentIndex == 2 ? 'Account & Profile' : brandName,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              BrandLogoWidget(
+                isCompact: true,
+                brandName: brandName,
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  !isHeaderPlacement && _currentIndex == 2 ? 'Account & Profile' : brandName,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           actions: [
             IconButton(
@@ -1131,149 +1265,443 @@ class _AdminShellPageState extends State<AdminShellPage> {
         ),
       ),
 
-      // 💻 Desktop & Tablet Layout: Navigation rail, data grid tables, topbar search
+      // 💻 Desktop Layout (>900px): Left sidebar with expanded/partial collapse/hidden modes
       desktop: Scaffold(
-        body: Row(
+        body: Stack(
           children: [
-            NavigationRail(
-              selectedIndex: activeMobileIndex,
-              onDestinationSelected: (idx) => setState(() => _currentIndex = idx),
-              labelType: NavigationRailLabelType.all,
-              leading: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text('⚡ ' + brandName, style: const TextStyle(fontWeight: FontWeight.bold)),
-              ),
-              destinations: isHeaderPlacement
-                  ? [
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.dashboard_outlined),
-                        label: Text(AppLocale.t(widget.currentLocale, 'dashboard')),
-                      ),
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.layers_outlined),
-                        label: Text(AppLocale.t(widget.currentLocale, 'entities')),
-                      ),
-                    ]
-                  : [
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.dashboard_outlined),
-                        label: Text(AppLocale.t(widget.currentLocale, 'dashboard')),
-                      ),
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.layers_outlined),
-                        label: Text(AppLocale.t(widget.currentLocale, 'entities')),
-                      ),
-                      NavigationRailDestination(
-                        icon: const Icon(Icons.account_circle_outlined),
-                        label: Text(AppLocale.t(widget.currentLocale, 'account')),
+            Row(
+              children: [
+                if (_sidebarMode != SidebarCollapseMode.hidden) ...[
+                  _buildDesktopSidebar(resources, activeMobileIndex, isHeaderPlacement, brandName),
+                  const VerticalDivider(thickness: 1, width: 1),
+                ],
+                Expanded(
+                  child: Column(
+                    children: [
+                      // Desktop Header Bar
+                      _buildDesktopHeaderBar(isHeaderPlacement, brandName),
+                      Expanded(
+                        child: IndexedStack(
+                          index: activeMobileIndex,
+                          children: [
+                            _buildDesktopDashboard(),
+                            _buildDesktopResources(resources),
+                            if (!isHeaderPlacement)
+                              _buildMobileAccountHub(),
+                          ],
+                        ),
                       ),
                     ],
+                  ),
+                ),
+              ],
             ),
-            const VerticalDivider(thickness: 1, width: 1),
-            Expanded(
-              child: Column(
+            // Floating popping button when sidebar is completely hidden
+            if (_sidebarMode == SidebarCollapseMode.hidden)
+              Positioned(
+                left: 16,
+                bottom: 24,
+                child: FloatingActionButton.extended(
+                  heroTag: 'sidebar_restore_fab',
+                  elevation: 6,
+                  backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+                  icon: const Icon(Icons.menu_open_rounded, size: 20),
+                  label: const Text('Show Menu', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () => setState(() => _sidebarMode = SidebarCollapseMode.expanded),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopHeaderBar(bool isHeaderPlacement, String brandName) {
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              if (_sidebarMode == SidebarCollapseMode.hidden) ...[
+                IconButton(
+                  icon: const Icon(Icons.menu_rounded),
+                  tooltip: 'Show Sidebar',
+                  onPressed: () => setState(() => _sidebarMode = SidebarCollapseMode.expanded),
+                ),
+                const SizedBox(width: 8),
+                BrandLogoWidget(
+                  isCompact: true,
+                  brandName: brandName,
+                ),
+                const SizedBox(width: 10),
+              ],
+              Text(
+                brandName + ' Control Center',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  api.activeTenant ?? 'GLOBAL TENANT',
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber),
+                ),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                ),
+                icon: Text(AppLocale.getFlag(widget.currentLocale), style: const TextStyle(fontSize: 16)),
+                label: Text(
+                  '${AppLocale.getLabel(widget.currentLocale)} (${widget.isRTL ? "RTL" : "LTR"})',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () => showLanguageDialog(context),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
+                onPressed: widget.onToggleTheme,
+              ),
+              IconButton(
+                icon: const Icon(Icons.corporate_fare),
+                tooltip: 'Switch Tenant',
+                onPressed: showTenantSwitcher,
+              ),
+              // Header circular button is shown ONLY when placement is 'header'
+              if (isHeaderPlacement) ...[
+                const SizedBox(width: 8),
+                CircularAccountButton(
+                  initial: (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
+                  name: api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
+                  email: api.currentUser?['email'] ?? 'admin@filament.local',
+                  role: (api.currentUser?['role'] ?? 'OPERATIONS LEAD').toString().toUpperCase(),
+                  onTap: () => AccountModalSheet.show(
+                    context: context,
+                    api: api,
+                    activeTenant: api.activeTenant,
+                    onThemeToggle: widget.onToggleTheme,
+                    isDark: widget.isDark,
+                    accountNavPlacement: _accountNavPlacement,
+                    onAccountNavPlacementChanged: setAccountNavPlacement,
+                    currentLocale: widget.currentLocale,
+                    isRTL: widget.isRTL,
+                    onLocaleChanged: widget.onLocaleChanged,
+                    onOpenLanguagePicker: () => showLanguageDialog(context),
+                    onSignOut: widget.onSignOut,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopSidebar(List<dynamic> resources, int activeMobileIndex, bool isHeaderPlacement, String brandName) {
+    final isPartial = _sidebarMode == SidebarCollapseMode.partialCollapse;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      width: isPartial ? 72 : 250,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+      ),
+      child: Column(
+        children: [
+          // Sidebar Brand Header
+          if (isPartial) ...[
+            Container(
+              height: 60,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+              ),
+              child: BrandLogoWidget(
+                isCompact: true,
+                brandName: brandName,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Desktop Header Bar
-                  Container(
-                    height: 60,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              brandName + ' Control Center',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                            ),
-                            const SizedBox(width: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: Colors.amber.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                api.activeTenant ?? 'GLOBAL TENANT',
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber),
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            FilledButton.tonalIcon(
-                              style: FilledButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              ),
-                              icon: Text(AppLocale.getFlag(widget.currentLocale), style: const TextStyle(fontSize: 16)),
-                              label: Text(
-                                '${AppLocale.getLabel(widget.currentLocale)} (${widget.isRTL ? "RTL" : "LTR"})',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () => showLanguageDialog(context),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
-                              onPressed: widget.onToggleTheme,
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.corporate_fare),
-                              tooltip: 'Switch Tenant',
-                              onPressed: showTenantSwitcher,
-                            ),
-                            // Header circular button is shown ONLY when placement is 'header'
-                            if (isHeaderPlacement) ...[
-                              const SizedBox(width: 8),
-                              CircularAccountButton(
-                                initial: (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
-                                name: api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
-                                email: api.currentUser?['email'] ?? 'admin@filament.local',
-                                role: (api.currentUser?['role'] ?? 'OPERATIONS LEAD').toString().toUpperCase(),
-                                onTap: () => AccountModalSheet.show(
-                                  context: context,
-                                  api: api,
-                                  activeTenant: api.activeTenant,
-                                  onThemeToggle: widget.onToggleTheme,
-                                  isDark: widget.isDark,
-                                  accountNavPlacement: _accountNavPlacement,
-                                  onAccountNavPlacementChanged: setAccountNavPlacement,
-                                  currentLocale: widget.currentLocale,
-                                  isRTL: widget.isRTL,
-                                  onLocaleChanged: widget.onLocaleChanged,
-                                  onOpenLanguagePicker: () => showLanguageDialog(context),
-                                  onSignOut: widget.onSignOut,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
+                  IconButton(
+                    icon: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+                    tooltip: 'Expand Sidebar',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() => _sidebarMode = SidebarCollapseMode.expanded),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.visibility_off_outlined, size: 14),
+                    tooltip: 'Hide Sidebar (Full Collapse)',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() => _sidebarMode = SidebarCollapseMode.hidden),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            Container(
+              height: 60,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: BrandLogoWidget(
+                      isCompact: false,
+                      brandName: brandName,
+                      subtitle: 'Control Center',
                     ),
                   ),
-                  Expanded(
-                    child: IndexedStack(
-                      index: activeMobileIndex,
-                      children: [
-                        _buildDesktopDashboard(),
-                        _buildDesktopResources(resources),
-                        if (!isHeaderPlacement)
-                          _buildMobileAccountHub(),
-                      ],
-                    ),
+                  IconButton(
+                    icon: const Icon(Icons.menu_open_rounded, size: 20),
+                    tooltip: 'Partial Collapse (Icons only)',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() => _sidebarMode = SidebarCollapseMode.partialCollapse),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    tooltip: 'Hide Sidebar (Full Collapse)',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() => _sidebarMode = SidebarCollapseMode.hidden),
                   ),
                 ],
               ),
             ),
           ],
+
+          // Navigation Links
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                if (!isPartial)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    child: Text(
+                      'MAIN NAVIGATION',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                        color: isDark ? Colors.grey.shade500 : Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                if (isPartial) ...[
+                  _buildPartialNavItem(
+                    icon: Icons.dashboard_outlined,
+                    selectedIcon: Icons.dashboard,
+                    label: AppLocale.t(widget.currentLocale, 'dashboard'),
+                    isSelected: activeMobileIndex == 0,
+                    onTap: () => setState(() => _currentIndex = 0),
+                  ),
+                  _buildPartialNavItem(
+                    icon: Icons.layers_outlined,
+                    selectedIcon: Icons.layers,
+                    label: AppLocale.t(widget.currentLocale, 'entities'),
+                    isSelected: activeMobileIndex == 1,
+                    onTap: () => setState(() => _currentIndex = 1),
+                  ),
+                  if (!isHeaderPlacement)
+                    _buildPartialNavItem(
+                      icon: Icons.account_circle_outlined,
+                      selectedIcon: Icons.account_circle,
+                      label: AppLocale.t(widget.currentLocale, 'account'),
+                      isSelected: activeMobileIndex == 2,
+                      onTap: () => setState(() => _currentIndex = 2),
+                    ),
+                ] else ...[
+                  _buildHorizontalNavItem(
+                    icon: Icons.dashboard_outlined,
+                    selectedIcon: Icons.dashboard,
+                    label: AppLocale.t(widget.currentLocale, 'dashboard'),
+                    isSelected: activeMobileIndex == 0,
+                    onTap: () => setState(() => _currentIndex = 0),
+                  ),
+                  _buildHorizontalNavItem(
+                    icon: Icons.layers_outlined,
+                    selectedIcon: Icons.layers,
+                    label: AppLocale.t(widget.currentLocale, 'entities'),
+                    isSelected: activeMobileIndex == 1,
+                    onTap: () => setState(() => _currentIndex = 1),
+                  ),
+                  if (!isHeaderPlacement)
+                    _buildHorizontalNavItem(
+                      icon: Icons.account_circle_outlined,
+                      selectedIcon: Icons.account_circle,
+                      label: AppLocale.t(widget.currentLocale, 'account'),
+                      isSelected: activeMobileIndex == 2,
+                      onTap: () => setState(() => _currentIndex = 2),
+                    ),
+                ],
+              ],
+            ),
+          ),
+
+          // Sidebar Footer Status
+          if (!isPartial)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      api.activeTenant ?? 'GLOBAL TENANT',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHorizontalNavItem({
+    required IconData icon,
+    IconData? selectedIcon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final activeBg = isDark
+        ? Colors.amber.withValues(alpha: 0.15)
+        : Colors.amber.withValues(alpha: 0.20);
+    final activeColor = isDark ? Colors.amber : const Color(0xFFB45309);
+    final inactiveColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      child: Material(
+        color: isSelected ? activeBg : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Icon(
+                  isSelected ? (selectedIcon ?? icon) : icon,
+                  size: 20,
+                  color: isSelected ? activeColor : inactiveColor,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? activeColor : (isDark ? Colors.white : Colors.black87),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (isSelected)
+                  Container(
+                    width: 4,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: activeColor,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPartialNavItem({
+    required IconData icon,
+    IconData? selectedIcon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final activeBg = isDark
+        ? Colors.amber.withValues(alpha: 0.18)
+        : Colors.amber.withValues(alpha: 0.22);
+    final activeColor = isDark ? Colors.amber : const Color(0xFFB45309);
+    final inactiveColor = isDark ? Colors.grey.shade400 : Colors.grey.shade700;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Tooltip(
+        message: label,
+        preferBelow: false,
+        waitDuration: const Duration(milliseconds: 150),
+        child: Material(
+          color: isSelected ? activeBg : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onTap,
+            child: Container(
+              height: 44,
+              alignment: Alignment.center,
+              child: Icon(
+                isSelected ? (selectedIcon ?? icon) : icon,
+                size: 22,
+                color: isSelected ? activeColor : inactiveColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
     );
   }
 
