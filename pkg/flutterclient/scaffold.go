@@ -427,15 +427,22 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
   Set<String> selectedRecordIds = <String>{};
 
   bool get isAllSelected =>
-      filteredRecords.isNotEmpty && selectedRecordIds.length == filteredRecords.length;
+      filteredRecords.isNotEmpty &&
+      filteredRecords.every((r) {
+        final id = _getChildId(r);
+        return id.isNotEmpty && selectedRecordIds.contains(id);
+      });
 
-  void _toggleSelectAll() {
+  void _toggleSelectAll([bool? forceVal]) {
     setState(() {
-      if (isAllSelected) {
+      final shouldSelect = forceVal ?? !isAllSelected;
+      if (!shouldSelect) {
         selectedRecordIds.clear();
       } else {
         selectedRecordIds = filteredRecords
-            .map((r) => _getChildId(r))
+            .asMap()
+            .entries
+            .map((e) => _getChildId(e.value, e.key))
             .where((id) => id.isNotEmpty)
             .toSet();
       }
@@ -565,15 +572,19 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
     }
   }
 
-  String _getChildId(dynamic item) {
-    if (item == null) return '';
-    return (item['login'] ??
-            item['id'] ??
-            item['ID'] ??
-            item['chip_serial'] ??
-            item['plate_number'] ??
-            '')
-        .toString();
+  String _getChildId(dynamic item, [int? index]) {
+    if (item == null) return index != null ? "$index" : "";
+    final raw = item["id"] ??
+        item["ID"] ??
+        item["login"] ??
+        item["chip_serial"] ??
+        item["uuid"] ??
+        item["plate_number"] ??
+        item["_id"];
+    if (raw != null && raw.toString().isNotEmpty) {
+      return raw.toString();
+    }
+    return index != null ? "$index" : "";
   }
 
   String _getChildTitle(dynamic item) {
@@ -1615,63 +1626,122 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Table Header
+                            // Table Header / Bulk Action Bar
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                                border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+                                color: selectedRecordIds.isNotEmpty
+                                    ? Colors.amber.withValues(alpha: isDark ? 0.2 : 0.12)
+                                    : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: selectedRecordIds.isNotEmpty
+                                        ? Colors.amber.withValues(alpha: 0.35)
+                                        : (isDark ? Colors.white12 : Colors.black12),
+                                  ),
+                                ),
                               ),
                               child: Row(
                                 children: [
                                   SizedBox(
                                     width: 48,
                                     child: Checkbox(
-                                      value: isAllSelected,
-                                      tristate: selectedRecordIds.isNotEmpty && !isAllSelected,
+                                      value: isAllSelected
+                                          ? true
+                                          : (selectedRecordIds.isNotEmpty ? null : false),
+                                      tristate: true,
                                       activeColor: Colors.amber.shade600,
                                       checkColor: Colors.black,
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                      onChanged: (_) => _toggleSelectAll(),
+                                      onChanged: (val) {
+                                        if (isAllSelected) {
+                                          _deselectAll();
+                                        } else {
+                                          _toggleSelectAll(true);
+                                        }
+                                      },
                                     ),
                                   ),
-                                  const SizedBox(
-                                    width: 70,
-                                    child: Text(
-                                      'ID',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                    ),
-                                  ),
-                                  for (final col in columns)
-                                    SizedBox(
-                                      width: _columnWidth(col),
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(right: 12),
-                                        child: Text(
-                                          _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                  if (selectedRecordIds.isNotEmpty) ...[
+                                    Text(
+                                      '${selectedRecordIds.length} of ${filteredRecords.length} selected',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: isDark ? Colors.amber.shade400 : const Color(0xFFB45309),
                                       ),
                                     ),
-                                  const SizedBox(
-                                    width: 130,
-                                    child: Text(
-                                      'STATUS',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                    const SizedBox(width: 16),
+                                    FilledButton.icon(
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Colors.redAccent,
+                                        foregroundColor: Colors.white,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      ),
+                                      icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                                      label: Text(
+                                        'Delete Selected (${selectedRecordIds.length})',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                      onPressed: () => _executeBulkDelete(context),
                                     ),
-                                  ),
-                                  const SizedBox(
-                                    width: 140,
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
+                                    const SizedBox(width: 10),
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      ),
+                                      icon: const Icon(Icons.download_rounded, size: 16),
+                                      label: const Text('Export', style: TextStyle(fontSize: 12)),
+                                      onPressed: () => _exportSelectedRecords(context),
+                                    ),
+                                    const Spacer(),
+                                    TextButton(
+                                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                      child: const Text('Deselect All', style: TextStyle(fontSize: 12)),
+                                      onPressed: _deselectAll,
+                                    ),
+                                    const SizedBox(width: 16),
+                                  ] else ...[
+                                    const SizedBox(
+                                      width: 70,
                                       child: Text(
-                                        'ACTIONS',
+                                        'ID',
                                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 16),
+                                    for (final col in columns)
+                                      SizedBox(
+                                        width: _columnWidth(col),
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(right: 12),
+                                          child: Text(
+                                            _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(
+                                      width: 130,
+                                      child: Text(
+                                        'STATUS',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      width: 140,
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Text(
+                                          'ACTIONS',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                  ],
                                 ],
                               ),
                             ),
@@ -1681,7 +1751,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
                               _buildTableRow(
                                 context,
                                 items[i],
-                                _getChildId(items[i]),
+                                _getChildId(items[i], i),
                                 _getChildTitle(items[i]),
                                 columns,
                                 hasRelations,
@@ -4500,21 +4570,38 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   final ScrollController _verticalScrollController = ScrollController();
   Set<String> selectedRecordIds = <String>{};
 
-  String _getRecordId(dynamic item) {
-    if (item == null) return "";
-    return (item["ID"] ?? item["id"] ?? item["login"] ?? item["uuid"] ?? "").toString();
+  String _getRecordId(dynamic item, [int? index]) {
+    if (item == null) return index != null ? "$index" : "";
+    final raw = item["id"] ??
+        item["ID"] ??
+        item["login"] ??
+        item["chip_serial"] ??
+        item["uuid"] ??
+        item["plate_number"] ??
+        item["_id"];
+    if (raw != null && raw.toString().isNotEmpty) {
+      return raw.toString();
+    }
+    return index != null ? "$index" : "";
   }
 
   bool get isAllSelected =>
-      records.isNotEmpty && selectedRecordIds.length == records.length;
+      records.isNotEmpty &&
+      records.every((r) {
+        final id = _getRecordId(r);
+        return id.isNotEmpty && selectedRecordIds.contains(id);
+      });
 
-  void _toggleSelectAll() {
+  void _toggleSelectAll([bool? forceVal]) {
     setState(() {
-      if (isAllSelected) {
+      final shouldSelect = forceVal ?? !isAllSelected;
+      if (!shouldSelect) {
         selectedRecordIds.clear();
       } else {
         selectedRecordIds = records
-            .map((r) => _getRecordId(r))
+            .asMap()
+            .entries
+            .map((e) => _getRecordId(e.value, e.key))
             .where((id) => id.isNotEmpty)
             .toSet();
       }
@@ -5589,63 +5676,122 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Table Header
+                            // Table Header / Bulk Action Bar
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                               decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                                border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+                                color: selectedRecordIds.isNotEmpty
+                                    ? Colors.amber.withValues(alpha: isDark ? 0.2 : 0.12)
+                                    : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC)),
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: selectedRecordIds.isNotEmpty
+                                        ? Colors.amber.withValues(alpha: 0.35)
+                                        : (isDark ? Colors.white12 : Colors.black12),
+                                  ),
+                                ),
                               ),
                               child: Row(
                                 children: [
                                   SizedBox(
                                     width: 48,
                                     child: Checkbox(
-                                      value: isAllSelected,
-                                      tristate: selectedRecordIds.isNotEmpty && !isAllSelected,
+                                      value: isAllSelected
+                                          ? true
+                                          : (selectedRecordIds.isNotEmpty ? null : false),
+                                      tristate: true,
                                       activeColor: Colors.amber.shade600,
                                       checkColor: Colors.black,
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                      onChanged: (_) => _toggleSelectAll(),
+                                      onChanged: (val) {
+                                        if (isAllSelected) {
+                                          _deselectAll();
+                                        } else {
+                                          _toggleSelectAll(true);
+                                        }
+                                      },
                                     ),
                                   ),
-                                  const SizedBox(
-                                    width: 70,
-                                    child: Text(
-                                      'ID',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                    ),
-                                  ),
-                                  for (final col in columns)
-                                    SizedBox(
-                                      width: _columnWidth(col),
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(right: 12),
-                                        child: Text(
-                                          _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                  if (selectedRecordIds.isNotEmpty) ...[
+                                    Text(
+                                      '${selectedRecordIds.length} of ${records.length} selected',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: isDark ? Colors.amber.shade400 : const Color(0xFFB45309),
                                       ),
                                     ),
-                                  const SizedBox(
-                                    width: 130,
-                                    child: Text(
-                                      'STATUS',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                    const SizedBox(width: 16),
+                                    FilledButton.icon(
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Colors.redAccent,
+                                        foregroundColor: Colors.white,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      ),
+                                      icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                                      label: Text(
+                                        'Delete Selected (${selectedRecordIds.length})',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                      ),
+                                      onPressed: () => _executeBulkDelete(context),
                                     ),
-                                  ),
-                                  const SizedBox(
-                                    width: 140,
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
+                                    const SizedBox(width: 10),
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      ),
+                                      icon: const Icon(Icons.download_rounded, size: 16),
+                                      label: const Text('Export', style: TextStyle(fontSize: 12)),
+                                      onPressed: () => _exportSelectedRecords(context),
+                                    ),
+                                    const Spacer(),
+                                    TextButton(
+                                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                      child: const Text('Deselect All', style: TextStyle(fontSize: 12)),
+                                      onPressed: _deselectAll,
+                                    ),
+                                    const SizedBox(width: 16),
+                                  ] else ...[
+                                    const SizedBox(
+                                      width: 70,
                                       child: Text(
-                                        'ACTIONS',
+                                        'ID',
                                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 16),
+                                    for (final col in columns)
+                                      SizedBox(
+                                        width: _columnWidth(col),
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(right: 12),
+                                          child: Text(
+                                            _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ),
+                                    const SizedBox(
+                                      width: 130,
+                                      child: Text(
+                                        'STATUS',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                      ),
+                                    ),
+                                    const SizedBox(
+                                      width: 140,
+                                      child: Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Text(
+                                          'ACTIONS',
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                  ],
                                 ],
                               ),
                             ),
@@ -5655,7 +5801,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                               _buildTableRow(
                                 context,
                                 records[i],
-                                (records[i]['ID'] ?? records[i]['id'] ?? '$i').toString(),
+                                _getRecordId(records[i], i),
                                 columns,
                                 hasRelations,
                                 relations,
@@ -6165,7 +6311,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                               itemCount: records.length,
                               itemBuilder: (context, i) {
                                 final item = records[i];
-                                final id = (item['ID'] ?? item['id'] ?? '$i').toString();
+                                final id = _getRecordId(item, i);
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 12),
                                   child: _buildRecordCard(context, item, id),
