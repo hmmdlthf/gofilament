@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/golaravel/gofilament/pkg/assets"
 	"github.com/golaravel/gofilament/pkg/colors"
@@ -87,6 +88,9 @@ type Panel struct {
 	hasPasswordReset    bool
 	hasProfile          bool
 	requiresAuth        bool
+	sessionDuration     time.Duration
+	rememberMeDuration  time.Duration
+	tabsEnabled         bool
 	authGuard           any
 	authValidator       AuthValidatorFunc
 	tokenValidator      TokenValidatorFunc
@@ -139,6 +143,9 @@ func NewPanel(id string) *Panel {
 		globalSearchKeyBinding:   "k",
 		globalSearchResultsLimit: 10,
 		globalSearchFuzzy:        true,
+		sessionDuration:          24 * time.Hour,
+		rememberMeDuration:       30 * 24 * time.Hour,
+		tabsEnabled:              false,
 	}
 
 	// Default user menu
@@ -432,6 +439,58 @@ func (p *Panel) TokenValidator(fn TokenValidatorFunc) *Panel {
 	p.tokenValidator = fn
 	p.requiresAuth = true
 	return p
+}
+
+// SessionDuration configures the standard session lifespan (when Remember Me is unchecked).
+// Useful for banking or high-security applications where short timeouts (e.g. 5m, 15m) are required.
+func (p *Panel) SessionDuration(d time.Duration) *Panel {
+	p.sessionDuration = d
+	return p
+}
+
+// RememberMeDuration configures the extended lifespan when "Remember Me" is selected.
+func (p *Panel) RememberMeDuration(d time.Duration) *Panel {
+	p.rememberMeDuration = d
+	return p
+}
+
+// Tabs enables or disables resource status filter tabs globally across this panel.
+func (p *Panel) Tabs(enabled ...bool) *Panel {
+	if len(enabled) > 0 {
+		p.tabsEnabled = enabled[0]
+	} else {
+		p.tabsEnabled = true
+	}
+	return p
+}
+
+// GetSessionDuration returns the panel session duration (default 24h).
+func (p *Panel) GetSessionDuration() time.Duration {
+	if p.sessionDuration <= 0 {
+		return 24 * time.Hour
+	}
+	return p.sessionDuration
+}
+
+// GetRememberMeDuration returns the panel remember me duration (default 30d).
+func (p *Panel) GetRememberMeDuration() time.Duration {
+	if p.rememberMeDuration <= 0 {
+		return 30 * 24 * time.Hour
+	}
+	return p.rememberMeDuration
+}
+
+// ResolveTokenDuration calculates the effective token duration based on remember-me flag.
+func (p *Panel) ResolveTokenDuration(remember bool) time.Duration {
+	if remember {
+		return p.GetRememberMeDuration()
+	}
+	return p.GetSessionDuration()
+}
+
+// IsTabsEnabled returns true if status tabs are enabled for the panel.
+func (p *Panel) IsTabsEnabled() bool {
+	return p.tabsEnabled
 }
 
 // AuthGuard specifies an authentication guard.

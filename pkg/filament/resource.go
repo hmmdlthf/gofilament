@@ -140,6 +140,58 @@ type BaseResource[T any] struct {
 	globalResultActions func(record T) []GlobalSearchAction
 	globalResultURL     func(record T) string
 	globalSearchLimit   int
+
+	// Resource Tabs (Status / Filter Segments)
+	tabs        []*ResourceTab
+	tabsEnabled *bool
+}
+
+// ResourceTab represents a status or query filter tab displayed above the resource records list.
+type ResourceTab struct {
+	Key       string            `json:"key"`
+	Label     string            `json:"label"`
+	Badge     string            `json:"badge,omitempty"`
+	Icon      string            `json:"icon,omitempty"`
+	Query     map[string]string `json:"query,omitempty"`
+}
+
+// Tab creates a new ResourceTab with the given label.
+func Tab(label string) *ResourceTab {
+	cleanKey := strings.ToLower(strings.TrimSpace(label))
+	cleanKey = strings.ReplaceAll(cleanKey, " ", "_")
+	cleanKey = strings.ReplaceAll(cleanKey, "-", "_")
+	return &ResourceTab{
+		Key:   cleanKey,
+		Label: label,
+		Query: make(map[string]string),
+	}
+}
+
+// Key sets the unique key for the resource tab.
+func (t *ResourceTab) KeyName(k string) *ResourceTab {
+	t.Key = k
+	return t
+}
+
+// Badge sets an optional badge label on the tab.
+func (t *ResourceTab) TabBadge(b string) *ResourceTab {
+	t.Badge = b
+	return t
+}
+
+// Icon sets an optional icon name on the tab.
+func (t *ResourceTab) TabIcon(icon string) *ResourceTab {
+	t.Icon = icon
+	return t
+}
+
+// QueryParam adds a query filter parameter when this tab is selected.
+func (t *ResourceTab) QueryParam(k, v string) *ResourceTab {
+	if t.Query == nil {
+		t.Query = make(map[string]string)
+	}
+	t.Query[k] = v
+	return t
 }
 
 // NewResource creates a new Resource with a URL slug.
@@ -447,6 +499,37 @@ func (r *BaseResource[T]) Relations(rms ...RelationManager) *BaseResource[T] {
 
 func (r *BaseResource[T]) GetRelations() []RelationManager {
 	return r.relations
+}
+
+// Tabs defines explicit status/filter tabs displayed above the records list.
+func (r *BaseResource[T]) Tabs(tabs ...*ResourceTab) *BaseResource[T] {
+	r.tabs = tabs
+	b := true
+	r.tabsEnabled = &b
+	return r
+}
+
+// EnableTabs explicitly enables or disables status tabs for this resource.
+func (r *BaseResource[T]) EnableTabs(enabled ...bool) *BaseResource[T] {
+	b := true
+	if len(enabled) > 0 {
+		b = enabled[0]
+	}
+	r.tabsEnabled = &b
+	return r
+}
+
+// GetTabs returns the configured resource tabs.
+func (r *BaseResource[T]) GetTabs() []*ResourceTab {
+	return r.tabs
+}
+
+// IsTabsEnabled returns true if tabs are enabled for this resource.
+func (r *BaseResource[T]) IsTabsEnabled() bool {
+	if r.tabsEnabled != nil {
+		return *r.tabsEnabled
+	}
+	return false
 }
 
 func (r *BaseResource[T]) GetFilters() []tables.FilterDTO {

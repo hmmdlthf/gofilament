@@ -41,6 +41,8 @@ type ResourceInterface interface {
 	IsGloballySearchable() bool
 	SearchGlobal(ctx *Context, query string) []GlobalSearchResult
 	GetRelations() []RelationManager
+	GetTabs() []*ResourceTab
+	IsTabsEnabled() bool
 }
 
 // PageInterface defines the contract for custom panel pages.

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/golaravel/gofilament/pkg/notifications"
 	"github.com/golaravel/gofilament/pkg/tables"
@@ -52,6 +53,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			Login    string `json:"login"`
 			Email    string `json:"email"`
 			Password string `json:"password"`
+			Remember bool   `json:"remember"`
 		}
 		if err := c.BindJSON(&creds); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request payload"})
@@ -71,10 +73,16 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		}
 
 		ctx := NewContext(c, p)
+		tokenDuration := p.ResolveTokenDuration(creds.Remember)
+		ctx.Set("remember", creds.Remember)
+		ctx.Set("token_duration", tokenDuration)
+
 		authUser, tokenStr, err := p.authValidator(ctx, identifier, creds.Password)
 		if err != nil || authUser == nil {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
 		}
+
+		expiresAt := time.Now().Add(tokenDuration)
 
 		var userInfo map[string]any
 		if pu, ok := authUser.(interface{ ToMap() map[string]any }); ok {
@@ -88,9 +96,11 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{
-			"status": "success",
-			"token":  tokenStr,
-			"user":   userInfo,
+			"status":     "success",
+			"token":      tokenStr,
+			"user":       userInfo,
+			"expires_at": expiresAt.Format(time.RFC3339),
+			"expires_in": int(tokenDuration.Seconds()),
 		})
 	})
 
@@ -163,13 +173,15 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		}
 
 		type resourceDTO struct {
-			Slug            string            `json:"slug"`
-			ModelName       string            `json:"model_name"`
-			PluralModelName string            `json:"plural_model_name"`
-			NavIcon         string            `json:"icon"`
+			Slug            string              `json:"slug"`
+			ModelName       string              `json:"model_name"`
+			PluralModelName string              `json:"plural_model_name"`
+			NavIcon         string              `json:"icon"`
 			NavGroup        string              `json:"group"`
 			Relations       []relationMetaDTO   `json:"relations,omitempty"`
 			Filters         []tables.FilterDTO  `json:"filters,omitempty"`
+			Tabs            []*ResourceTab      `json:"tabs,omitempty"`
+			TabsEnabled     bool                `json:"tabs_enabled"`
 		}
 
 		var resourceDTOs []resourceDTO
@@ -188,6 +200,15 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 				if hf, ok := res.(interface{ GetFilters() []tables.FilterDTO }); ok {
 					filtersDTO = hf.GetFilters()
 				}
+				tabsEnabled := p.IsTabsEnabled() || res.IsTabsEnabled()
+				var tabsDTO []*ResourceTab = res.GetTabs()
+				if len(tabsDTO) == 0 && tabsEnabled {
+					tabsDTO = []*ResourceTab{
+						{Key: "all", Label: "All"},
+						{Key: "active", Label: "Active", Query: map[string]string{"status": "active"}},
+						{Key: "inactive", Label: "Inactive", Query: map[string]string{"status": "inactive"}},
+					}
+				}
 				resourceDTOs = append(resourceDTOs, resourceDTO{
 					Slug:            res.Slug(),
 					ModelName:       item.Label,
@@ -196,6 +217,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					NavGroup:        item.Group,
 					Relations:       relsDTO,
 					Filters:         filtersDTO,
+					Tabs:            tabsDTO,
+					TabsEnabled:     tabsEnabled,
 				})
 			}
 		}
@@ -269,6 +292,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"widgets_count":         len(p.widgets),
 			"account_nav_placement": string(p.GetAccountNavPlacement()),
 			"requires_auth":         p.requiresAuth,
+			"session_duration":      int(p.GetSessionDuration().Seconds()),
+			"remember_me_duration":  int(p.GetRememberMeDuration().Seconds()),
+			"tabs_enabled":          p.IsTabsEnabled(),
 		}
 
 		return c.JSON(http.StatusOK, schema)

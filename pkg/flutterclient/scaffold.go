@@ -34,6 +34,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.0
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:
@@ -81,6 +82,7 @@ flutter:
 	apiDart := fmt.Sprintf(`import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FilamentApiClient {
   String baseUrl;
@@ -91,6 +93,104 @@ class FilamentApiClient {
   FilamentApiClient({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl();
 
   bool get isAuthenticated => token != null && token!.isNotEmpty;
+
+  String get _storageKeyPrefix => 'gofilament_${Uri.parse(baseUrl).path.replaceAll('/', '_')}';
+
+  Future<void> saveSession({
+    required String? token,
+    Map<String, dynamic>? user,
+    String? expiresAt,
+    bool remember = false,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefix = _storageKeyPrefix;
+      if (token != null && token.isNotEmpty) {
+        await prefs.setString('${prefix}_token', token);
+        if (user != null) {
+          await prefs.setString('${prefix}_user', json.encode(user));
+        }
+        if (expiresAt != null && expiresAt.isNotEmpty) {
+          await prefs.setString('${prefix}_expires_at', expiresAt);
+        }
+        await prefs.setBool('${prefix}_remember', remember);
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> restoreSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefix = _storageKeyPrefix;
+      final savedToken = prefs.getString('${prefix}_token');
+      if (savedToken == null || savedToken.isEmpty) {
+        return false;
+      }
+      final expStr = prefs.getString('${prefix}_expires_at');
+      if (expStr != null && expStr.isNotEmpty) {
+        final exp = DateTime.tryParse(expStr);
+        if (exp != null && DateTime.now().isAfter(exp)) {
+          await clearSession();
+          return false;
+        }
+      }
+      token = savedToken;
+      final userJson = prefs.getString('${prefix}_user');
+      if (userJson != null && userJson.isNotEmpty) {
+        try {
+          currentUser = json.decode(userJson) as Map<String, dynamic>?;
+        } catch (_) {}
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> clearSession() async {
+    token = null;
+    currentUser = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefix = _storageKeyPrefix;
+      await prefs.remove('${prefix}_token');
+      await prefs.remove('${prefix}_user');
+      await prefs.remove('${prefix}_expires_at');
+      await prefs.remove('${prefix}_remember');
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>> login(String username, String password, {bool remember = false}) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/api/login'),
+      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'username': username, 'password': password, 'remember': remember}),
+    );
+    if (res.statusCode == 200) {
+      final data = json.decode(res.body) as Map<String, dynamic>;
+      token = data['token'] as String?;
+      currentUser = data['user'] as Map<String, dynamic>?;
+      final expiresAtStr = data['expires_at'] as String?;
+      await saveSession(token: token, user: currentUser, expiresAt: expiresAtStr, remember: remember);
+      return data;
+    }
+    try {
+      final err = json.decode(res.body);
+      throw Exception(err['error'] ?? 'Authentication failed');
+    } catch (e) {
+      if (e is Exception) rethrow;
+      throw Exception('Authentication failed (${res.statusCode})');
+    }
+  }
+
+  Future<void> logout() async {
+    try {
+      if (token != null && token!.isNotEmpty) {
+        await http.post(Uri.parse('$baseUrl/api/logout'), headers: _headers);
+      }
+    } catch (_) {}
+    await clearSession();
+  }
 
   static String _defaultBaseUrl() {
     if (kIsWeb) {
@@ -121,31 +221,7 @@ class FilamentApiClient {
     return h;
   }
 
-  Future<Map<String, dynamic>> login(String username, String password) async {
-    final res = await http.post(
-      Uri.parse('$baseUrl/api/login'),
-      headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-      body: json.encode({'username': username, 'password': password}),
-    );
-    if (res.statusCode == 200) {
-      final data = json.decode(res.body) as Map<String, dynamic>;
-      token = data['token'] as String?;
-      currentUser = data['user'] as Map<String, dynamic>?;
-      return data;
-    }
-    try {
-      final err = json.decode(res.body);
-      throw Exception(err['error'] ?? 'Authentication failed');
-    } catch (e) {
-      if (e is Exception) rethrow;
-      throw Exception('Authentication failed (${res.statusCode})');
-    }
-  }
 
-  void logout() {
-    token = null;
-    currentUser = null;
-  }
 
   Future<Map<String, dynamic>> fetchSchema() async {
     final res = await http.get(Uri.parse('$baseUrl/api/schema'), headers: _headers);
@@ -2774,11 +2850,22 @@ class _FilamentAppState extends State<FilamentApp> {
   String _locale = 'en';
   bool _isRTL = false;
   bool _isAuthenticated = false;
+  bool _isInitializing = true;
 
   @override
   void initState() {
     super.initState();
-    _isAuthenticated = api.isAuthenticated;
+    _restoreSession();
+  }
+
+  Future<void> _restoreSession() async {
+    final authenticated = await api.restoreSession();
+    if (mounted) {
+      setState(() {
+        _isAuthenticated = authenticated;
+        _isInitializing = false;
+      });
+    }
   }
 
   void toggleTheme() {
@@ -2824,32 +2911,43 @@ class _FilamentAppState extends State<FilamentApp> {
         useMaterial3: true,
         fontFamily: 'sans-serif',
       ),
-      home: _isAuthenticated
-          ? AdminShellPage(
-              api: api,
-              onToggleTheme: toggleTheme,
-              isDark: _themeMode == ThemeMode.dark,
-              currentLocale: _locale,
-              isRTL: _isRTL,
-              onLocaleChanged: setLocale,
-              onSignOut: () {
-                api.logout();
-                setState(() {
-                  _isAuthenticated = false;
-                });
-              },
+      home: _isInitializing
+          ? Scaffold(
+              backgroundColor: _themeMode == ThemeMode.dark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+              body: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
+                ),
+              ),
             )
-          : LoginScreen(
-              api: api,
-              panelTitle: '{{TITLE}}',
-              isDark: _themeMode == ThemeMode.dark,
-              onToggleTheme: toggleTheme,
-              onLoginSuccess: (user) {
-                setState(() {
-                  _isAuthenticated = true;
-                });
-              },
-            ),
+          : _isAuthenticated
+              ? AdminShellPage(
+                  api: api,
+                  onToggleTheme: toggleTheme,
+                  isDark: _themeMode == ThemeMode.dark,
+                  currentLocale: _locale,
+                  isRTL: _isRTL,
+                  onLocaleChanged: setLocale,
+                  onSignOut: () async {
+                    await api.logout();
+                    if (mounted) {
+                      setState(() {
+                        _isAuthenticated = false;
+                      });
+                    }
+                  },
+                )
+              : LoginScreen(
+                  api: api,
+                  panelTitle: '{{TITLE}}',
+                  isDark: _themeMode == ThemeMode.dark,
+                  onToggleTheme: toggleTheme,
+                  onLoginSuccess: (user) {
+                    setState(() {
+                      _isAuthenticated = true;
+                    });
+                  },
+                ),
     );
   }
 }
@@ -2878,6 +2976,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = false;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -2904,7 +3003,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final res = await widget.api.login(username, password);
+      final res = await widget.api.login(username, password, remember: _rememberMe);
       final user = res['user'] as Map<String, dynamic>? ?? {'login': username};
       if (mounted) {
         widget.onLoginSuccess(user);
@@ -3044,7 +3143,38 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       onSubmitted: (_) => _handleLogin(),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      onTap: () => setState(() => _rememberMe = !_rememberMe),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: Checkbox(
+                                value: _rememberMe,
+                                activeColor: const Color(0xFFF59E0B),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                onChanged: (v) => setState(() => _rememberMe = v ?? false),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Remember me',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     FilledButton(
                       onPressed: _isLoading ? null : _handleLogin,
                       style: FilledButton.styleFrom(

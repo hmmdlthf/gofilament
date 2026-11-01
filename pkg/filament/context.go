@@ -3,6 +3,7 @@ package filament
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/golaravel/golaravel/pkg/auth"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
@@ -35,6 +36,29 @@ func NewContext(gc *gcontext.Context, p *Panel) *Context {
 // Panel returns the current active Panel.
 func (c *Context) Panel() *Panel {
 	return c.panel
+}
+
+// RememberMe returns whether the authentication request requested persistent Remember Me.
+func (c *Context) RememberMe() bool {
+	if val, ok := c.Get("remember"); ok {
+		if b, ok := val.(bool); ok {
+			return b
+		}
+	}
+	return false
+}
+
+// TokenDuration returns the resolved session duration for this authentication request.
+func (c *Context) TokenDuration() time.Duration {
+	if val, ok := c.Get("token_duration"); ok {
+		if d, ok := val.(time.Duration); ok {
+			return d
+		}
+	}
+	if c.panel != nil {
+		return c.panel.ResolveTokenDuration(c.RememberMe())
+	}
+	return 24 * time.Hour
 }
 
 // User returns the authenticated user entity from the request session/token.
