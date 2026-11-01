@@ -2989,6 +2989,372 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     );
   }
 
+  List<Map<String, dynamic>> _getRelations() {
+    if (widget.relations != null && widget.relations!.isNotEmpty) {
+      return widget.relations!.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+    return [];
+  }
+
+  IconData _iconForRelation(String icon) {
+    if (icon.contains('user') || icon.contains('admin') || icon.contains('person')) {
+      return Icons.people_alt_outlined;
+    }
+    if (icon.contains('building') || icon.contains('office') || icon.contains('branch')) {
+      return Icons.business_outlined;
+    }
+    if (icon.contains('truck') || icon.contains('car') || icon.contains('vehicle')) {
+      return Icons.local_shipping_outlined;
+    }
+    if (icon.contains('chip') || icon.contains('cpu') || icon.contains('tag')) {
+      return Icons.nfc_outlined;
+    }
+    return Icons.account_tree_outlined;
+  }
+
+  Widget _buildRecordTable(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final relations = _getRelations();
+    final hasRelations = relations.isNotEmpty;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1600),
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+              ),
+            ),
+            color: theme.colorScheme.surface,
+            clipBehavior: Clip.antiAlias,
+            child: LayoutBuilder(
+              builder: (ctx, constraints) {
+                final tableWidth = constraints.maxWidth > 960 ? constraints.maxWidth : 960.0;
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: tableWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Table Header
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                            border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+                          ),
+                          child: Row(
+                            children: [
+                              const SizedBox(
+                                width: 70,
+                                child: Text(
+                                  'ID',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                ),
+                              ),
+                              const Expanded(
+                                flex: 3,
+                                child: Text(
+                                  'RECORD / TITLE',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                ),
+                              ),
+                              const Expanded(
+                                flex: 3,
+                                child: Text(
+                                  'ATTRIBUTES',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                ),
+                              ),
+                              const SizedBox(
+                                width: 140,
+                                child: Text(
+                                  'STATUS',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                ),
+                              ),
+                              if (hasRelations)
+                                const Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'SUB-ENTITIES',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                  ),
+                                ),
+                              const SizedBox(
+                                width: 130,
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    'ACTIONS',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Table Rows
+                        for (int i = 0; i < records.length; i++)
+                          _buildTableRow(context, records[i], (records[i]['ID'] ?? records[i]['id'] ?? '$i').toString(), hasRelations, relations, i == records.length - 1),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableRow(
+    BuildContext context,
+    dynamic item,
+    String id,
+    bool hasRelations,
+    List<Map<String, dynamic>> relations,
+    bool isLast,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isDevice = widget.slug == 'devices';
+    final isTelemetry = widget.slug == 'telemetry';
+    final isTicket = widget.slug == 'tickets';
+    final isFirmware = widget.slug == 'firmware';
+
+    String name = 'Record #$id';
+    if (isDevice) {
+      name = (item['Name'] ?? item['name'] ?? 'Device #$id').toString();
+    } else if (isTelemetry) {
+      name = '${item['DeviceName'] ?? item['device_name'] ?? 'Node'}: ${item['Metric'] ?? item['metric'] ?? 'Metric'}';
+    } else if (isTicket) {
+      name = (item['Title'] ?? item['title'] ?? 'Ticket #$id').toString();
+    } else if (isFirmware) {
+      name = '${item['Version'] ?? item['version'] ?? 'Release'} (${item['HardwareTarget'] ?? item['hardware_target'] ?? 'All'})';
+    } else {
+      name = (item['Name'] ?? item['name'] ?? item['Title'] ?? item['title'] ?? 'Record #$id').toString();
+    }
+
+    IconData headerIcon = Icons.article_outlined;
+    if (isDevice) headerIcon = Icons.router;
+    if (isTelemetry) headerIcon = Icons.sensors;
+    if (isTicket) headerIcon = Icons.confirmation_number_outlined;
+    if (isFirmware) headerIcon = Icons.system_update_alt;
+
+    final status = (item['Status'] ?? item['status'] ?? item['status_text'] ?? (item['active'] == 'Y' ? 'active' : (item['active'] == 'N' ? 'inactive' : 'online'))).toString();
+    Color statusColor = const Color(0xFF10B981);
+    final stLower = status.toLowerCase();
+    if (stLower == 'inactive' || stLower == 'offline' || stLower == 'critical' || stLower == 'rejected' || stLower == 'overdue' || stLower == 'n') {
+      statusColor = Colors.redAccent;
+    } else if (stLower == 'pending' || stLower == 'warning' || stLower == 'draft' || stLower == 'partial') {
+      statusColor = Colors.amber;
+    }
+
+    // Contextual attributes
+    final attributes = <String>[];
+    if (item is Map) {
+      for (final k in ['code', 'phone', 'city', 'total_amount', 'quantity', 'balance_due', 'category_name', 'metric', 'hardware_target', 'plate_number', 'serial_number']) {
+        final v = item[k] ?? item[k.toUpperCase()] ?? item[_snakeToCamel(k)];
+        if (v != null && v.toString().isNotEmpty) {
+          attributes.add('${_titleCase(k.replaceAll('_', ' '))}: $v');
+        }
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        border: isLast ? null : Border(bottom: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05))),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          hoverColor: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.02),
+          onTap: () => showEditSheet(context, id, item),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(
+              children: [
+                // ID Column
+                SizedBox(
+                  width: 70,
+                  child: Text(
+                    '#$id',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+                ),
+
+                // Record / Title Column
+                Expanded(
+                  flex: 3,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: theme.colorScheme.primaryContainer,
+                        child: Icon(headerIcon, size: 16, color: theme.colorScheme.primary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (item['email'] != null || item['Email'] != null)
+                              Text(
+                                '${item['email'] ?? item['Email']}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Attributes Column
+                Expanded(
+                  flex: 3,
+                  child: attributes.isEmpty
+                      ? const Text('—', style: TextStyle(color: Colors.grey))
+                      : Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: attributes.take(3).map((attr) {
+                            return Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                attr,
+                                style: TextStyle(fontSize: 11, color: isDark ? Colors.grey.shade300 : Colors.grey.shade700),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                ),
+
+                // Status Badge Column
+                SizedBox(
+                  width: 140,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                          const SizedBox(width: 6),
+                          Text(
+                            status.toUpperCase(),
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Sub-Entities / Relations Column (if present)
+                if (hasRelations)
+                  Expanded(
+                    flex: 2,
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: relations.map((rel) {
+                        final relTitle = (rel['title'] ?? rel['relationship'] ?? 'Related').toString();
+                        final iconName = (rel['icon'] ?? '').toString();
+                        return ActionChip(
+                          avatar: Icon(_iconForRelation(iconName), size: 14, color: Colors.amber.shade400),
+                          label: Text(relTitle, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          backgroundColor: Colors.amber.withValues(alpha: 0.1),
+                          side: BorderSide(color: Colors.amber.withValues(alpha: 0.3)),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Opening $relTitle for #$id')),
+                            );
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+
+                // Actions Column
+                SizedBox(
+                  width: 130,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        tooltip: 'Edit Record',
+                        onPressed: () => showEditSheet(context, id, item),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                        tooltip: 'Delete Record',
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Delete Record?'),
+                              content: Text('Are you sure you want to delete #$id?'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            await widget.api.deleteRecord(widget.slug, id);
+                            loadRecords();
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -3109,27 +3475,15 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                   onRefresh: loadRecords,
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      // Tablet & Desktop: 2-column card grid (Zero horizontal scrolling)
-                      final isTabletOrWide = constraints.maxWidth >= 600;
-                      if (isTabletOrWide) {
-                        return GridView.builder(
-                          padding: const EdgeInsets.all(16),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisExtent: 260,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
-                          itemCount: records.length,
-                          itemBuilder: (context, i) {
-                            final item = records[i];
-                            final id = (item['ID'] ?? item['id'] ?? '$i').toString();
-                            return _buildRecordCard(context, item, id);
-                          },
-                        );
+                      // Desktop (left sidebar navigation active, width > 900):
+                      // Render as professional table list of records!
+                      final isDesktopTable = constraints.maxWidth > 900;
+                      if (isDesktopTable) {
+                        return _buildRecordTable(context);
                       }
 
-                      // Mobile: 1-column stacked cards (Zero horizontal scrolling)
+                      // Mobile (bottom menu active, width <= 900):
+                      // Render 1-column stacked card records (no horizontal scrolling needed)
                       return ListView.builder(
                         padding: const EdgeInsets.all(12),
                         itemCount: records.length,
