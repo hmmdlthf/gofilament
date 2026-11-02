@@ -753,12 +753,36 @@ class AppLocale {
     },
   };
 
-  static String t(String locale, String key, {Map<String, String>? remoteOverrides}) {
-    if (remoteOverrides != null && remoteOverrides.containsKey(key)) {
-      return remoteOverrides[key]!;
+  static String t(String locale, dynamic keyOrText, {Map<String, String>? remoteOverrides}) {
+    if (keyOrText == null) return '';
+    final raw = keyOrText.toString().trim();
+    if (raw.isEmpty) return '';
+    if (remoteOverrides != null && remoteOverrides.containsKey(raw)) {
+      return remoteOverrides[raw]!;
     }
-    final locDict = strings[locale] ?? strings['en']!;
-    return locDict[key] ?? strings['en']![key] ?? key;
+    final locDict = strings[locale] ?? strings['en'] ?? {};
+    if (locDict.containsKey(raw)) return locDict[raw]!;
+    final lower = raw.toLowerCase();
+    if (locDict.containsKey(lower)) return locDict[lower]!;
+    final snake = lower.replaceAll(RegExp(r'[\s\-_/]+'), '_');
+    if (locDict.containsKey(snake)) return locDict[snake]!;
+
+    // Fallback to English dictionary if current locale is not English
+    if (locale != 'en') {
+      final enDict = strings['en'] ?? {};
+      if (enDict.containsKey(raw)) return enDict[raw]!;
+      if (enDict.containsKey(lower)) return enDict[lower]!;
+      if (enDict.containsKey(snake)) return enDict[snake]!;
+    }
+
+    // Humanizer fallback: replace underscores with spaces and capitalize words
+    if (raw.contains('_')) {
+      return raw
+          .split('_')
+          .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+          .join(' ');
+    }
+    return raw;
   }
 
   static String getFlag(String loc) {

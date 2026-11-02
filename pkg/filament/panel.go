@@ -722,6 +722,10 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 
 // Mount attaches all routes for this panel into the given GoLaravel router.
 func (p *Panel) Mount(r *router.Router) {
+	if err := p.ValidateTranslations(); err != nil {
+		panic(err)
+	}
+
 	// 1. Standardized Panel REST API (powers Flutter, mobile apps, and headless integrations)
 	p.RegisterAPIRoutes(r)
 
@@ -1036,6 +1040,9 @@ func (p *Panel) Mount(r *router.Router) {
 
 // Register mounts the panel onto a GoLaravel Engine.
 func (p *Panel) Register(app *golaravel.Engine) error {
+	if err := p.ValidateTranslations(); err != nil {
+		return err
+	}
 	p.Mount(app.Router)
 	return nil
 }
