@@ -42,24 +42,92 @@ type Table[T any] struct {
 	activeFilters map[string]string
 	idFunc        func(record T) string
 	toggleable    bool
-	reorderable   bool
-	reorderCol    string
-	softDeletes   bool
-	isTrashed     func(record T) bool
+	reorderable    bool
+	reorderCol     string
+	softDeletes    bool
+	isTrashed      func(record T) bool
+	listMode       string
+	perPageOptions []int
 }
 
 // New creates an empty Table instance.
 func New[T any]() *Table[T] {
 	return &Table[T]{
-		columns:       make([]ColumnRenderer[T], 0),
-		filters:       make([]FilterInterface, 0),
-		actions:       make([]*TableAction[T], 0),
-		bulkActions:   make([]*BulkActionDef, 0),
-		headerActions: make([]*TableAction[T], 0),
-		page:          1,
-		perPage:       15,
-		activeFilters: make(map[string]string),
+		columns:        make([]ColumnRenderer[T], 0),
+		filters:        make([]FilterInterface, 0),
+		actions:        make([]*TableAction[T], 0),
+		bulkActions:    make([]*BulkActionDef, 0),
+		headerActions:  make([]*TableAction[T], 0),
+		page:           1,
+		perPage:        15,
+		perPageOptions: []int{10, 15, 25, 50, 100},
+		listMode:       "pagination",
+		activeFilters:  make(map[string]string),
 	}
+}
+
+// Pagination configures the table for paginated record browsing with an optional items-per-page.
+func (t *Table[T]) Pagination(perPage ...int) *Table[T] {
+	t.listMode = "pagination"
+	if len(perPage) > 0 && perPage[0] > 0 {
+		t.perPage = perPage[0]
+	}
+	return t
+}
+
+// InfiniteScroll configures the table for infinite scrolling with an optional chunk size.
+func (t *Table[T]) InfiniteScroll(perPage ...int) *Table[T] {
+	t.listMode = "infinite_scroll"
+	if len(perPage) > 0 && perPage[0] > 0 {
+		t.perPage = perPage[0]
+	}
+	return t
+}
+
+// ListMode sets the list loading mode ("pagination" or "infinite_scroll").
+func (t *Table[T]) ListMode(mode string) *Table[T] {
+	t.listMode = mode
+	return t
+}
+
+// PerPage sets the records per page / chunk size.
+func (t *Table[T]) PerPage(n int) *Table[T] {
+	if n > 0 {
+		t.perPage = n
+	}
+	return t
+}
+
+// PerPageOptions sets the selectable page size options.
+func (t *Table[T]) PerPageOptions(opts ...int) *Table[T] {
+	if len(opts) > 0 {
+		t.perPageOptions = opts
+	}
+	return t
+}
+
+// GetListMode returns the configured list mode.
+func (t *Table[T]) GetListMode() string {
+	if t.listMode == "" {
+		return "pagination"
+	}
+	return t.listMode
+}
+
+// GetPerPage returns the configured items per page.
+func (t *Table[T]) GetPerPage() int {
+	if t.perPage <= 0 {
+		return 15
+	}
+	return t.perPage
+}
+
+// GetPerPageOptions returns the configured per page choices.
+func (t *Table[T]) GetPerPageOptions() []int {
+	if len(t.perPageOptions) == 0 {
+		return []int{10, 15, 25, 50, 100}
+	}
+	return t.perPageOptions
 }
 
 // Toggleable enables or disables the column show/hide toggler.

@@ -210,3 +210,55 @@ func TestResourceFullCRUDLifecycle(t *testing.T) {
 		AssertDontSee("Super Admin").
 		AssertSee("Jane Doe")
 }
+
+func TestResourcePaginationAndInfiniteScrollConfig(t *testing.T) {
+	// 1. Test Resource configuration
+	resPag := filament.NewResource[*ResourceUser]("orders").
+		Pagination(25).
+		PerPageOptions(25, 50, 100)
+
+	if resPag.GetListMode() != filament.ListModePagination {
+		t.Errorf("Expected ListModePagination, got %v", resPag.GetListMode())
+	}
+	if resPag.GetPerPage() != 25 {
+		t.Errorf("Expected perPage 25, got %d", resPag.GetPerPage())
+	}
+	if len(resPag.GetPerPageOptions()) != 3 || resPag.GetPerPageOptions()[0] != 25 {
+		t.Errorf("Expected custom PerPageOptions, got %v", resPag.GetPerPageOptions())
+	}
+
+	resInf := filament.NewResource[*ResourceUser]("logs").
+		InfiniteScroll(30)
+
+	if resInf.GetListMode() != filament.ListModeInfiniteScroll {
+		t.Errorf("Expected ListModeInfiniteScroll, got %v", resInf.GetListMode())
+	}
+	if resInf.GetPerPage() != 30 {
+		t.Errorf("Expected perPage 30, got %d", resInf.GetPerPage())
+	}
+
+	// 2. Test Table configuration
+	tbl := tables.New[*ResourceUser]().
+		InfiniteScroll(40).
+		PerPageOptions(20, 40, 80)
+
+	if tbl.GetListMode() != "infinite_scroll" {
+		t.Errorf("Expected table list mode infinite_scroll, got %s", tbl.GetListMode())
+	}
+	if tbl.GetPerPage() != 40 {
+		t.Errorf("Expected table perPage 40, got %d", tbl.GetPerPage())
+	}
+
+	// 3. Test Panel defaults
+	p := filament.NewPanel("fleet").
+		DefaultListMode(filament.ListModeInfiniteScroll).
+		DefaultPerPage(50).
+		DefaultPerPageOptions(25, 50, 100)
+
+	if p.GetDefaultListMode() != filament.ListModeInfiniteScroll {
+		t.Errorf("Expected panel default ListModeInfiniteScroll, got %v", p.GetDefaultListMode())
+	}
+	if p.GetDefaultPerPage() != 50 {
+		t.Errorf("Expected panel default perPage 50, got %d", p.GetDefaultPerPage())
+	}
+}

@@ -267,18 +267,32 @@ class FilamentApiClient {
 
 
 
+  Map<String, dynamic>? cachedSchema;
+
   Future<Map<String, dynamic>> fetchSchema() async {
     final res = await http.get(Uri.parse('$baseUrl/api/schema'), headers: _headers);
     if (res.statusCode == 200) {
-      return json.decode(res.body);
+      cachedSchema = json.decode(res.body);
+      return cachedSchema!;
     }
     throw Exception('Failed to load panel schema: ${res.statusCode}');
   }
 
-  Future<Map<String, dynamic>> fetchResourceRecords(String slug, {int page = 1, String search = '', Map<String, dynamic>? filters}) async {
+  Future<Map<String, dynamic>> fetchResourceRecords(
+    String slug, {
+    int page = 1,
+    int? perPage,
+    String search = '',
+    Map<String, dynamic>? filters,
+    String? sort,
+    String? direction,
+  }) async {
     final queryParams = <String, String>{
       'page': page.toString(),
+      if (perPage != null && perPage > 0) 'perPage': perPage.toString(),
       if (search.isNotEmpty) 'search': search,
+      if (sort != null && sort.isNotEmpty) 'sort': sort,
+      if (direction != null && direction.isNotEmpty) 'direction': direction,
     };
     if (filters != null) {
       filters.forEach((key, val) {
@@ -595,6 +609,17 @@ class AppLocale {
       'clear_sort': 'Clear Sort',
       'ascending': 'Ascending (A-Z / 0-9)',
       'descending': 'Descending (Z-A / 9-0)',
+      'pagination': 'Pagination',
+      'infinite_scroll': 'Infinite Scroll',
+      'previous_page': 'Previous',
+      'next_page': 'Next',
+      'first_page': 'First',
+      'last_page': 'Last',
+      'showing_records': 'Showing',
+      'to': 'to',
+      'load_more': 'Load More',
+      'loading_more': 'Loading more records...',
+      'all_records_loaded': 'All records loaded',
       'clear_all': 'Clear All',
       'select_all': 'Select All',
       'deselect_all': 'Deselect All',
@@ -707,6 +732,17 @@ class AppLocale {
       'clear_sort': 'إلغاء الترتيب',
       'ascending': 'تصاعدي (أ-ي / 0-9)',
       'descending': 'تنازلي (ي-أ / 9-0)',
+      'pagination': 'ترقيم الصفحات',
+      'infinite_scroll': 'التمرير اللانهائي',
+      'previous_page': 'السابق',
+      'next_page': 'التالي',
+      'first_page': 'الأول',
+      'last_page': 'الأخير',
+      'showing_records': 'عرض',
+      'to': 'إلى',
+      'load_more': 'تحميل المزيد',
+      'loading_more': 'جاري تحميل المزيد من السجلات...',
+      'all_records_loaded': 'تم تحميل جميع السجلات',
       'clear_all': 'مسح الكل',
       'select_all': 'تحديد الكل',
       'deselect_all': 'إلغاء تحديد الكل',
@@ -5682,7 +5718,23 @@ class _AdminShellPageState extends State<AdminShellPage> {
                   final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
                   final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
                   final tabs = cur != null ? (cur['tabs'] as List<dynamic>?) : null;
-                  return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters, tabs: tabs, currentLocale: widget.currentLocale);
+                  final listMode = cur != null ? cur['list_mode'] as String? : null;
+                  final perPage = cur != null ? (cur['per_page'] as num?)?.toInt() : null;
+                  List<int>? perPageOpts;
+                  if (cur != null && cur['per_page_options'] is List) {
+                    perPageOpts = (cur['per_page_options'] as List).map((e) => (e as num).toInt()).toList();
+                  }
+                  return ResourceRecordList(
+                    api: api,
+                    slug: selectedResourceSlug!,
+                    relations: rels,
+                    filters: filters,
+                    tabs: tabs,
+                    currentLocale: widget.currentLocale,
+                    configuredListMode: listMode,
+                    configuredPerPage: perPage,
+                    configuredPerPageOptions: perPageOpts,
+                  );
                 }),
         ),
       ],
@@ -5702,7 +5754,23 @@ class _AdminShellPageState extends State<AdminShellPage> {
     final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
     final filters = cur != null ? (cur['filters'] as List<dynamic>?) : null;
     final tabs = cur != null ? (cur['tabs'] as List<dynamic>?) : null;
-    return ResourceRecordList(api: api, slug: selectedResourceSlug!, relations: rels, filters: filters, tabs: tabs, currentLocale: widget.currentLocale);
+    final listMode = cur != null ? cur['list_mode'] as String? : null;
+    final perPage = cur != null ? (cur['per_page'] as num?)?.toInt() : null;
+    List<int>? perPageOpts;
+    if (cur != null && cur['per_page_options'] is List) {
+      perPageOpts = (cur['per_page_options'] as List).map((e) => (e as num).toInt()).toList();
+    }
+    return ResourceRecordList(
+      api: api,
+      slug: selectedResourceSlug!,
+      relations: rels,
+      filters: filters,
+      tabs: tabs,
+      currentLocale: widget.currentLocale,
+      configuredListMode: listMode,
+      configuredPerPage: perPage,
+      configuredPerPageOptions: perPageOpts,
+    );
   }
 
   Widget _buildMobileAccountHub() {
@@ -6020,6 +6088,9 @@ class ResourceRecordList extends StatefulWidget {
   final List<dynamic>? filters;
   final List<dynamic>? tabs;
   final String currentLocale;
+  final String? configuredListMode;
+  final int? configuredPerPage;
+  final List<int>? configuredPerPageOptions;
 
   const ResourceRecordList({
     super.key,
@@ -6029,6 +6100,9 @@ class ResourceRecordList extends StatefulWidget {
     this.filters,
     this.tabs,
     this.currentLocale = 'en',
+    this.configuredListMode,
+    this.configuredPerPage,
+    this.configuredPerPageOptions,
   });
 
   @override
@@ -6048,6 +6122,14 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _verticalScrollController = ScrollController();
   Set<String> selectedRecordIds = <String>{};
+
+  late String _currentListMode;
+  late int _perPage;
+  late List<int> _perPageOptions;
+  int _currentPage = 1;
+  int _totalRecords = 0;
+  bool _isLoadingMore = false;
+  bool _hasMoreRecords = true;
 
   String _getRecordId(dynamic item, [int? index]) {
     if (item == null) return index != null ? "$index" : "";
@@ -6164,6 +6246,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
   @override
   void dispose() {
+    _verticalScrollController.removeListener(_handleScroll);
     _horizontalScrollController.dispose();
     _verticalScrollController.dispose();
     super.dispose();
@@ -6187,6 +6270,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
       _sortAscending = true;
       selectedRecordIds.clear();
     });
+    loadRecords(resetPage: true);
   }
 
   void _toggleSort(String col) {
@@ -6203,6 +6287,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
         _sortAscending = true;
       }
     });
+    loadRecords(resetPage: true);
   }
 
   void _removeFilter(String key, String val) {
@@ -6212,6 +6297,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
         activeFilters.remove(key);
       }
     });
+    loadRecords(resetPage: true);
   }
 
   void _toggleFilter(String key, String val) {
@@ -6561,7 +6647,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                       if (isWideScreen)
                         IconButton(
                           icon: const Icon(Icons.close, size: 20),
-                          onPressed: () => Navigator.pop(ctx),
+                          onPressed: () {
+                    Navigator.pop(ctx);
+                    loadRecords(resetPage: true);
+                  },
                         ),
                     ],
                   ),
@@ -6840,7 +6929,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: () => Navigator.pop(ctx),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    loadRecords(resetPage: true);
+                  },
                   child: Text(
                     'Apply & Show ${records.length} Results',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
@@ -6921,7 +7013,56 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   @override
   void initState() {
     super.initState();
-    loadRecords();
+    _initPaginationConfig();
+    _verticalScrollController.addListener(_handleScroll);
+    loadRecords(resetPage: true);
+  }
+
+  void _initPaginationConfig() {
+    Map<String, dynamic>? resMeta;
+    final schema = widget.api.cachedSchema;
+    if (schema != null && schema['resources'] is List) {
+      for (final r in schema['resources']) {
+        if (r is Map<String, dynamic> && r['slug'] == widget.slug) {
+          resMeta = r;
+          break;
+        }
+      }
+    }
+    _currentListMode = widget.configuredListMode ??
+        resMeta?['list_mode']?.toString() ??
+        schema?['default_list_mode']?.toString() ??
+        'pagination';
+
+    _perPage = widget.configuredPerPage ??
+        (resMeta?['per_page'] as num?)?.toInt() ??
+        (schema?['default_per_page'] as num?)?.toInt() ??
+        15;
+
+    if (widget.configuredPerPageOptions != null && widget.configuredPerPageOptions!.isNotEmpty) {
+      _perPageOptions = List<int>.from(widget.configuredPerPageOptions!);
+    } else if (resMeta?['per_page_options'] is List) {
+      _perPageOptions = (resMeta!['per_page_options'] as List).map((e) => (e as num).toInt()).toList();
+    } else if (schema?['default_per_page_options'] is List) {
+      _perPageOptions = (schema!['default_per_page_options'] as List).map((e) => (e as num).toInt()).toList();
+    } else {
+      _perPageOptions = [10, 15, 25, 50, 100];
+    }
+    if (!_perPageOptions.contains(_perPage)) {
+      _perPageOptions.insert(0, _perPage);
+      _perPageOptions.sort();
+    }
+  }
+
+  void _handleScroll() {
+    if (_currentListMode != 'infinite_scroll') return;
+    if (_isLoadingMore || isLoading || !_hasMoreRecords) return;
+    if (!_verticalScrollController.hasClients) return;
+    final max = _verticalScrollController.position.maxScrollExtent;
+    final cur = _verticalScrollController.position.pixels;
+    if (max - cur <= 250) {
+      _loadMoreRecords();
+    }
   }
 
   @override
@@ -6929,24 +7070,128 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.slug != widget.slug) {
       _activeTabKey = null;
-      loadRecords();
+      _initPaginationConfig();
+      loadRecords(resetPage: true);
     }
   }
 
-  Future<void> loadRecords() async {
+  Future<void> loadRecords({bool resetPage = true}) async {
+    if (resetPage) {
+      _currentPage = 1;
+      _hasMoreRecords = true;
+    }
     setState(() {
       isLoading = true;
       selectedRecordIds.clear();
     });
     try {
-      final res = await widget.api.fetchResourceRecords(widget.slug, search: search);
+      final filterParams = <String, dynamic>{};
+      for (final entry in activeFilters.entries) {
+        if (entry.value.isNotEmpty) {
+          filterParams[entry.key] = entry.value.toList();
+        }
+      }
+      if (_activeTabKey != null && _activeTabKey != 'all') {
+        final tabs = _getTabs();
+        final curTab = tabs.firstWhere((t) => t['key'] == _activeTabKey, orElse: () => <String, dynamic>{});
+        final q = curTab['query'] as Map<String, dynamic>?;
+        if (q != null) {
+          q.forEach((k, v) => filterParams[k] = v);
+        }
+      }
+      final res = await widget.api.fetchResourceRecords(
+        widget.slug,
+        page: _currentPage,
+        perPage: _perPage,
+        search: search,
+        filters: filterParams,
+        sort: _sortColumn,
+        direction: _sortAscending ? 'asc' : 'desc',
+      );
+      final data = (res['data'] as List<dynamic>?) ?? [];
+      final total = (res['total'] as num?)?.toInt() ?? data.length;
       setState(() {
-        allRecords = (res['data'] as List<dynamic>?) ?? [];
+        allRecords = List<dynamic>.from(data);
+        _totalRecords = total;
+        _hasMoreRecords = allRecords.length < _totalRecords;
         isLoading = false;
       });
     } catch (e) {
       setState(() => isLoading = false);
     }
+  }
+
+  Future<void> _loadMoreRecords() async {
+    if (_isLoadingMore || isLoading || !_hasMoreRecords) return;
+    setState(() {
+      _isLoadingMore = true;
+    });
+    try {
+      final nextPage = _currentPage + 1;
+      final filterParams = <String, dynamic>{};
+      for (final entry in activeFilters.entries) {
+        if (entry.value.isNotEmpty) {
+          filterParams[entry.key] = entry.value.toList();
+        }
+      }
+      if (_activeTabKey != null && _activeTabKey != 'all') {
+        final tabs = _getTabs();
+        final curTab = tabs.firstWhere((t) => t['key'] == _activeTabKey, orElse: () => <String, dynamic>{});
+        final q = curTab['query'] as Map<String, dynamic>?;
+        if (q != null) {
+          q.forEach((k, v) => filterParams[k] = v);
+        }
+      }
+      final res = await widget.api.fetchResourceRecords(
+        widget.slug,
+        page: nextPage,
+        perPage: _perPage,
+        search: search,
+        filters: filterParams,
+        sort: _sortColumn,
+        direction: _sortAscending ? 'asc' : 'desc',
+      );
+      final data = (res['data'] as List<dynamic>?) ?? [];
+      final total = (res['total'] as num?)?.toInt() ?? _totalRecords;
+      setState(() {
+        _currentPage = nextPage;
+        allRecords.addAll(data);
+        _totalRecords = total;
+        _hasMoreRecords = data.isNotEmpty && allRecords.length < _totalRecords;
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      setState(() => _isLoadingMore = false);
+    }
+  }
+
+  int get _totalPages {
+    if (_totalRecords <= 0 || _perPage <= 0) return 1;
+    return (_totalRecords + _perPage - 1) ~/ _perPage;
+  }
+
+  void _goToPage(int page) {
+    if (page < 1 || page > _totalPages || page == _currentPage) return;
+    setState(() {
+      _currentPage = page;
+    });
+    loadRecords(resetPage: false);
+  }
+
+  void _changePerPage(int newPerPage) {
+    if (newPerPage == _perPage) return;
+    setState(() {
+      _perPage = newPerPage;
+    });
+    loadRecords(resetPage: true);
+  }
+
+  void _toggleListMode(String mode) {
+    if (_currentListMode == mode) return;
+    setState(() {
+      _currentListMode = mode;
+    });
+    loadRecords(resetPage: true);
   }
 
   Widget _buildFieldItem(String label, String value, {IconData? icon, Color? valueColor}) {
@@ -7506,6 +7751,341 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     );
   }
 
+  Widget _buildPaginationBar(BuildContext context, {bool isMobile = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final int startRecord = _totalRecords == 0 ? 0 : (_currentPage - 1) * _perPage + 1;
+    int endRecord = _currentPage * _perPage;
+    if (endRecord > _totalRecords) endRecord = _totalRecords;
+
+    final infoText = '${AppLocale.t(widget.currentLocale, "showing_records")} $startRecord ${AppLocale.t(widget.currentLocale, "to")} $endRecord ${AppLocale.t(widget.currentLocale, "of")} $_totalRecords';
+
+    if (isMobile) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          border: Border(
+            top: BorderSide(
+              color: isDark ? Colors.white12 : Colors.black12,
+            ),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    infoText,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                _buildModeToggleButton(isDark),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildPerPageDropdown(isDark),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.chevron_left_rounded),
+                      iconSize: 22,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      tooltip: AppLocale.t(widget.currentLocale, 'previous_page'),
+                      onPressed: _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '$_currentPage / $_totalPages',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right_rounded),
+                      iconSize: 22,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      tooltip: AppLocale.t(widget.currentLocale, 'next_page'),
+                      onPressed: _currentPage < _totalPages ? () => _goToPage(_currentPage + 1) : null,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        border: Border(
+          top: BorderSide(
+            color: isDark ? Colors.white12 : Colors.black12,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                infoText,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(width: 16),
+              _buildPerPageDropdown(isDark),
+              const SizedBox(width: 16),
+              _buildModeToggleButton(isDark),
+            ],
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.first_page_rounded),
+                iconSize: 20,
+                tooltip: AppLocale.t(widget.currentLocale, 'first_page'),
+                onPressed: _currentPage > 1 ? () => _goToPage(1) : null,
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_left_rounded),
+                iconSize: 20,
+                tooltip: AppLocale.t(widget.currentLocale, 'previous_page'),
+                onPressed: _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
+              ),
+              const SizedBox(width: 4),
+              ..._buildPageNumberButtons(isDark),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.chevron_right_rounded),
+                iconSize: 20,
+                tooltip: AppLocale.t(widget.currentLocale, 'next_page'),
+                onPressed: _currentPage < _totalPages ? () => _goToPage(_currentPage + 1) : null,
+              ),
+              IconButton(
+                icon: const Icon(Icons.last_page_rounded),
+                iconSize: 20,
+                tooltip: AppLocale.t(widget.currentLocale, 'last_page'),
+                onPressed: _currentPage < _totalPages ? () => _goToPage(_totalPages) : null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildPageNumberButtons(bool isDark) {
+    final buttons = <Widget>[];
+    final total = _totalPages;
+    if (total <= 1) return buttons;
+
+    final pagesToShow = <int>{};
+    pagesToShow.add(1);
+    pagesToShow.add(total);
+    for (int p = _currentPage - 2; p <= _currentPage + 2; p++) {
+      if (p >= 1 && p <= total) pagesToShow.add(p);
+    }
+    final sortedPages = pagesToShow.toList()..sort();
+
+    int lastP = 0;
+    for (final p in sortedPages) {
+      if (lastP != 0 && p - lastP > 1) {
+        buttons.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text('...', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+          ),
+        );
+      }
+      final isCurrent = p == _currentPage;
+      buttons.add(
+        InkWell(
+          onTap: isCurrent ? null : () => _goToPage(p),
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isCurrent ? Colors.amber : (isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05)),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: isCurrent ? Colors.amber : Colors.transparent,
+              ),
+            ),
+            child: Text(
+              '$p',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                color: isCurrent
+                    ? Colors.black87
+                    : (isDark ? Colors.grey.shade300 : Colors.grey.shade800),
+              ),
+            ),
+          ),
+        ),
+      );
+      lastP = p;
+    }
+    return buttons;
+  }
+
+  Widget _buildPerPageDropdown(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: _perPageOptions.contains(_perPage) ? _perPage : _perPageOptions.first,
+          isDense: true,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white : Colors.black87,
+          ),
+          dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          items: _perPageOptions.map((opt) {
+            return DropdownMenuItem<int>(
+              value: opt,
+              child: Text('$opt / ${AppLocale.t(widget.currentLocale, "page")}'),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null) _changePerPage(val);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeToggleButton(bool isDark) {
+    final isPagination = _currentListMode == 'pagination';
+    return Tooltip(
+      message: isPagination
+          ? '${AppLocale.t(widget.currentLocale, "pagination")} (Click for ${AppLocale.t(widget.currentLocale, "infinite_scroll")})'
+          : '${AppLocale.t(widget.currentLocale, "infinite_scroll")} (Click for ${AppLocale.t(widget.currentLocale, "pagination")})',
+      child: InkWell(
+        onTap: () => _toggleListMode(isPagination ? 'infinite_scroll' : 'pagination'),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isPagination ? Icons.auto_stories_outlined : Icons.all_inclusive_rounded,
+                size: 15,
+                color: Colors.amber,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                isPagination
+                    ? AppLocale.t(widget.currentLocale, 'pagination')
+                    : AppLocale.t(widget.currentLocale, 'infinite_scroll'),
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfiniteScrollFooter(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        border: Border(
+          top: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${AppLocale.t(widget.currentLocale, "showing_records")} ${allRecords.length} ${AppLocale.t(widget.currentLocale, "of")} $_totalRecords',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(width: 14),
+              _buildModeToggleButton(isDark),
+            ],
+          ),
+          if (_isLoadingMore)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                const SizedBox(width: 8),
+                Text(
+                  AppLocale.t(widget.currentLocale, 'loading_more'),
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+              ],
+            )
+          else if (_hasMoreRecords)
+            OutlinedButton.icon(
+              icon: const Icon(Icons.expand_more_rounded, size: 16),
+              label: Text(AppLocale.t(widget.currentLocale, 'load_more'), style: const TextStyle(fontSize: 12)),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              ),
+              onPressed: _loadMoreRecords,
+            )
+          else
+            Text(
+              '${AppLocale.t(widget.currentLocale, "all_records_loaded")} ($_totalRecords)',
+              style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: Colors.grey.shade500),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRecordTable(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -7542,7 +8122,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
               ),
               color: theme.colorScheme.surface,
               clipBehavior: Clip.antiAlias,
-              child: LayoutBuilder(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LayoutBuilder(
                 builder: (ctx, constraints) {
                   final tableWidth = constraints.maxWidth > totalColsWidth ? constraints.maxWidth : totalColsWidth;
                   return Scrollbar(
@@ -7857,7 +8440,13 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                   );
                 },
               ),
-            ),
+              if (_currentListMode == 'pagination')
+                _buildPaginationBar(context, isMobile: false)
+              else
+                _buildInfiniteScrollFooter(isDark),
+            ],
+          ),
+        ),
           ),
         ),
       ),
@@ -8138,6 +8727,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                   icon: const Icon(Icons.clear, size: 16),
                                   onPressed: () {
                                     setState(() => search = '');
+                                    loadRecords(resetPage: true);
                                   },
                                 )
                               : null,
@@ -8147,6 +8737,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         ),
                         onChanged: (v) {
                           setState(() => search = v);
+                        },
+                        onSubmitted: (v) {
+                          setState(() => search = v);
+                          loadRecords(resetPage: true);
                         },
                       ),
                     ),
@@ -8284,6 +8878,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                           icon: const Icon(Icons.clear, size: 18),
                                           onPressed: () {
                                             setState(() => search = '');
+                                            loadRecords(resetPage: true);
                                           },
                                         )
                                       : null,
@@ -8292,6 +8887,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                 ),
                                 onChanged: (v) {
                                   setState(() => search = v);
+                                },
+                                onSubmitted: (v) {
+                                  setState(() => search = v);
+                                  loadRecords(resetPage: true);
                                 },
                               ),
                             ),
@@ -8447,6 +9046,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                     _activeTabKey = tab['key'];
                                     selectedRecordIds.clear();
                                   });
+                                  loadRecords(resetPage: true);
                                 }
                               },
                               selectedColor: Colors.amber.withValues(alpha: 0.25),
@@ -8598,19 +9198,32 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                               ),
                             ),
                           Expanded(
-                            child: ListView.builder(
-                              padding: const EdgeInsets.all(12),
-                              itemCount: records.length,
-                              itemBuilder: (context, i) {
-                                final item = records[i];
-                                final id = _getRecordId(item, i);
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: _buildRecordCard(context, item, id),
-                                );
+                            child: NotificationListener<ScrollNotification>(
+                              onNotification: (notif) {
+                                if (_currentListMode == 'infinite_scroll' &&
+                                    notif.metrics.pixels >= notif.metrics.maxScrollExtent - 200) {
+                                  _loadMoreRecords();
+                                }
+                                return false;
                               },
+                              child: ListView.builder(
+                                padding: const EdgeInsets.all(12),
+                                itemCount: records.length,
+                                itemBuilder: (context, i) {
+                                  final item = records[i];
+                                  final id = _getRecordId(item, i);
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: _buildRecordCard(context, item, id),
+                                  );
+                                },
+                              ),
                             ),
                           ),
+                          if (_currentListMode == 'pagination')
+                            _buildPaginationBar(context, isMobile: true)
+                          else
+                            _buildInfiniteScrollFooter(isDark),
                         ],
                       );
                     },

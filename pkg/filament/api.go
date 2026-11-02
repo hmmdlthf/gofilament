@@ -182,6 +182,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			Filters         []tables.FilterDTO  `json:"filters,omitempty"`
 			Tabs            []*ResourceTab      `json:"tabs,omitempty"`
 			TabsEnabled     bool                `json:"tabs_enabled"`
+			ListMode        string              `json:"list_mode"`
+			PerPage         int                 `json:"per_page"`
+			PerPageOptions  []int               `json:"per_page_options,omitempty"`
 		}
 
 		var resourceDTOs []resourceDTO
@@ -209,6 +212,19 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 						{Key: "inactive", Label: "Inactive", Query: map[string]string{"status": "inactive"}},
 					}
 				}
+				listMode := string(res.GetListMode())
+				if listMode == "" {
+					listMode = string(p.GetDefaultListMode())
+				}
+				perPage := res.GetPerPage()
+				if perPage <= 0 {
+					perPage = p.GetDefaultPerPage()
+				}
+				perPageOpts := res.GetPerPageOptions()
+				if len(perPageOpts) == 0 {
+					perPageOpts = p.GetDefaultPerPageOptions()
+				}
+
 				resourceDTOs = append(resourceDTOs, resourceDTO{
 					Slug:            res.Slug(),
 					ModelName:       item.Label,
@@ -219,6 +235,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					Filters:         filtersDTO,
 					Tabs:            tabsDTO,
 					TabsEnabled:     tabsEnabled,
+					ListMode:        listMode,
+					PerPage:         perPage,
+					PerPageOptions:  perPageOpts,
 				})
 			}
 		}
@@ -296,6 +315,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"session_duration":      int(p.GetSessionDuration().Seconds()),
 			"remember_me_duration":  int(p.GetRememberMeDuration().Seconds()),
 			"tabs_enabled":          p.IsTabsEnabled(),
+			"default_list_mode":     string(p.GetDefaultListMode()),
+			"default_per_page":      p.GetDefaultPerPage(),
+			"default_per_page_options": p.GetDefaultPerPageOptions(),
 		}
 
 		return c.JSON(http.StatusOK, schema)
@@ -635,7 +657,20 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		sortCol := ctx.Query("sort")
 		sortDir := ctx.DefaultQuery("direction", "asc")
 		page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-		perPage, _ := strconv.Atoi(ctx.DefaultQuery("perPage", "15"))
+		perPageStr := ctx.Query("perPage")
+		if perPageStr == "" {
+			perPageStr = ctx.Query("per_page")
+		}
+		defaultPerPage := res.GetPerPage()
+		if defaultPerPage <= 0 {
+			defaultPerPage = 15
+		}
+		perPage := defaultPerPage
+		if perPageStr != "" {
+			if pVal, err := strconv.Atoi(perPageStr); err == nil && pVal > 0 {
+				perPage = pVal
+			}
+		}
 
 		filters := make(map[string]string)
 		for k, v := range ctx.Request.URL.Query() {

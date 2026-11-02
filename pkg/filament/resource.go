@@ -144,6 +144,11 @@ type BaseResource[T any] struct {
 	// Resource Tabs (Status / Filter Segments)
 	tabs        []*ResourceTab
 	tabsEnabled *bool
+
+	// Pagination & Infinite Scroll
+	listMode       ListMode
+	perPage        int
+	perPageOptions []int
 }
 
 // ResourceTab represents a status or query filter tab displayed above the resource records list.
@@ -203,7 +208,74 @@ func NewResource[T any](slug string) *BaseResource[T] {
 		navIcon:            "heroicon-rectangle-stack",
 		relations:          make([]RelationManager, 0),
 		globallySearchable: true,
+		listMode:           ListModePagination,
+		perPage:            15,
+		perPageOptions:     []int{10, 15, 25, 50, 100},
 	}
+}
+
+// Pagination configures the resource for paginated list display with an optional default items-per-page.
+func (r *BaseResource[T]) Pagination(perPage ...int) *BaseResource[T] {
+	r.listMode = ListModePagination
+	if len(perPage) > 0 && perPage[0] > 0 {
+		r.perPage = perPage[0]
+	}
+	return r
+}
+
+// InfiniteScroll configures the resource for infinite scrolling list display with an optional chunk size.
+func (r *BaseResource[T]) InfiniteScroll(perPage ...int) *BaseResource[T] {
+	r.listMode = ListModeInfiniteScroll
+	if len(perPage) > 0 && perPage[0] > 0 {
+		r.perPage = perPage[0]
+	}
+	return r
+}
+
+// ListMode sets the list loading mode explicitly (ListModePagination or ListModeInfiniteScroll).
+func (r *BaseResource[T]) ListMode(mode ListMode) *BaseResource[T] {
+	r.listMode = mode
+	return r
+}
+
+// PerPage sets the default records per page / chunk size.
+func (r *BaseResource[T]) PerPage(n int) *BaseResource[T] {
+	if n > 0 {
+		r.perPage = n
+	}
+	return r
+}
+
+// PerPageOptions sets the selectable items-per-page choices.
+func (r *BaseResource[T]) PerPageOptions(opts ...int) *BaseResource[T] {
+	if len(opts) > 0 {
+		r.perPageOptions = opts
+	}
+	return r
+}
+
+// GetListMode returns the configured ListMode.
+func (r *BaseResource[T]) GetListMode() ListMode {
+	if r.listMode == "" {
+		return ListModePagination
+	}
+	return r.listMode
+}
+
+// GetPerPage returns the configured items per page.
+func (r *BaseResource[T]) GetPerPage() int {
+	if r.perPage <= 0 {
+		return 15
+	}
+	return r.perPage
+}
+
+// GetPerPageOptions returns the configured per page choices.
+func (r *BaseResource[T]) GetPerPageOptions() []int {
+	if len(r.perPageOptions) == 0 {
+		return []int{10, 15, 25, 50, 100}
+	}
+	return r.perPageOptions
 }
 
 func (r *BaseResource[T]) GloballySearchable(enabled ...bool) *BaseResource[T] {

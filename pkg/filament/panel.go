@@ -91,6 +91,9 @@ type Panel struct {
 	sessionDuration     time.Duration
 	rememberMeDuration  time.Duration
 	tabsEnabled         bool
+	defaultListMode     ListMode
+	defaultPerPage      int
+	defaultPerPageOptions []int
 	authGuard           any
 	authValidator       AuthValidatorFunc
 	tokenValidator      TokenValidatorFunc
@@ -146,6 +149,9 @@ func NewPanel(id string) *Panel {
 		sessionDuration:          24 * time.Hour,
 		rememberMeDuration:       30 * 24 * time.Hour,
 		tabsEnabled:              false,
+		defaultListMode:          ListModePagination,
+		defaultPerPage:           15,
+		defaultPerPageOptions:    []int{10, 15, 25, 50, 100},
 	}
 
 	// Default user menu
@@ -153,6 +159,52 @@ func NewPanel(id string) *Panel {
 	p.userMenu.Item("Sign Out", p.path+"/logout").Icon("heroicon-arrow-left-on-rectangle").Color("danger")
 
 	return p
+}
+
+// DefaultListMode sets the default list mode across all resources in the panel.
+func (p *Panel) DefaultListMode(mode ListMode) *Panel {
+	p.defaultListMode = mode
+	return p
+}
+
+// DefaultPerPage sets the panel-wide default records per page.
+func (p *Panel) DefaultPerPage(n int) *Panel {
+	if n > 0 {
+		p.defaultPerPage = n
+	}
+	return p
+}
+
+// DefaultPerPageOptions sets the panel-wide selectable items per page choices.
+func (p *Panel) DefaultPerPageOptions(opts ...int) *Panel {
+	if len(opts) > 0 {
+		p.defaultPerPageOptions = opts
+	}
+	return p
+}
+
+// GetDefaultListMode returns the panel-wide default ListMode.
+func (p *Panel) GetDefaultListMode() ListMode {
+	if p.defaultListMode == "" {
+		return ListModePagination
+	}
+	return p.defaultListMode
+}
+
+// GetDefaultPerPage returns the panel-wide default items per page.
+func (p *Panel) GetDefaultPerPage() int {
+	if p.defaultPerPage <= 0 {
+		return 15
+	}
+	return p.defaultPerPage
+}
+
+// GetDefaultPerPageOptions returns the panel-wide default items per page choices.
+func (p *Panel) GetDefaultPerPageOptions() []int {
+	if len(p.defaultPerPageOptions) == 0 {
+		return []int{10, 15, 25, 50, 100}
+	}
+	return p.defaultPerPageOptions
 }
 
 // ID returns the unique identifier of the panel.

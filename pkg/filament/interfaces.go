@@ -30,6 +30,14 @@ type GlobalSearchGroup struct {
 	Items []GlobalSearchResult `json:"items"`
 }
 
+// ListMode defines how records are loaded in a data table / list (pagination or infinite scrolling).
+type ListMode string
+
+const (
+	ListModePagination     ListMode = "pagination"
+	ListModeInfiniteScroll ListMode = "infinite_scroll"
+)
+
 // ResourceInterface defines the contract for all CRUD resources.
 type ResourceInterface interface {
 	ID() string
@@ -43,6 +51,9 @@ type ResourceInterface interface {
 	GetRelations() []RelationManager
 	GetTabs() []*ResourceTab
 	IsTabsEnabled() bool
+	GetListMode() ListMode
+	GetPerPage() int
+	GetPerPageOptions() []int
 }
 
 // PageInterface defines the contract for custom panel pages.
