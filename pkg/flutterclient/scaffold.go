@@ -182,6 +182,28 @@ class FilamentApiClient {
     return null;
   }
 
+  Future<void> saveLocale(String locale, bool isRTL) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefix = _storageKeyPrefix;
+      await prefs.setString('${prefix}_locale', locale);
+      await prefs.setBool('${prefix}_is_rtl', isRTL);
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> restoreLocale() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final prefix = _storageKeyPrefix;
+      final loc = prefs.getString('${prefix}_locale');
+      if (loc != null && loc.isNotEmpty) {
+        final rtl = prefs.getBool('${prefix}_is_rtl') ?? (loc.toLowerCase() == 'ar');
+        return {'locale': loc, 'is_rtl': rtl};
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<Map<String, dynamic>> login(String username, String password, {bool remember = false}) async {
     final res = await http.post(
       Uri.parse('$baseUrl/api/login'),
@@ -4238,7 +4260,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 const SizedBox(width: 10),
               ],
               Text(
-                brandName + ' Control Center',
+                '${AppLocale.t(widget.currentLocale, brandName)} ${AppLocale.t(widget.currentLocale, "control_center")}',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(width: 12),
@@ -4423,7 +4445,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     _buildPartialNavItem(
                       icon: _iconForResourceSlug((r['slug'] ?? '').toString()),
                       selectedIcon: _iconForResourceSlug((r['slug'] ?? '').toString(), isSelected: true),
-                      label: (r['model_name'] ?? r['slug'] ?? 'Resource').toString(),
+                      label: AppLocale.t(widget.currentLocale, r['model_name'] ?? r['slug'] ?? 'Resource'),
                       isSelected: _currentIndex == 1 && selectedResourceSlug == r['slug'],
                       onTap: () => setState(() {
                         _currentIndex = 1;
@@ -4464,7 +4486,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     _buildHorizontalNavItem(
                       icon: _iconForResourceSlug((r['slug'] ?? '').toString()),
                       selectedIcon: _iconForResourceSlug((r['slug'] ?? '').toString(), isSelected: true),
-                      label: (r['model_name'] ?? r['slug'] ?? 'Resource').toString(),
+                      label: AppLocale.t(widget.currentLocale, r['model_name'] ?? r['slug'] ?? 'Resource'),
                       isSelected: _currentIndex == 1 && selectedResourceSlug == r['slug'],
                       onTap: () => setState(() {
                         _currentIndex = 1;
@@ -4475,7 +4497,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                       child: Text(
-                        'PREFERENCES',
+                        AppLocale.t(widget.currentLocale, 'preferences').toUpperCase(),
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
@@ -4774,9 +4796,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   Widget _buildBannerWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
-    final title = (w['title'] ?? 'Welcome').toString();
-    final subtitle = (w['subtitle'] ?? '').toString();
-    final actionLabel = (w['action_label'] ?? '').toString();
+    final title = AppLocale.t(widget.currentLocale, w['title'] ?? 'Welcome');
+    final subtitle = AppLocale.t(widget.currentLocale, w['subtitle'] ?? '');
+    final actionLabel = AppLocale.t(widget.currentLocale, w['action_label'] ?? '');
     final actionUrl = (w['action_url'] ?? '').toString();
     final icon = _resolveHeroicon((w['icon'] ?? 'heroicon-sparkles').toString());
 
@@ -4854,9 +4876,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
 
     final statWidgets = stats.map((sRaw) {
       final s = Map<String, dynamic>.from(sRaw as Map);
-      final label = (s['label'] ?? '').toString();
+      final label = AppLocale.t(widget.currentLocale, s['label'] ?? '');
       final value = (s['value'] ?? '').toString();
-      final desc = (s['description'] ?? '').toString();
+      final desc = AppLocale.t(widget.currentLocale, s['description'] ?? '');
       final colorRole = (s['color'] ?? 'primary').toString();
       final color = _resolveColorRole(colorRole);
       final chartRaw = (s['chart'] as List<dynamic>?) ?? [];
@@ -5044,7 +5066,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   Widget _buildBreakdownWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
-    final heading = (w['heading'] ?? 'Distribution Breakdown').toString();
+    final heading = AppLocale.t(widget.currentLocale, w['heading'] ?? 'Distribution Breakdown');
     final description = (w['description'] ?? '').toString();
     final items = (w['items'] as List<dynamic>?) ?? [];
 
@@ -5096,7 +5118,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
           // Category items
           ...items.map((itRaw) {
             final it = Map<String, dynamic>.from(itRaw as Map);
-            final label = (it['label'] ?? '').toString();
+            final label = AppLocale.t(widget.currentLocale, it['label'] ?? '');
             final formatted = (it['formatted'] ?? '').toString();
             final pct = (it['percentage'] as num?)?.toDouble() ?? 0.0;
             final colorStr = (it['color'] ?? '#10b981').toString();
@@ -5172,7 +5194,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
           const SizedBox(height: 16),
           ...items.map((itRaw) {
             final it = Map<String, dynamic>.from(itRaw as Map);
-            final label = (it['label'] ?? '').toString();
+            final label = AppLocale.t(widget.currentLocale, it['label'] ?? '');
             final pct = (it['percentage'] as num?)?.toDouble() ?? 0.0;
             final colorRole = (it['color'] ?? 'emerald').toString();
             final color = _resolveColorRole(colorRole);
@@ -5220,7 +5242,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   Widget _buildQuickActionsWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
-    final heading = (w['heading'] ?? 'Quick Actions').toString();
+    final heading = AppLocale.t(widget.currentLocale, w['heading'] ?? 'Quick Actions');
     final description = (w['description'] ?? '').toString();
     final actions = (w['actions'] as List<dynamic>?) ?? [];
 
@@ -5434,7 +5456,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   Widget _buildTableWidget(Map<String, dynamic> w, bool isMobile, bool isDark) {
-    final heading = (w['heading'] ?? 'Latest Records').toString();
+    final heading = AppLocale.t(widget.currentLocale, w['heading'] ?? 'Latest Records');
     final columns = (w['columns'] as List<dynamic>?) ?? [];
     final rows = (w['rows'] as List<dynamic>?) ?? [];
 
@@ -5585,7 +5607,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
               final name = (r['model_name'] ?? slug) as String;
               final isSel = slug == selectedResourceSlug;
               return ChoiceChip(
-                label: Text(name),
+                label: Text(AppLocale.t(widget.currentLocale, name)),
                 selected: isSel,
                 onSelected: (val) {
                   if (val) setState(() => selectedResourceSlug = slug);
@@ -5596,7 +5618,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
         ),
         Expanded(
           child: selectedResourceSlug == null
-              ? const Center(child: Text('Select a resource above'))
+              ? Center(child: Text(AppLocale.t(widget.currentLocale, 'select_resource_above')))
               : Builder(builder: (_) {
                   final cur = resources.firstWhere((r) => r['slug'] == selectedResourceSlug, orElse: () => null);
                   final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
@@ -5616,7 +5638,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
       selectedResourceSlug = resources.first['slug'];
     }
     if (selectedResourceSlug == null) {
-      return const Center(child: Text('Select a resource from the menu'));
+      return Center(child: Text(AppLocale.t(widget.currentLocale, 'select_resource_above')));
     }
     final cur = resources.firstWhere((r) => r['slug'] == selectedResourceSlug, orElse: () => null);
     final rels = cur != null ? (cur['relations'] as List<dynamic>?) : null;
@@ -5755,7 +5777,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
               child: _buildAccountHubCard(
                 icon: Icons.credit_card_outlined,
                 iconColor: Colors.tealAccent,
-                title: 'Billing',
+                title: AppLocale.t(widget.currentLocale, 'billing'),
                 subtitle: 'Fleet License',
                 onTap: () => Navigator.push(
                   context,
@@ -5768,7 +5790,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
               child: _buildAccountHubCard(
                 icon: Icons.fingerprint_rounded,
                 iconColor: const Color(0xFF10B981),
-                title: 'Biometrics',
+                title: AppLocale.t(widget.currentLocale, 'biometrics'),
                 subtitle: 'Security Test',
                 onTap: () => Navigator.push(
                   context,
@@ -5780,7 +5802,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
         ),
 
         const SizedBox(height: 24),
-        const Text('Quick Preferences', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.6, color: Colors.grey)),
+        Text(AppLocale.t(widget.currentLocale, 'quick_preferences'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.6, color: Colors.grey)),
         const SizedBox(height: 8),
 
         Card(
@@ -5788,7 +5810,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
             children: [
               ListTile(
                 leading: const Icon(Icons.switch_access_shortcut),
-                title: const Text('Account Navigation Entrypoint'),
+                title: Text(AppLocale.t(widget.currentLocale, 'account_navigation_entrypoint')),
                 subtitle: Text(
                   _accountNavPlacement == 'header'
                       ? 'Top Header Avatar Circle (opens floating sheet)'
@@ -5798,9 +5820,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 trailing: DropdownButton<String>(
                   value: _accountNavPlacement,
                   underline: const SizedBox(),
-                  items: const [
-                    DropdownMenuItem(value: 'header', child: Text('Header Circle')),
-                    DropdownMenuItem(value: 'bottom_bar', child: Text('Bottom Bar Tab')),
+                  items: [
+                    DropdownMenuItem(value: 'header', child: Text(AppLocale.t(widget.currentLocale, 'header_circle'))),
+                    DropdownMenuItem(value: 'bottom_bar', child: Text(AppLocale.t(widget.currentLocale, 'bottom_bar_tab'))),
                   ],
                   onChanged: (val) {
                     if (val != null) setAccountNavPlacement(val);
@@ -6818,7 +6840,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                       children: [
                         Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
                         const SizedBox(width: 6),
-                        Text(status.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor)),
+                        Text(AppLocale.t(widget.currentLocale, status).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor)),
                       ],
                     ),
                   )
@@ -7000,8 +7022,8 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                 children: [
                   Icon(Icons.hub_outlined, size: 14, color: Colors.amber.shade400),
                   const SizedBox(width: 6),
-                  const Text(
-                    'SUB-ENTITIES & RELATIONS',
+                  Text(
+                    AppLocale.t(widget.currentLocale, 'sub_entities_relations').toUpperCase(),
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -7022,7 +7044,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                   return ActionChip(
                     avatar: Icon(_iconForRelation(iconName), size: 15, color: Colors.amber.shade400),
                     label: Text(
-                      relTitle,
+                      AppLocale.t(widget.currentLocale, relTitle),
                       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                     backgroundColor: Colors.amber.withValues(alpha: 0.1),
@@ -7371,25 +7393,25 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                         child: Padding(
                                           padding: const EdgeInsets.only(right: 12),
                                           child: Text(
-                                            _titleCase(col.replaceAll('_', ' ')).toUpperCase(),
+                                            AppLocale.t(widget.currentLocale, col).toUpperCase(),
                                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                       ),
-                                    const SizedBox(
+                                    SizedBox(
                                       width: 130,
                                       child: Text(
-                                        'STATUS',
+                                        AppLocale.t(widget.currentLocale, 'status').toUpperCase(),
                                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                       ),
                                     ),
-                                    const SizedBox(
+                                    SizedBox(
                                       width: 140,
                                       child: Align(
                                         alignment: Alignment.centerRight,
                                         child: Text(
-                                          'ACTIONS',
+                                          AppLocale.t(widget.currentLocale, 'actions').toUpperCase(),
                                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                         ),
                                       ),
@@ -7552,7 +7574,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                               Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
                               const SizedBox(width: 6),
                               Text(
-                                status.toUpperCase(),
+                                AppLocale.t(widget.currentLocale, status).toUpperCase(),
                                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
                               ),
                             ],
@@ -8535,8 +8557,8 @@ class AccountModalSheet extends StatelessWidget {
                       tooltip: 'Close',
                       onPressed: () => Navigator.pop(context),
                     ),
-                    const Text(
-                      'Account & Profile',
+                    Text(
+                      AppLocale.t(currentLocale, 'account_profile'),
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(width: 48),
@@ -8660,7 +8682,7 @@ class AccountModalSheet extends StatelessWidget {
                     _buildModalNavItem(
                       icon: Icons.shopping_bag_outlined,
                       iconColor: Colors.blueAccent,
-                      title: 'Orders & Procurement',
+                      title: AppLocale.t(currentLocale, 'orders_procurement'),
                       subtitle: 'Hardware orders, delivery tracking, invoices',
                       onTap: () {
                         Navigator.pop(context);
@@ -8674,7 +8696,7 @@ class AccountModalSheet extends StatelessWidget {
                     _buildModalNavItem(
                       icon: Icons.credit_card_outlined,
                       iconColor: Colors.tealAccent,
-                      title: 'Billing & Fleet License',
+                      title: AppLocale.t(currentLocale, 'billing_license'),
                       subtitle: 'Enterprise subscription, cards, tax receipts',
                       onTap: () {
                         Navigator.pop(context);
@@ -8688,7 +8710,7 @@ class AccountModalSheet extends StatelessWidget {
                     _buildModalNavItem(
                       icon: Icons.fingerprint_rounded,
                       iconColor: const Color(0xFF10B981),
-                      title: 'Security & Biometrics',
+                      title: AppLocale.t(currentLocale, 'security_biometrics'),
                       subtitle: 'Sensor test diagnostic, 2FA, active sessions',
                       onTap: () {
                         Navigator.pop(context);
