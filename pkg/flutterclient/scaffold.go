@@ -3875,6 +3875,26 @@ class AdminShellPage extends StatefulWidget {
   State<AdminShellPage> createState() => _AdminShellPageState();
 }
 
+IconData getResourceIcon(String slug, {bool isSelected = false}) {
+  final s = slug.toLowerCase();
+  if (s.contains('partner') && s.contains('branch')) return isSelected ? Icons.storefront_rounded : Icons.storefront_outlined;
+  if (s.contains('customer') && s.contains('branch')) return isSelected ? Icons.store_rounded : Icons.store_outlined;
+  if (s.contains('partner') || s.contains('station')) return isSelected ? Icons.local_gas_station_rounded : Icons.local_gas_station_outlined;
+  if (s.contains('customer') || s.contains('fleet')) return isSelected ? Icons.business_rounded : Icons.business_outlined;
+  if (s.contains('vehicle')) return isSelected ? Icons.local_shipping_rounded : Icons.local_shipping_outlined;
+  if (s.contains('driver')) return isSelected ? Icons.badge_rounded : Icons.badge_outlined;
+  if (s.contains('nfc') || s.contains('chip')) return isSelected ? Icons.nfc_rounded : Icons.nfc_outlined;
+  if (s.contains('device')) return isSelected ? Icons.router_rounded : Icons.router_outlined;
+  if (s.contains('telemetry')) return isSelected ? Icons.sensors_rounded : Icons.sensors_outlined;
+  if (s.contains('ticket')) return isSelected ? Icons.confirmation_number_rounded : Icons.confirmation_number_outlined;
+  if (s.contains('firmware')) return isSelected ? Icons.system_update_rounded : Icons.system_update_alt_outlined;
+  if (s.contains('admin') || s.contains('user')) return isSelected ? Icons.people_alt_rounded : Icons.people_outline_rounded;
+  if (s.contains('transaction') || s.contains('wallet')) return isSelected ? Icons.account_balance_wallet_rounded : Icons.account_balance_wallet_outlined;
+  if (s.contains('order')) return isSelected ? Icons.shopping_bag_rounded : Icons.shopping_bag_outlined;
+  if (s.contains('report') || s.contains('analytics')) return isSelected ? Icons.bar_chart_rounded : Icons.bar_chart_outlined;
+  return isSelected ? Icons.table_chart_rounded : Icons.table_chart_outlined;
+}
+
 class _AdminShellPageState extends State<AdminShellPage> {
   FilamentApiClient get api => widget.api;
   Map<String, dynamic>? schema;
@@ -3884,6 +3904,8 @@ class _AdminShellPageState extends State<AdminShellPage> {
   String _accountNavPlacement = 'header'; // 'header' (top circle button) or 'bottom_bar' (bottom menu tab)
   SidebarCollapseMode _sidebarMode = SidebarCollapseMode.expanded;
   String? errorMessage;
+  bool _showBottomNavLabels = false;
+  List<String> _bottomNavItems = ['dashboard', 'entities', 'account'];
 
   @override
   void initState() {
@@ -3891,22 +3913,144 @@ class _AdminShellPageState extends State<AdminShellPage> {
     loadSchema();
   }
 
-  IconData _iconForResourceSlug(String slug, {bool isSelected = false}) {
-    final s = slug.toLowerCase();
-    if (s.contains('partner') && s.contains('branch')) return isSelected ? Icons.storefront : Icons.storefront_outlined;
-    if (s.contains('customer') && s.contains('branch')) return isSelected ? Icons.store : Icons.store_outlined;
-    if (s.contains('partner')) return isSelected ? Icons.local_gas_station : Icons.local_gas_station_outlined;
-    if (s.contains('customer')) return isSelected ? Icons.business : Icons.business_outlined;
-    if (s.contains('vehicle')) return isSelected ? Icons.local_shipping : Icons.local_shipping_outlined;
-    if (s.contains('driver')) return isSelected ? Icons.badge : Icons.badge_outlined;
-    if (s.contains('nfc') || s.contains('chip')) return isSelected ? Icons.nfc : Icons.nfc_outlined;
-    if (s.contains('device')) return isSelected ? Icons.router : Icons.router_outlined;
-    if (s.contains('telemetry')) return isSelected ? Icons.sensors : Icons.sensors_outlined;
-    if (s.contains('ticket')) return isSelected ? Icons.confirmation_number : Icons.confirmation_number_outlined;
-    if (s.contains('firmware')) return isSelected ? Icons.system_update_alt : Icons.system_update_alt_outlined;
-    if (s.contains('admin') || s.contains('user')) return isSelected ? Icons.people : Icons.people_outline;
-    if (s.contains('transaction') || s.contains('wallet')) return isSelected ? Icons.account_balance_wallet : Icons.account_balance_wallet_outlined;
-    return isSelected ? Icons.table_chart : Icons.table_chart_outlined;
+  IconData _iconForResourceSlug(String slug, {bool isSelected = false}) =>
+      getResourceIcon(slug, isSelected: isSelected);
+
+  Future<void> _loadBottomNavPreferences(Map<String, dynamic> s) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey('bottom_nav_show_labels')) {
+        _showBottomNavLabels = prefs.getBool('bottom_nav_show_labels') ?? false;
+      } else if (s['bottom_nav_show_labels'] != null) {
+        _showBottomNavLabels = s['bottom_nav_show_labels'] as bool? ?? false;
+      } else {
+        _showBottomNavLabels = false;
+      }
+
+      final saved = prefs.getStringList('bottom_nav_custom_items');
+      if (saved != null && saved.isNotEmpty && saved.length <= 4) {
+        _bottomNavItems = saved;
+      } else if (s['default_bottom_nav_items'] is List && (s['default_bottom_nav_items'] as List).isNotEmpty) {
+        _bottomNavItems = (s['default_bottom_nav_items'] as List).map((e) => e.toString()).take(4).toList();
+      } else {
+        final resources = s['resources'] as List<dynamic>? ?? [];
+        final List<String> def = ['dashboard'];
+        for (final r in resources) {
+          if (def.length >= 3) break;
+          final slug = (r as Map<String, dynamic>)['slug']?.toString();
+          if (slug != null && !def.contains(slug)) {
+            def.add(slug);
+          }
+        }
+        final isHeader = _accountNavPlacement == 'header';
+        if (!isHeader && !def.contains('account')) {
+          def.add('account');
+        } else if (!def.contains('entities')) {
+          def.add('entities');
+        }
+        _bottomNavItems = def.take(4).toList();
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error loading bottom nav preferences: $e');
+    }
+  }
+
+  Future<void> _saveBottomNavPreferences({bool? showLabels, List<String>? items}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (showLabels != null) {
+        _showBottomNavLabels = showLabels;
+        await prefs.setBool('bottom_nav_show_labels', showLabels);
+      }
+      if (items != null) {
+        _bottomNavItems = items;
+        await prefs.setStringList('bottom_nav_custom_items', items);
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint('Error saving bottom nav preferences: $e');
+    }
+  }
+
+  List<NavigationDestination> _buildBottomNavDestinations(List<dynamic> resources) {
+    return _bottomNavItems.map((key) {
+      IconData icon;
+      IconData selectedIcon;
+      String label;
+
+      if (key == 'dashboard') {
+        icon = Icons.dashboard_outlined;
+        selectedIcon = Icons.dashboard_rounded;
+        label = AppLocale.t(widget.currentLocale, 'dashboard');
+      } else if (key == 'entities') {
+        icon = Icons.layers_outlined;
+        selectedIcon = Icons.layers_rounded;
+        label = AppLocale.t(widget.currentLocale, 'entities');
+      } else if (key == 'account' || key == 'settings') {
+        icon = Icons.account_circle_outlined;
+        selectedIcon = Icons.account_circle_rounded;
+        label = AppLocale.t(widget.currentLocale, 'account');
+      } else {
+        final res = resources.cast<Map<String, dynamic>?>().firstWhere(
+              (r) => r?['slug'] == key,
+              orElse: () => null,
+            );
+        final modelName = res?['model_name']?.toString() ?? key;
+        icon = getResourceIcon(key, isSelected: false);
+        selectedIcon = getResourceIcon(key, isSelected: true);
+        label = AppLocale.t(widget.currentLocale, modelName);
+      }
+
+      return NavigationDestination(
+        icon: Icon(icon, size: 21),
+        selectedIcon: Icon(selectedIcon, size: 21),
+        label: label,
+      );
+    }).toList();
+  }
+
+  int _getActiveBottomNavIndex() {
+    if (_bottomNavItems.isEmpty) return 0;
+    if (_currentIndex == 0) {
+      final idx = _bottomNavItems.indexOf('dashboard');
+      return idx >= 0 ? idx : 0;
+    }
+    if (_currentIndex == 1) {
+      if (selectedResourceSlug != null) {
+        final idx = _bottomNavItems.indexOf(selectedResourceSlug!);
+        if (idx >= 0) return idx;
+      }
+      final entIdx = _bottomNavItems.indexOf('entities');
+      if (entIdx >= 0) return entIdx;
+      return 0;
+    }
+    if (_currentIndex == 2) {
+      final accIdx = _bottomNavItems.indexOf('account');
+      if (accIdx >= 0) return accIdx;
+      final setIdx = _bottomNavItems.indexOf('settings');
+      if (setIdx >= 0) return setIdx;
+      return 0;
+    }
+    return 0;
+  }
+
+  void _onBottomNavTapped(int idx, List<dynamic> resources) {
+    if (idx < 0 || idx >= _bottomNavItems.length) return;
+    HapticFeedback.selectionClick();
+    final itemKey = _bottomNavItems[idx];
+    if (itemKey == 'dashboard') {
+      setState(() => _currentIndex = 0);
+    } else if (itemKey == 'entities') {
+      setState(() => _currentIndex = 1);
+    } else if (itemKey == 'account' || itemKey == 'settings') {
+      setState(() => _currentIndex = 2);
+    } else {
+      setState(() {
+        _currentIndex = 1;
+        selectedResourceSlug = itemKey;
+      });
+    }
   }
 
   void setAccountNavPlacement(String placement) {
@@ -3944,6 +4088,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
         }
         isLoading = false;
       });
+      _loadBottomNavPreferences(s);
     } catch (e) {
       debugPrint('Failed to load schema from ${api.baseUrl}: $e');
       if (e.toString().contains('401') || e.toString().contains('Unauthorized')) {
@@ -4203,6 +4348,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     onLocaleChanged: widget.onLocaleChanged,
                     onOpenLanguagePicker: () => showLanguageDialog(context),
                     onSignOut: widget.onSignOut,
+                    showBottomNavLabels: _showBottomNavLabels,
+                    onShowBottomNavLabelsChanged: (val) => _saveBottomNavPreferences(showLabels: val),
+                    bottomNavItems: _bottomNavItems,
+                    onBottomNavItemsChanged: (items) => _saveBottomNavPreferences(items: items),
+                    availableResources: resources,
                   ),
                 ),
               ),
@@ -4220,48 +4370,26 @@ class _AdminShellPageState extends State<AdminShellPage> {
         bottomNavigationBar: NavigationBarTheme(
           data: NavigationBarThemeData(
             height: 52,
-            iconTheme: WidgetStateProperty.all(const IconThemeData(size: 19)),
-            labelTextStyle: WidgetStateProperty.all(
-              const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
-            ),
+            indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            labelTextStyle: WidgetStateProperty.resolveWith((states) {
+              final isSel = states.contains(WidgetState.selected);
+              return TextStyle(
+                fontSize: 10,
+                fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+              );
+            }),
+            iconTheme: WidgetStateProperty.resolveWith((states) {
+              return const IconThemeData(size: 21);
+            }),
           ),
           child: NavigationBar(
-            selectedIndex: activeMobileIndex,
-            onDestinationSelected: (idx) {
-              HapticFeedback.selectionClick();
-              setState(() => _currentIndex = idx);
-            },
-            // Bottom menu account tab is shown ONLY when placement is 'bottom_bar' (never both!)
-            destinations: isHeaderPlacement
-                ? [
-                    NavigationDestination(
-                      icon: const Icon(Icons.dashboard_outlined),
-                      selectedIcon: const Icon(Icons.dashboard),
-                      label: AppLocale.t(widget.currentLocale, 'dashboard'),
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Icons.layers_outlined),
-                      selectedIcon: const Icon(Icons.layers),
-                      label: AppLocale.t(widget.currentLocale, 'entities'),
-                    ),
-                  ]
-                : [
-                    NavigationDestination(
-                      icon: const Icon(Icons.dashboard_outlined),
-                      selectedIcon: const Icon(Icons.dashboard),
-                      label: AppLocale.t(widget.currentLocale, 'dashboard'),
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Icons.layers_outlined),
-                      selectedIcon: const Icon(Icons.layers),
-                      label: AppLocale.t(widget.currentLocale, 'entities'),
-                    ),
-                    NavigationDestination(
-                      icon: const Icon(Icons.account_circle_outlined),
-                      selectedIcon: const Icon(Icons.account_circle),
-                      label: AppLocale.t(widget.currentLocale, 'account'),
-                    ),
-                  ],
+            height: 52,
+            labelBehavior: _showBottomNavLabels
+                ? NavigationDestinationLabelBehavior.alwaysShow
+                : NavigationDestinationLabelBehavior.alwaysHide,
+            selectedIndex: _getActiveBottomNavIndex(),
+            onDestinationSelected: (idx) => _onBottomNavTapped(idx, resources),
+            destinations: _buildBottomNavDestinations(resources),
           ),
         ),
       ),
@@ -4319,6 +4447,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   Widget _buildDesktopHeaderBar(bool isHeaderPlacement, String brandName) {
+    final resources = (schema?['resources'] as List<dynamic>?) ?? [];
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -4408,6 +4537,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
                     onLocaleChanged: widget.onLocaleChanged,
                     onOpenLanguagePicker: () => showLanguageDialog(context),
                     onSignOut: widget.onSignOut,
+                    showBottomNavLabels: _showBottomNavLabels,
+                    onShowBottomNavLabelsChanged: (val) => _saveBottomNavPreferences(showLabels: val),
+                    bottomNavItems: _bottomNavItems,
+                    onBottomNavItemsChanged: (items) => _saveBottomNavPreferences(items: items),
+                    availableResources: resources,
                   ),
                 ),
               ],
@@ -5774,6 +5908,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
   }
 
   Widget _buildMobileAccountHub() {
+    final resources = (schema?['resources'] as List<dynamic>?) ?? [];
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -5876,6 +6011,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
                       currentLocale: widget.currentLocale,
                       isRTL: widget.isRTL,
                       onLocaleChanged: widget.onLocaleChanged,
+                      showBottomNavLabels: _showBottomNavLabels,
+                      onShowBottomNavLabelsChanged: (val) => _saveBottomNavPreferences(showLabels: val),
+                      bottomNavItems: _bottomNavItems,
+                      onBottomNavItemsChanged: (items) => _saveBottomNavPreferences(items: items),
+                      availableResources: resources,
                     ),
                   ),
                 ),
@@ -10326,6 +10466,11 @@ class AccountModalSheet extends StatelessWidget {
   final void Function(String locale, bool isRTL)? onLocaleChanged;
   final VoidCallback? onOpenLanguagePicker;
   final VoidCallback? onSignOut;
+  final bool showBottomNavLabels;
+  final ValueChanged<bool>? onShowBottomNavLabelsChanged;
+  final List<String> bottomNavItems;
+  final ValueChanged<List<String>>? onBottomNavItemsChanged;
+  final List<dynamic> availableResources;
 
   const AccountModalSheet({
     super.key,
@@ -10340,6 +10485,11 @@ class AccountModalSheet extends StatelessWidget {
     this.onLocaleChanged,
     this.onOpenLanguagePicker,
     this.onSignOut,
+    this.showBottomNavLabels = false,
+    this.onShowBottomNavLabelsChanged,
+    this.bottomNavItems = const ['dashboard', 'entities', 'account'],
+    this.onBottomNavItemsChanged,
+    this.availableResources = const [],
   });
 
   static Future<void> show({
@@ -10355,6 +10505,11 @@ class AccountModalSheet extends StatelessWidget {
     void Function(String locale, bool isRTL)? onLocaleChanged,
     VoidCallback? onOpenLanguagePicker,
     VoidCallback? onSignOut,
+    bool showBottomNavLabels = false,
+    ValueChanged<bool>? onShowBottomNavLabelsChanged,
+    List<String> bottomNavItems = const ['dashboard', 'entities', 'account'],
+    ValueChanged<List<String>>? onBottomNavItemsChanged,
+    List<dynamic> availableResources = const [],
   }) {
     return showModalBottomSheet(
       context: context,
@@ -10372,6 +10527,11 @@ class AccountModalSheet extends StatelessWidget {
         onLocaleChanged: onLocaleChanged,
         onOpenLanguagePicker: onOpenLanguagePicker,
         onSignOut: onSignOut,
+        showBottomNavLabels: showBottomNavLabels,
+        onShowBottomNavLabelsChanged: onShowBottomNavLabelsChanged,
+        bottomNavItems: bottomNavItems,
+        onBottomNavItemsChanged: onBottomNavItemsChanged,
+        availableResources: availableResources,
       ),
     );
   }
@@ -10539,6 +10699,11 @@ class AccountModalSheet extends StatelessWidget {
                               currentLocale: currentLocale,
                               isRTL: isRTL,
                               onLocaleChanged: onLocaleChanged,
+                              showBottomNavLabels: showBottomNavLabels,
+                              onShowBottomNavLabelsChanged: onShowBottomNavLabelsChanged,
+                              bottomNavItems: bottomNavItems,
+                              onBottomNavItemsChanged: onBottomNavItemsChanged,
+                              availableResources: availableResources,
                             ),
                           ),
                         );
@@ -10684,6 +10849,11 @@ class SettingsScreen extends StatefulWidget {
   final String currentLocale;
   final bool isRTL;
   final void Function(String locale, bool isRTL)? onLocaleChanged;
+  final bool showBottomNavLabels;
+  final ValueChanged<bool>? onShowBottomNavLabelsChanged;
+  final List<String> bottomNavItems;
+  final ValueChanged<List<String>>? onBottomNavItemsChanged;
+  final List<dynamic> availableResources;
 
   const SettingsScreen({
     super.key,
@@ -10695,6 +10865,11 @@ class SettingsScreen extends StatefulWidget {
     this.currentLocale = 'en',
     this.isRTL = false,
     this.onLocaleChanged,
+    this.showBottomNavLabels = false,
+    this.onShowBottomNavLabelsChanged,
+    this.bottomNavItems = const ['dashboard', 'entities', 'account'],
+    this.onBottomNavItemsChanged,
+    this.availableResources = const [],
   });
 
   @override
@@ -10703,6 +10878,8 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late String _selectedPlacement = widget.accountNavPlacement;
+  late bool _showBottomNavLabels = widget.showBottomNavLabels;
+  late List<String> _bottomNavItems = List<String>.from(widget.bottomNavItems);
   bool isBiometricEnabled = true;
   String autoLockTimeout = '5 Minutes';
   bool requireBioForCriticalActions = true;
@@ -10857,6 +11034,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Widget _buildDestinationChip({required String key, required String label, required IconData icon}) {
+    final isSelected = _bottomNavItems.contains(key);
+    return FilterChip(
+      selected: isSelected,
+      avatar: Icon(
+        icon,
+        size: 16,
+        color: isSelected ? Colors.black : Theme.of(context).colorScheme.onSurface,
+      ),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? Colors.black : Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+      selectedColor: Colors.amber,
+      checkmarkColor: Colors.black,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      onSelected: (selected) {
+        if (selected) {
+          if (_bottomNavItems.length >= 4) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Maximum 4 destinations allowed in the bottom bar.'),
+                behavior: SnackBarBehavior.floating,
+                duration: Duration(seconds: 2),
+              ),
+            );
+            return;
+          }
+          setState(() {
+            _bottomNavItems.add(key);
+          });
+          widget.onBottomNavItemsChanged?.call(List<String>.from(_bottomNavItems));
+        } else {
+          if (_bottomNavItems.length <= 1) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('At least 1 destination must remain in the bottom bar.'),
+                behavior: SnackBarBehavior.floating,
+                duration: Duration(seconds: 2),
+              ),
+            );
+            return;
+          }
+          setState(() {
+            _bottomNavItems.remove(key);
+          });
+          widget.onBottomNavItemsChanged?.call(List<String>.from(_bottomNavItems));
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -10947,6 +11180,222 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ? '• Circular avatar in header opens floating account sheet.\n• Bottom bar contains only core tabs (Dashboard & Entities).'
                         : '• Dedicated Account tab in bottom bar opens full account hub page.\n• Header circle avatar button is hidden (strictly one entrypoint).',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Mobile Bottom Navigation Customization Section
+          Text(
+            AppLocale.t(widget.currentLocale, 'customize_bottom_nav').toUpperCase(),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.8, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.subtitles_rounded, color: Colors.amber, size: 20),
+                    ),
+                    title: Text(
+                      AppLocale.t(widget.currentLocale, 'show_nav_labels'),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      _showBottomNavLabels ? 'Labels visible under icons' : 'Icons only (labels hidden)',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    value: _showBottomNavLabels,
+                    onChanged: (v) {
+                      setState(() => _showBottomNavLabels = v);
+                      widget.onShowBottomNavLabelsChanged?.call(v);
+                    },
+                  ),
+                  const Divider(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'PINNED DESTINATIONS',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _bottomNavItems.length == 4
+                              ? Colors.green.withValues(alpha: 0.15)
+                              : Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _bottomNavItems.length == 4
+                                ? Colors.green.withValues(alpha: 0.4)
+                                : Colors.amber.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          '${_bottomNavItems.length} / 4 Selected',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: _bottomNavItems.length == 4 ? Colors.greenAccent : Colors.amber,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    AppLocale.t(widget.currentLocale, 'bottom_nav_items_desc'),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  // Visual Preview of the 4 slots
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: List.generate(4, (index) {
+                        if (index < _bottomNavItems.length) {
+                          final itemKey = _bottomNavItems[index];
+                          IconData icon;
+                          String label;
+                          if (itemKey == 'dashboard') {
+                            icon = Icons.dashboard_rounded;
+                            label = AppLocale.t(widget.currentLocale, 'dashboard');
+                          } else if (itemKey == 'entities') {
+                            icon = Icons.layers_rounded;
+                            label = AppLocale.t(widget.currentLocale, 'entities');
+                          } else if (itemKey == 'account') {
+                            icon = Icons.account_circle_rounded;
+                            label = AppLocale.t(widget.currentLocale, 'account');
+                          } else {
+                            final res = widget.availableResources.cast<Map<String, dynamic>?>().firstWhere(
+                              (r) => r?['slug'] == itemKey,
+                              orElse: () => null,
+                            );
+                            icon = getResourceIcon(itemKey, isSelected: true);
+                            label = AppLocale.t(widget.currentLocale, res?['model_name']?.toString() ?? itemKey);
+                          }
+                          return Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.withValues(alpha: 0.15),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(icon, color: Colors.amber, size: 18),
+                                    ),
+                                    Positioned(
+                                      top: -3,
+                                      right: -3,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(3),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.amber,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Text(
+                                          '${index + 1}',
+                                          style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.black),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          );
+                        } else {
+                          return Expanded(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.05),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                                  ),
+                                  child: Icon(Icons.add_rounded, color: Colors.grey.withValues(alpha: 0.5), size: 18),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Empty',
+                                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                      }),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Available Destinations (Tap to toggle):',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildDestinationChip(
+                        key: 'dashboard',
+                        label: AppLocale.t(widget.currentLocale, 'dashboard'),
+                        icon: Icons.dashboard_rounded,
+                      ),
+                      for (final r in widget.availableResources)
+                        if (r is Map<String, dynamic> && r['slug'] != null)
+                          _buildDestinationChip(
+                            key: r['slug'].toString(),
+                            label: AppLocale.t(widget.currentLocale, r['model_name']?.toString() ?? r['slug'].toString()),
+                            icon: getResourceIcon(r['slug'].toString(), isSelected: true),
+                          ),
+                      _buildDestinationChip(
+                        key: 'entities',
+                        label: AppLocale.t(widget.currentLocale, 'entities'),
+                        icon: Icons.layers_rounded,
+                      ),
+                      _buildDestinationChip(
+                        key: 'account',
+                        label: AppLocale.t(widget.currentLocale, 'account'),
+                        icon: Icons.account_circle_rounded,
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -95,6 +95,8 @@ type Panel struct {
 	defaultPerPage                    int
 	defaultPerPageOptions             []int
 	defaultMobilePaginationPosition   PaginationPosition
+	mobileBottomNavShowLabels         *bool
+	mobileBottomNavItems              []string
 	authGuard           any
 	authValidator       AuthValidatorFunc
 	tokenValidator      TokenValidatorFunc
@@ -221,6 +223,46 @@ func (p *Panel) GetDefaultMobilePaginationPosition() PaginationPosition {
 		return PaginationPositionTop
 	}
 	return p.defaultMobilePaginationPosition
+}
+
+// MobileBottomNavShowLabels sets whether text labels are visible in the mobile bottom navigation bar (default: false / icon-only).
+func (p *Panel) MobileBottomNavShowLabels(show bool) *Panel {
+	p.mobileBottomNavShowLabels = &show
+	return p
+}
+
+// SetShowBottomNavLabels is an alias for MobileBottomNavShowLabels.
+func (p *Panel) SetShowBottomNavLabels(show bool) *Panel {
+	return p.MobileBottomNavShowLabels(show)
+}
+
+// IsBottomNavLabelsVisible returns whether mobile bottom navigation labels are visible (default: false).
+func (p *Panel) IsBottomNavLabelsVisible() bool {
+	if p.mobileBottomNavShowLabels != nil {
+		return *p.mobileBottomNavShowLabels
+	}
+	return false
+}
+
+// MobileBottomNavItems sets the default 4 pinned destinations (slugs or special keys: "dashboard", "entities", "account") in the mobile bottom bar.
+func (p *Panel) MobileBottomNavItems(items ...string) *Panel {
+	if len(items) > 0 {
+		p.mobileBottomNavItems = items
+	}
+	return p
+}
+
+// SetDefaultBottomNavItems is an alias for MobileBottomNavItems.
+func (p *Panel) SetDefaultBottomNavItems(items ...string) *Panel {
+	return p.MobileBottomNavItems(items...)
+}
+
+// GetMobileBottomNavItems returns the configured default mobile bottom navigation items.
+func (p *Panel) GetMobileBottomNavItems() []string {
+	if len(p.mobileBottomNavItems) == 0 {
+		return nil
+	}
+	return p.mobileBottomNavItems
 }
 
 // ID returns the unique identifier of the panel.

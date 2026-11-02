@@ -329,6 +329,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"default_per_page":                   p.GetDefaultPerPage(),
 			"default_per_page_options":           p.GetDefaultPerPageOptions(),
 			"default_mobile_pagination_position": string(p.GetDefaultMobilePaginationPosition()),
+			"bottom_nav_show_labels":             p.IsBottomNavLabelsVisible(),
+			"default_bottom_nav_items":           p.GetMobileBottomNavItems(),
 		}
 
 		return c.JSON(http.StatusOK, schema)

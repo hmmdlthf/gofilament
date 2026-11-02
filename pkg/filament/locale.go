@@ -119,6 +119,9 @@ var RequiredTranslationKeys = []string{
 	"pagination_position",
 	"position_top",
 	"position_fab",
+	"customize_bottom_nav",
+	"show_nav_labels",
+	"bottom_nav_items_desc",
 
 	// Dashboard & Metrics
 	"operational_dashboard",
@@ -264,6 +267,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"pagination_position":    "Pagination Position",
 		"position_top":           "Top Bar",
 		"position_fab":           "Floating Button",
+		"customize_bottom_nav":   "Customize Bottom Navigation",
+		"show_nav_labels":        "Show Navigation Labels",
+		"bottom_nav_items_desc":  "Select up to 4 destinations to pin in the bottom bar",
 	},
 	"ar": {
 		"dashboard":              "لوحة التحكم",
@@ -383,6 +389,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"pagination_position":    "موضع الترقيم",
 		"position_top":           "الشريط العلوي",
 		"position_fab":           "زر عائم",
+		"customize_bottom_nav":   "تخصيص شريط التنقل السفلي",
+		"show_nav_labels":        "إظهار تسميات التنقل",
+		"bottom_nav_items_desc":  "حدد ما يصل إلى 4 عناصر لتثبيتها في الشريط السفلي",
 	},
 	"es": {
 		"dashboard":              "Panel de Control",
@@ -502,6 +511,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"pagination_position":    "Posición de paginación",
 		"position_top":           "Barra superior",
 		"position_fab":           "Botón flotante",
+		"customize_bottom_nav":   "Personalizar navegación inferior",
+		"show_nav_labels":        "Mostrar etiquetas de navegación",
+		"bottom_nav_items_desc":  "Seleccione hasta 4 destinos para fijar en la barra inferior",
 	},
 	"de": {
 		"dashboard":              "Übersicht",
@@ -621,6 +633,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"pagination_position":    "Seitennummerierungsposition",
 		"position_top":           "Obere Leiste",
 		"position_fab":           "Schwebender Button",
+		"customize_bottom_nav":   "Untere Navigation anpassen",
+		"show_nav_labels":        "Navigationsbeschriftungen anzeigen",
+		"bottom_nav_items_desc":  "Wählen Sie bis zu 4 Ziele für die untere Leiste",
 	},
 	"fr": {
 		"dashboard":              "Tableau de bord",
@@ -740,6 +755,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"pagination_position":    "Position de la pagination",
 		"position_top":           "Barre supérieure",
 		"position_fab":           "Bouton flottant",
+		"customize_bottom_nav":   "Personnaliser la navigation inférieure",
+		"show_nav_labels":        "Afficher les étiquettes de navigation",
+		"bottom_nav_items_desc":  "Sélectionnez jusqu'à 4 destinations à épingler en bas",
 	},
 }
 
