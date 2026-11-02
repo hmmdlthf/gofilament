@@ -7751,6 +7751,528 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     );
   }
 
+  Widget _buildFloatingActionButtons(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool showPaginationBtn = _totalRecords > 0 || records.isNotEmpty;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (showPaginationBtn) ...[
+          FloatingActionButton.small(
+            heroTag: 'pagination_fab_${widget.slug}',
+            tooltip: AppLocale.t(widget.currentLocale, 'pagination'),
+            backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+            foregroundColor: Colors.amber.shade700,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+              side: BorderSide(color: Colors.amber.shade400, width: 1.5),
+            ),
+            elevation: 4,
+            onPressed: () => _showPaginationModal(context),
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Icon(
+                  _currentListMode == 'pagination' ? Icons.auto_stories_outlined : Icons.all_inclusive_rounded,
+                  size: 20,
+                  color: Colors.amber.shade700,
+                ),
+                if (_currentListMode == 'pagination' && _totalPages > 1)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade700,
+                        shape: BoxShape.circle,
+                      ),
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      child: Text(
+                        '$_currentPage',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        FloatingActionButton(
+          heroTag: 'create_fab_${widget.slug}',
+          onPressed: () => showCreateSheet(context),
+          child: const Icon(Icons.add),
+        ),
+      ],
+    );
+  }
+
+  void _showPaginationModal(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWideScreen = screenWidth >= 720;
+
+    Widget buildContent(BuildContext ctx, StateSetter setModalState) {
+      final int startRecord = _totalRecords == 0 ? 0 : (_currentPage - 1) * _perPage + 1;
+      int endRecord = _currentPage * _perPage;
+      if (endRecord > _totalRecords) endRecord = _totalRecords;
+      final infoText = '${AppLocale.t(widget.currentLocale, "showing_records")} $startRecord ${AppLocale.t(widget.currentLocale, "to")} $endRecord ${AppLocale.t(widget.currentLocale, "of")} $_totalRecords';
+
+      return Container(
+        constraints: BoxConstraints(
+          maxWidth: isWideScreen ? 500 : double.infinity,
+          maxHeight: MediaQuery.of(context).size.height * 0.82,
+        ),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          borderRadius: isWideScreen
+              ? BorderRadius.circular(16)
+              : const BorderRadius.vertical(top: Radius.circular(20)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          _currentListMode == 'pagination' ? Icons.auto_stories_rounded : Icons.all_inclusive_rounded,
+                          color: Colors.amber,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            AppLocale.t(widget.currentLocale, 'pagination'),
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            infoText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // Mode Switcher Card
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                    ),
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'DISPLAY MODE',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ChoiceChip(
+                                  label: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.auto_stories_outlined, size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(AppLocale.t(widget.currentLocale, 'pagination'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                  selected: _currentListMode == 'pagination',
+                                  onSelected: (selected) {
+                                    if (selected && _currentListMode != 'pagination') {
+                                      _toggleListMode('pagination');
+                                      setModalState(() {});
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ChoiceChip(
+                                  label: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.all_inclusive_rounded, size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(AppLocale.t(widget.currentLocale, 'infinite_scroll'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                  selected: _currentListMode == 'infinite_scroll',
+                                  onSelected: (selected) {
+                                    if (selected && _currentListMode != 'infinite_scroll') {
+                                      _toggleListMode('infinite_scroll');
+                                      setModalState(() {});
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Pagination controls
+                  if (_currentListMode == 'pagination') ...[
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                      ),
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'PAGE NAVIGATION',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                IconButton.filledTonal(
+                                  icon: const Icon(Icons.first_page_rounded, size: 20),
+                                  tooltip: AppLocale.t(widget.currentLocale, 'first_page'),
+                                  onPressed: _currentPage > 1
+                                      ? () {
+                                          _goToPage(1);
+                                          setModalState(() {});
+                                        }
+                                      : null,
+                                ),
+                                IconButton.filledTonal(
+                                  icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                                  tooltip: AppLocale.t(widget.currentLocale, 'previous_page'),
+                                  onPressed: _currentPage > 1
+                                      ? () {
+                                          _goToPage(_currentPage - 1);
+                                          setModalState(() {});
+                                        }
+                                      : null,
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(
+                                    '$_currentPage / $_totalPages',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.amber),
+                                  ),
+                                ),
+                                IconButton.filledTonal(
+                                  icon: const Icon(Icons.chevron_right_rounded, size: 20),
+                                  tooltip: AppLocale.t(widget.currentLocale, 'next_page'),
+                                  onPressed: _currentPage < _totalPages
+                                      ? () {
+                                          _goToPage(_currentPage + 1);
+                                          setModalState(() {});
+                                        }
+                                      : null,
+                                ),
+                                IconButton.filledTonal(
+                                  icon: const Icon(Icons.last_page_rounded, size: 20),
+                                  tooltip: AppLocale.t(widget.currentLocale, 'last_page'),
+                                  onPressed: _currentPage < _totalPages
+                                      ? () {
+                                          _goToPage(_totalPages);
+                                          setModalState(() {});
+                                        }
+                                      : null,
+                                ),
+                              ],
+                            ),
+                            if (_totalPages > 1) ...[
+                              const SizedBox(height: 14),
+                              Text(
+                                'JUMP TO PAGE',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: List.generate(_totalPages, (idx) {
+                                  final pageNum = idx + 1;
+                                  final isCurrent = pageNum == _currentPage;
+                                  return ChoiceChip(
+                                    visualDensity: VisualDensity.compact,
+                                    label: Text('$pageNum', style: TextStyle(fontSize: 11, fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal)),
+                                    selected: isCurrent,
+                                    onSelected: (selected) {
+                                      if (selected && pageNum != _currentPage) {
+                                        _goToPage(pageNum);
+                                        setModalState(() {});
+                                      }
+                                    },
+                                  );
+                                }),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  // Infinite Scroll controls
+                  if (_currentListMode == 'infinite_scroll') ...[
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                      ),
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'INFINITE SCROLL STATUS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '${records.length} of $_totalRecords records loaded',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark ? Colors.grey.shade300 : Colors.grey.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (records.length < _totalRecords)
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                icon: _isLoadingMore
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Icon(Icons.arrow_downward_rounded, size: 18),
+                                label: Text(
+                                  _isLoadingMore
+                                      ? AppLocale.t(widget.currentLocale, 'loading_more')
+                                      : '${AppLocale.t(widget.currentLocale, 'load_more')} (+$_perPage)',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                onPressed: _isLoadingMore
+                                    ? null
+                                    : () async {
+                                        await _loadMoreRecords();
+                                        setModalState(() {});
+                                      },
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.check_circle_outline_rounded, color: Colors.green, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      AppLocale.t(widget.currentLocale, 'all_records_loaded'),
+                                      style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w600, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  // Rows per page / Batch size
+                  Card(
+                    margin: EdgeInsets.zero,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                    ),
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _currentListMode == 'pagination' ? 'ROWS PER PAGE' : 'RECORDS PER BATCH',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _perPageOptions.map((opt) {
+                              final isSelected = opt == _perPage;
+                              return ChoiceChip(
+                                label: Text('$opt', style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                                selected: isSelected,
+                                onSelected: (selected) {
+                                  if (selected && opt != _perPage) {
+                                    _changePerPage(opt);
+                                    setModalState(() {});
+                                  }
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Footer
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Done', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isWideScreen) {
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => StatefulBuilder(
+          builder: (ctx, setModalState) => Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: buildContent(ctx, setModalState),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (bottomSheetCtx) => StatefulBuilder(
+          builder: (ctx, setModalState) => buildContent(ctx, setModalState),
+        ),
+      );
+    }
+  }
+
   Widget _buildPaginationBar(BuildContext context, {bool isMobile = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final int startRecord = _totalRecords == 0 ? 0 : (_currentPage - 1) * _perPage + 1;
@@ -9220,19 +9742,12 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                               ),
                             ),
                           ),
-                          if (_currentListMode == 'pagination')
-                            _buildPaginationBar(context, isMobile: true)
-                          else
-                            _buildInfiniteScrollFooter(isDark),
                         ],
                       );
                     },
                   ),
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => showCreateSheet(context),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _buildFloatingActionButtons(context),
     );
   }
 
