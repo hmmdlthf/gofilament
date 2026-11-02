@@ -591,6 +591,10 @@ class AppLocale {
       'search_records': 'Search records...',
       'filters': 'Filters',
       'filter': 'Filter',
+      'sort_by': 'Sort By',
+      'clear_sort': 'Clear Sort',
+      'ascending': 'Ascending (A-Z / 0-9)',
+      'descending': 'Descending (Z-A / 9-0)',
       'clear_all': 'Clear All',
       'select_all': 'Select All',
       'deselect_all': 'Deselect All',
@@ -699,6 +703,10 @@ class AppLocale {
       'search_records': 'البحث في السجلات...',
       'filters': 'عوامل التصفية',
       'filter': 'تصفية',
+      'sort_by': 'الترتيب حسب',
+      'clear_sort': 'إلغاء الترتيب',
+      'ascending': 'تصاعدي (أ-ي / 0-9)',
+      'descending': 'تنازلي (ي-أ / 9-0)',
       'clear_all': 'مسح الكل',
       'select_all': 'تحديد الكل',
       'deselect_all': 'إلغاء تحديد الكل',
@@ -6034,6 +6042,9 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   final Map<String, Set<String>> activeFilters = {};
   String? _activeTabKey;
   bool _showRelations = true;
+  String? _sortColumn;
+  bool _sortAscending = true;
+  final Map<String, double> _customColumnWidths = {};
   final ScrollController _horizontalScrollController = ScrollController();
   final ScrollController _verticalScrollController = ScrollController();
   Set<String> selectedRecordIds = <String>{};
@@ -6163,12 +6174,34 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     for (final s in activeFilters.values) {
       count += s.length;
     }
+    if (_sortColumn != null) {
+      count += 1;
+    }
     return count;
   }
 
   void _clearAllFilters() {
     setState(() {
       activeFilters.clear();
+      _sortColumn = null;
+      _sortAscending = true;
+      selectedRecordIds.clear();
+    });
+  }
+
+  void _toggleSort(String col) {
+    setState(() {
+      if (_sortColumn == col) {
+        if (_sortAscending) {
+          _sortAscending = false;
+        } else {
+          _sortColumn = null;
+          _sortAscending = true;
+        }
+      } else {
+        _sortColumn = col;
+        _sortAscending = true;
+      }
     });
   }
 
@@ -6413,13 +6446,52 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     }).toList();
   }
 
-  List<dynamic> get records => filteredRecords;
+  List<dynamic> get records {
+    final list = List<dynamic>.from(filteredRecords);
+    if (_sortColumn != null) {
+      list.sort((a, b) {
+        dynamic valA;
+        dynamic valB;
+        if (_sortColumn == 'id') {
+          valA = _getRecordId(a);
+          valB = _getRecordId(b);
+        } else {
+          valA = _getRecordValue(a, _sortColumn!);
+          valB = _getRecordValue(b, _sortColumn!);
+        }
+        if (valA == null && valB == null) return 0;
+        if (valA == null) return _sortAscending ? 1 : -1;
+        if (valB == null) return _sortAscending ? -1 : 1;
+
+        final strA = valA.toString().trim();
+        final strB = valB.toString().trim();
+
+        final numA = num.tryParse(strA);
+        final numB = num.tryParse(strB);
+        int cmp;
+        if (numA != null && numB != null) {
+          cmp = numA.compareTo(numB);
+        } else {
+          final dateA = DateTime.tryParse(strA);
+          final dateB = DateTime.tryParse(strB);
+          if (dateA != null && dateB != null && strA.length >= 8 && strB.length >= 8) {
+            cmp = dateA.compareTo(dateB);
+          } else {
+            cmp = strA.toLowerCase().compareTo(strB.toLowerCase());
+          }
+        }
+        return _sortAscending ? cmp : -cmp;
+      });
+    }
+    return list;
+  }
 
   void _showFilterModal(BuildContext context) {
     final availableFilters = _getAvailableFilters();
-    if (availableFilters.isEmpty) {
+    final columns = _extractColumns();
+    if (availableFilters.isEmpty && columns.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No filterable attributes found for this resource.')),
+        const SnackBar(content: Text('No filterable or sortable attributes found for this resource.')),
       );
       return;
     }
@@ -6469,9 +6541,9 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                     children: [
                       Icon(Icons.tune_rounded, color: theme.colorScheme.primary),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Refined Search Filters',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      Text(
+                        AppLocale.t(widget.currentLocale, 'filters'),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -6480,7 +6552,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                       if (activeFilterCount > 0)
                         TextButton.icon(
                           icon: const Icon(Icons.refresh, size: 16),
-                          label: const Text('Reset All', style: TextStyle(fontSize: 13)),
+                          label: Text(AppLocale.t(widget.currentLocale, 'clear_all'), style: const TextStyle(fontSize: 13)),
                           onPressed: () {
                             _clearAllFilters();
                             setModalState(() {});
@@ -6498,20 +6570,12 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
             ),
             const Divider(height: 1),
             Flexible(
-              child: ListView.builder(
+              child: ListView(
                 shrinkWrap: true,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                itemCount: availableFilters.length,
-                itemBuilder: (c, idx) {
-                  final f = availableFilters[idx];
-                  final colKey = (f['column'] ?? f['name'] ?? '').toString();
-                  final label = (f['label'] ?? colKey).toString();
-                  final options = _getOptionsForFilter(f);
-                  if (options.isEmpty) return const SizedBox.shrink();
-
-                  final selectedSet = activeFilters[colKey] ?? <String>{};
-
-                  return Card(
+                children: [
+                  // 1. Sorting Section (Card view sorting inside filter modal)
+                  Card(
                     margin: const EdgeInsets.only(bottom: 12),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -6527,101 +6591,241 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                label.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.8,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                              if (selectedSet.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    '${selectedSet.length} selected',
+                              Row(
+                                children: [
+                                  Icon(Icons.sort_rounded, size: 16, color: theme.colorScheme.primary),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    AppLocale.t(widget.currentLocale, 'sort_by').toUpperCase(),
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.8,
                                       color: theme.colorScheme.primary,
                                     ),
                                   ),
+                                ],
+                              ),
+                              if (_sortColumn != null)
+                                TextButton(
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                  ),
+                                  child: Text(AppLocale.t(widget.currentLocale, 'clear_sort'), style: const TextStyle(fontSize: 11)),
+                                  onPressed: () {
+                                    setState(() {
+                                      _sortColumn = null;
+                                      _sortAscending = true;
+                                    });
+                                    setModalState(() {});
+                                  },
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          ...options.map((optVal) {
-                            final isChecked = selectedSet.contains(optVal);
-                            final count = _calculateFacetCount(colKey, optVal);
-
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(8),
-                              onTap: () {
-                                _toggleFilter(colKey, optVal);
-                                setModalState(() {});
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: Checkbox(
-                                        value: isChecked,
-                                        activeColor: theme.colorScheme.primary,
-                                        onChanged: (val) {
-                                          _toggleFilter(colKey, optVal);
-                                          setModalState(() {});
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        optVal,
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
-                                          color: (count == 0 && !isChecked) ? Colors.grey : null,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: isChecked
-                                            ? theme.colorScheme.primary.withValues(alpha: 0.2)
-                                            : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        '$count',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: isChecked
-                                              ? theme.colorScheme.primary
-                                              : ((count == 0 && !isChecked) ? Colors.grey : null),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              ChoiceChip(
+                                visualDensity: VisualDensity.compact,
+                                label: const Text('ID', style: TextStyle(fontSize: 12)),
+                                selected: _sortColumn == 'id',
+                                onSelected: (sel) {
+                                  setState(() {
+                                    _sortColumn = sel ? 'id' : null;
+                                  });
+                                  setModalState(() {});
+                                },
                               ),
-                            );
-                          }),
+                              ...columns.map((col) {
+                                final isSel = _sortColumn == col;
+                                final label = AppLocale.t(widget.currentLocale, col);
+                                return ChoiceChip(
+                                  visualDensity: VisualDensity.compact,
+                                  label: Text(label, style: const TextStyle(fontSize: 12)),
+                                  selected: isSel,
+                                  onSelected: (sel) {
+                                    setState(() {
+                                      _sortColumn = sel ? col : null;
+                                    });
+                                    setModalState(() {});
+                                  },
+                                );
+                              }),
+                              ChoiceChip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text(AppLocale.t(widget.currentLocale, 'status'), style: const TextStyle(fontSize: 12)),
+                                selected: _sortColumn == 'status',
+                                onSelected: (sel) {
+                                  setState(() {
+                                    _sortColumn = sel ? 'status' : null;
+                                  });
+                                  setModalState(() {});
+                                },
+                              ),
+                            ],
+                          ),
+                          if (_sortColumn != null) ...[
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Text(
+                                  '${AppLocale.t(widget.currentLocale, "direction")}:',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                ChoiceChip(
+                                  visualDensity: VisualDensity.compact,
+                                  avatar: Icon(_sortAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded, size: 14),
+                                  label: Text(
+                                    _sortAscending ? AppLocale.t(widget.currentLocale, 'ascending') : AppLocale.t(widget.currentLocale, 'descending'),
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  selected: true,
+                                  onSelected: (_) {
+                                    setState(() {
+                                      _sortAscending = !_sortAscending;
+                                    });
+                                    setModalState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
-                  );
-                },
+                  ),
+
+                  // 2. Filter Cards
+                  for (final f in availableFilters) ...[
+                    Builder(builder: (bctx) {
+                      final colKey = (f['column'] ?? f['name'] ?? '').toString();
+                      final label = (f['label'] ?? colKey).toString();
+                      final options = _getOptionsForFilter(f);
+                      if (options.isEmpty) return const SizedBox.shrink();
+
+                      final selectedSet = activeFilters[colKey] ?? <String>{};
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                        ),
+                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    label.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.8,
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                  if (selectedSet.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        '${selectedSet.length} selected',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              ...options.map((optVal) {
+                                final isChecked = selectedSet.contains(optVal);
+                                final count = _calculateFacetCount(colKey, optVal);
+
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () {
+                                    _toggleFilter(colKey, optVal);
+                                    setModalState(() {});
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+                                    child: Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: Checkbox(
+                                            value: isChecked,
+                                            activeColor: theme.colorScheme.primary,
+                                            onChanged: (val) {
+                                              _toggleFilter(colKey, optVal);
+                                              setModalState(() {});
+                                            },
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            optVal,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: isChecked ? FontWeight.bold : FontWeight.normal,
+                                              color: (count == 0 && !isChecked) ? Colors.grey : null,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: isChecked
+                                                ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                                                : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            '$count',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: isChecked
+                                                  ? theme.colorScheme.primary
+                                                  : ((count == 0 && !isChecked) ? Colors.grey : null),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ],
               ),
             ),
             Container(
@@ -6638,7 +6842,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                   ),
                   onPressed: () => Navigator.pop(ctx),
                   child: Text(
-                    'Show ${filteredRecords.length} Results',
+                    'Apply & Show ${records.length} Results',
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                 ),
@@ -7215,15 +7419,20 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   }
 
   double _columnWidth(String colKey) {
+    if (_customColumnWidths.containsKey(colKey)) {
+      return _customColumnWidths[colKey]!;
+    }
     final k = colKey.toLowerCase();
-    if (k == 'name' || k == 'title') return 220;
-    if (k == 'email' || k == 'username') return 200;
-    if (k.contains('address') || k.contains('description') || k.contains('notes')) return 240;
-    if (k == 'phone' || k.contains('phone')) return 150;
-    if (k.contains('code') || k.contains('serial') || k.contains('plate') || k.contains('cr_')) return 150;
-    if (k == 'city' || k == 'type' || k == 'role' || k == 'category') return 140;
-    if (k.contains('amount') || k.contains('balance') || k.contains('price') || k.contains('rate')) return 140;
-    return 150;
+    if (k == 'id') return 70.0;
+    if (k == 'status') return 130.0;
+    if (k == 'name' || k == 'title') return 220.0;
+    if (k == 'email' || k == 'username') return 200.0;
+    if (k.contains('address') || k.contains('description') || k.contains('notes')) return 240.0;
+    if (k == 'phone' || k.contains('phone')) return 150.0;
+    if (k.contains('code') || k.contains('serial') || k.contains('plate') || k.contains('cr_')) return 150.0;
+    if (k == 'city' || k == 'type' || k == 'role' || k == 'category') return 140.0;
+    if (k.contains('amount') || k.contains('balance') || k.contains('price') || k.contains('rate')) return 140.0;
+    return 150.0;
   }
 
   Widget _buildTableCell(BuildContext context, String colKey, dynamic item, bool isDark, IconData headerIcon) {
@@ -7304,7 +7513,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     final hasRelations = relations.isNotEmpty;
     final columns = _extractColumns();
 
-    double totalColsWidth = 48.0 + 70.0 + 130.0 + 140.0 + 80.0; // Checkbox + ID + STATUS + ACTIONS + clearance
+    double totalColsWidth = 48.0 + _columnWidth('id') + _columnWidth('status') + 140.0 + 80.0; // Checkbox + ID + STATUS + ACTIONS + clearance
     for (final col in columns) {
       totalColsWidth += _columnWidth(col);
     }
@@ -7430,30 +7639,188 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                     ),
                                     const SizedBox(width: 16),
                                   ] else ...[
-                                    const SizedBox(
-                                      width: 70,
-                                      child: Text(
-                                        'ID',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                    SizedBox(
+                                      width: _columnWidth('id'),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: InkWell(
+                                              onTap: () => _toggleSort('id'),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    'ID',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 12,
+                                                      letterSpacing: 0.5,
+                                                      color: _sortColumn == 'id' ? Colors.amber : Colors.grey,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Icon(
+                                                    _sortColumn == 'id'
+                                                        ? (_sortAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded)
+                                                        : Icons.unfold_more_rounded,
+                                                    size: 14,
+                                                    color: _sortColumn == 'id' ? Colors.amber : (isDark ? Colors.white24 : Colors.black26),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          MouseRegion(
+                                            cursor: SystemMouseCursors.resizeColumn,
+                                            child: GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onHorizontalDragUpdate: (details) {
+                                                setState(() {
+                                                  final cur = _columnWidth('id');
+                                                  _customColumnWidths['id'] = (cur + details.delta.dx).clamp(50.0, 300.0);
+                                                });
+                                              },
+                                              child: Container(
+                                                width: 14,
+                                                height: 28,
+                                                alignment: Alignment.center,
+                                                color: Colors.transparent,
+                                                child: Container(
+                                                  width: 2,
+                                                  height: 14,
+                                                  decoration: BoxDecoration(
+                                                    color: isDark ? Colors.white24 : Colors.black26,
+                                                    borderRadius: BorderRadius.circular(1),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                     for (final col in columns)
                                       SizedBox(
                                         width: _columnWidth(col),
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(right: 12),
-                                          child: Text(
-                                            AppLocale.t(widget.currentLocale, col).toUpperCase(),
-                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: InkWell(
+                                                onTap: () => _toggleSort(col),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Flexible(
+                                                      child: Text(
+                                                        AppLocale.t(widget.currentLocale, col).toUpperCase(),
+                                                        style: TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 12,
+                                                          letterSpacing: 0.5,
+                                                          color: _sortColumn == col ? Colors.amber : Colors.grey,
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Icon(
+                                                      _sortColumn == col
+                                                          ? (_sortAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded)
+                                                          : Icons.unfold_more_rounded,
+                                                      size: 14,
+                                                      color: _sortColumn == col ? Colors.amber : (isDark ? Colors.white24 : Colors.black26),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                            MouseRegion(
+                                              cursor: SystemMouseCursors.resizeColumn,
+                                              child: GestureDetector(
+                                                behavior: HitTestBehavior.opaque,
+                                                onHorizontalDragUpdate: (details) {
+                                                  setState(() {
+                                                    final cur = _columnWidth(col);
+                                                    _customColumnWidths[col] = (cur + details.delta.dx).clamp(60.0, 600.0);
+                                                  });
+                                                },
+                                                child: Container(
+                                                  width: 14,
+                                                  height: 28,
+                                                  alignment: Alignment.center,
+                                                  color: Colors.transparent,
+                                                  child: Container(
+                                                    width: 2,
+                                                    height: 14,
+                                                    decoration: BoxDecoration(
+                                                      color: isDark ? Colors.white24 : Colors.black26,
+                                                      borderRadius: BorderRadius.circular(1),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     SizedBox(
-                                      width: 130,
-                                      child: Text(
-                                        AppLocale.t(widget.currentLocale, 'status').toUpperCase(),
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                      width: _columnWidth('status'),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: InkWell(
+                                              onTap: () => _toggleSort('status'),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    AppLocale.t(widget.currentLocale, 'status').toUpperCase(),
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 12,
+                                                      letterSpacing: 0.5,
+                                                      color: _sortColumn == 'status' ? Colors.amber : Colors.grey,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Icon(
+                                                    _sortColumn == 'status'
+                                                        ? (_sortAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded)
+                                                        : Icons.unfold_more_rounded,
+                                                    size: 14,
+                                                    color: _sortColumn == 'status' ? Colors.amber : (isDark ? Colors.white24 : Colors.black26),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          MouseRegion(
+                                            cursor: SystemMouseCursors.resizeColumn,
+                                            child: GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onHorizontalDragUpdate: (details) {
+                                                setState(() {
+                                                  final cur = _columnWidth('status');
+                                                  _customColumnWidths['status'] = (cur + details.delta.dx).clamp(60.0, 400.0);
+                                                });
+                                              },
+                                              child: Container(
+                                                width: 14,
+                                                height: 28,
+                                                alignment: Alignment.center,
+                                                color: Colors.transparent,
+                                                child: Container(
+                                                  width: 2,
+                                                  height: 14,
+                                                  decoration: BoxDecoration(
+                                                    color: isDark ? Colors.white24 : Colors.black26,
+                                                    borderRadius: BorderRadius.circular(1),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                     SizedBox(
@@ -7462,7 +7829,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                         alignment: Alignment.centerRight,
                                         child: Text(
                                           AppLocale.t(widget.currentLocale, 'actions').toUpperCase(),
-                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5, color: Colors.grey),
                                         ),
                                       ),
                                     ),
@@ -7585,7 +7952,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                     ),
                     // ID Column
                     SizedBox(
-                      width: 70,
+                      width: _columnWidth('id'),
                       child: Text(
                         '#$id',
                         style: TextStyle(
@@ -7608,7 +7975,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
 
                     // Status Badge Column
                     SizedBox(
-                      width: 130,
+                      width: _columnWidth('status'),
                       child: Align(
                         alignment: Alignment.centerLeft,
                         child: Container(
@@ -8108,6 +8475,28 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         visualDensity: VisualDensity.compact,
                       ),
                       const SizedBox(width: 6),
+                      if (_sortColumn != null) ...[
+                        InputChip(
+                          avatar: Icon(
+                            _sortAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                            size: 13,
+                            color: Colors.amber,
+                          ),
+                          label: Text(
+                            '${AppLocale.t(widget.currentLocale, "sort_by")}: ${_titleCase(_sortColumn!)} (${_sortAscending ? AppLocale.t(widget.currentLocale, "ascending") : AppLocale.t(widget.currentLocale, "descending")})',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          onDeleted: () {
+                            setState(() {
+                              _sortColumn = null;
+                              _sortAscending = true;
+                            });
+                          },
+                          visualDensity: VisualDensity.compact,
+                          deleteIconColor: Colors.amber,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       ...activeFilters.entries.expand((entry) {
                         final cat = entry.key;
                         return entry.value.map((val) {

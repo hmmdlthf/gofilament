@@ -98,6 +98,12 @@ var RequiredTranslationKeys = []string{
 	"manage",
 	"related_records",
 
+	// Sorting & Table Controls
+	"sort_by",
+	"clear_sort",
+	"ascending",
+	"descending",
+
 	// Dashboard & Metrics
 	"operational_dashboard",
 	"admin_dashboard",
@@ -224,6 +230,10 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"close":                  "Close",
 		"apply":                  "Apply",
 		"save_changes":           "Save Changes",
+		"sort_by":                "Sort By",
+		"clear_sort":             "Clear Sort",
+		"ascending":              "Ascending",
+		"descending":             "Descending",
 	},
 	"ar": {
 		"dashboard":              "لوحة التحكم",
@@ -325,6 +335,10 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"close":                  "إغلاق",
 		"apply":                  "تطبيق",
 		"save_changes":           "حفظ التغييرات",
+		"sort_by":                "الترتيب حسب",
+		"clear_sort":             "إلغاء الترتيب",
+		"ascending":              "تصاعدي",
+		"descending":             "تنازلي",
 	},
 	"es": {
 		"dashboard":              "Panel de Control",
@@ -426,6 +440,10 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"close":                  "Cerrar",
 		"apply":                  "Aplicar",
 		"save_changes":           "Guardar Cambios",
+		"sort_by":                "Ordenar por",
+		"clear_sort":             "Borrar ordenación",
+		"ascending":              "Ascendente",
+		"descending":             "Descendente",
 	},
 	"de": {
 		"dashboard":              "Übersicht",
@@ -527,6 +545,10 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"close":                  "Schließen",
 		"apply":                  "Anwenden",
 		"save_changes":           "Änderungen speichern",
+		"sort_by":                "Sortieren nach",
+		"clear_sort":             "Sortierung aufheben",
+		"ascending":              "Aufsteigend",
+		"descending":             "Absteigend",
 	},
 	"fr": {
 		"dashboard":              "Tableau de bord",
@@ -628,6 +650,10 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"close":                  "Fermer",
 		"apply":                  "Appliquer",
 		"save_changes":           "Enregistrer les modifications",
+		"sort_by":                "Trier par",
+		"clear_sort":             "Effacer le tri",
+		"ascending":              "Croissant",
+		"descending":             "Décroissant",
 	},
 }
 

@@ -14,6 +14,7 @@ func TestRequiredKeysNotEmpty(t *testing.T) {
 		"dashboard", "sign_in_title", "sign_in_subtitle", "remember_me",
 		"search_records", "bulk_actions", "bulk_delete", "relations",
 		"show_relations", "hide_relations", "toggle_relations", "direction",
+		"sort_by", "clear_sort", "ascending", "descending",
 	}
 
 	keySet := make(map[string]bool)
