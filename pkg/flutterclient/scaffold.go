@@ -4095,6 +4095,8 @@ class _AdminShellPageState extends State<AdminShellPage> {
       // 📱 Mobile-First Layout: One-thumb bottom navigation, pull-to-refresh, cards
       mobile: Scaffold(
         appBar: AppBar(
+          toolbarHeight: 48,
+          titleSpacing: 8,
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -4103,11 +4105,11 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 brandName: 'Benzat',
                 imageAsset: 'assets/images/app_logo.png',
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   !isHeaderPlacement && _currentIndex == 2 ? 'Account & Profile' : brandName,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -4116,23 +4118,30 @@ class _AdminShellPageState extends State<AdminShellPage> {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.language),
+              icon: const Icon(Icons.language, size: 19),
               tooltip: 'Language & Direction / اللغة',
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(6),
               onPressed: () => showLanguageDialog(context),
             ),
             IconButton(
-              icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode),
+              icon: Icon(widget.isDark ? Icons.light_mode : Icons.dark_mode, size: 19),
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(6),
               onPressed: widget.onToggleTheme,
             ),
             IconButton(
-              icon: const Icon(Icons.corporate_fare),
+              icon: const Icon(Icons.corporate_fare, size: 19),
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(6),
               onPressed: showTenantSwitcher,
             ),
             // Header circle account button is shown ONLY when placement is 'header' (never both!)
             if (isHeaderPlacement)
               Padding(
-                padding: const EdgeInsets.only(right: 8, left: 4),
+                padding: const EdgeInsets.only(right: 6, left: 2),
                 child: CircularAccountButton(
+                  radius: 14,
                   initial: (api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'A')[0].toUpperCase(),
                   name: api.currentUser?['name'] ?? api.currentUser?['login'] ?? 'Administrator',
                   email: api.currentUser?['email'] ?? 'admin@benzat.com',
@@ -4164,43 +4173,52 @@ class _AdminShellPageState extends State<AdminShellPage> {
               _buildMobileAccountHub(),
           ],
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: activeMobileIndex,
-          onDestinationSelected: (idx) {
-            HapticFeedback.selectionClick();
-            setState(() => _currentIndex = idx);
-          },
-          // Bottom menu account tab is shown ONLY when placement is 'bottom_bar' (never both!)
-          destinations: isHeaderPlacement
-              ? [
-                  NavigationDestination(
-                    icon: const Icon(Icons.dashboard_outlined),
-                    selectedIcon: const Icon(Icons.dashboard),
-                    label: AppLocale.t(widget.currentLocale, 'dashboard'),
-                  ),
-                  NavigationDestination(
-                    icon: const Icon(Icons.layers_outlined),
-                    selectedIcon: const Icon(Icons.layers),
-                    label: AppLocale.t(widget.currentLocale, 'entities'),
-                  ),
-                ]
-              : [
-                  NavigationDestination(
-                    icon: const Icon(Icons.dashboard_outlined),
-                    selectedIcon: const Icon(Icons.dashboard),
-                    label: AppLocale.t(widget.currentLocale, 'dashboard'),
-                  ),
-                  NavigationDestination(
-                    icon: const Icon(Icons.layers_outlined),
-                    selectedIcon: const Icon(Icons.layers),
-                    label: AppLocale.t(widget.currentLocale, 'entities'),
-                  ),
-                  NavigationDestination(
-                    icon: const Icon(Icons.account_circle_outlined),
-                    selectedIcon: const Icon(Icons.account_circle),
-                    label: AppLocale.t(widget.currentLocale, 'account'),
-                  ),
-                ],
+        bottomNavigationBar: NavigationBarTheme(
+          data: NavigationBarThemeData(
+            height: 52,
+            iconTheme: WidgetStateProperty.all(const IconThemeData(size: 19)),
+            labelTextStyle: WidgetStateProperty.all(
+              const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+            ),
+          ),
+          child: NavigationBar(
+            selectedIndex: activeMobileIndex,
+            onDestinationSelected: (idx) {
+              HapticFeedback.selectionClick();
+              setState(() => _currentIndex = idx);
+            },
+            // Bottom menu account tab is shown ONLY when placement is 'bottom_bar' (never both!)
+            destinations: isHeaderPlacement
+                ? [
+                    NavigationDestination(
+                      icon: const Icon(Icons.dashboard_outlined),
+                      selectedIcon: const Icon(Icons.dashboard),
+                      label: AppLocale.t(widget.currentLocale, 'dashboard'),
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.layers_outlined),
+                      selectedIcon: const Icon(Icons.layers),
+                      label: AppLocale.t(widget.currentLocale, 'entities'),
+                    ),
+                  ]
+                : [
+                    NavigationDestination(
+                      icon: const Icon(Icons.dashboard_outlined),
+                      selectedIcon: const Icon(Icons.dashboard),
+                      label: AppLocale.t(widget.currentLocale, 'dashboard'),
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.layers_outlined),
+                      selectedIcon: const Icon(Icons.layers),
+                      label: AppLocale.t(widget.currentLocale, 'entities'),
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.account_circle_outlined),
+                      selectedIcon: const Icon(Icons.account_circle),
+                      label: AppLocale.t(widget.currentLocale, 'account'),
+                    ),
+                  ],
+          ),
         ),
       ),
 
@@ -4701,7 +4719,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
     return RefreshIndicator(
       onRefresh: loadSchema,
       child: ListView(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        padding: EdgeInsets.all(isMobile ? 12 : 24),
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -4712,24 +4730,25 @@ class _AdminShellPageState extends State<AdminShellPage> {
                   Text(
                     AppLocale.t(widget.currentLocale, 'operational_dashboard'),
                     style: TextStyle(
-                      fontSize: isMobile ? 20 : 26,
+                      fontSize: isMobile ? 18 : 26,
                       fontWeight: FontWeight.bold,
                       letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     AppLocale.t(widget.currentLocale, 'dashboard_subtitle'),
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: isMobile ? 11 : 12,
                       color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                     ),
                   ),
                 ],
               ),
               IconButton.filledTonal(
+                visualDensity: VisualDensity.compact,
                 tooltip: AppLocale.t(widget.currentLocale, 'refresh_dashboard'),
-                icon: const Icon(Icons.refresh_rounded, size: 20),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
                 onPressed: loadSchema,
               ),
             ],
@@ -4845,29 +4864,29 @@ class _AdminShellPageState extends State<AdminShellPage> {
           ),
         ],
       ),
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 12 : 20),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(isMobile ? 8 : 12),
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: Colors.amber.shade400, size: 28),
+            child: Icon(icon, color: Colors.amber.shade400, size: isMobile ? 22 : 28),
           ),
-          const SizedBox(width: 16),
+          SizedBox(width: isMobile ? 10 : 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(title, style: TextStyle(fontSize: isMobile ? 14 : 16, fontWeight: FontWeight.bold)),
                 if (subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: isMobile ? 11 : 13,
                       color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                     ),
                   ),
@@ -4909,7 +4928,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
       final chartData = chartRaw.map((v) => (v as num).toDouble()).toList();
 
       return Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isMobile ? 10 : 16),
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(16),
@@ -4945,33 +4964,33 @@ class _AdminShellPageState extends State<AdminShellPage> {
                 ),
                 if (chartData.length >= 2)
                   SizedBox(
-                    width: 70,
-                    height: 28,
+                    width: isMobile ? 55 : 70,
+                    height: isMobile ? 22 : 28,
                     child: CustomPaint(
                       painter: SparklinePainter(data: chartData, color: color),
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               value,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+              style: TextStyle(fontSize: isMobile ? 18 : 24, fontWeight: FontWeight.bold, letterSpacing: -0.5),
             ),
             if (desc.isNotEmpty) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Row(
                 children: [
                   Icon(
                     desc.contains('-') ? Icons.trending_down_rounded : Icons.trending_up_rounded,
-                    size: 14,
+                    size: 13,
                     color: color,
                   ),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       desc,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: color),
+                      style: TextStyle(fontSize: isMobile ? 10 : 11, fontWeight: FontWeight.w500, color: color),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -4989,9 +5008,9 @@ class _AdminShellPageState extends State<AdminShellPage> {
         crossAxisCount: 2,
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.35,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 1.45,
         children: statWidgets,
       );
     }
@@ -5608,6 +5627,7 @@ class _AdminShellPageState extends State<AdminShellPage> {
 
   // --- Mobile Resource Feed with Horizontal Resource Chips Selector ---
   Widget _buildMobileResourceFeed(List<dynamic> resources) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (resources.isEmpty) {
       return const Center(child: Text('No resources available. Check server connection.'));
     }
@@ -5615,22 +5635,28 @@ class _AdminShellPageState extends State<AdminShellPage> {
       children: [
         // Horizontal scrollable resource pill selector
         Container(
-          height: 52,
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          height: 42,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+            border: Border(bottom: BorderSide(color: isDark ? Colors.white12 : Colors.black12)),
           ),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: resources.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            separatorBuilder: (_, __) => const SizedBox(width: 6),
             itemBuilder: (context, i) {
               final r = resources[i];
               final slug = r['slug'] as String;
               final name = (r['model_name'] ?? slug) as String;
               final isSel = slug == selectedResourceSlug;
               return ChoiceChip(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                ),
                 label: Text(AppLocale.t(widget.currentLocale, name)),
                 selected: isSel,
                 onSelected: (val) {
@@ -6726,10 +6752,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
         Text(
           label.toUpperCase(),
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 9,
             fontWeight: FontWeight.w600,
             color: Colors.grey.shade400,
-            letterSpacing: 0.5,
+            letterSpacing: 0.4,
           ),
         ),
         const SizedBox(height: 2),
@@ -6737,14 +6763,14 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 14, color: valueColor ?? Colors.grey.shade300),
+              Icon(icon, size: 13, color: valueColor ?? Colors.grey.shade300),
               const SizedBox(width: 4),
             ],
             Flexible(
               child: Text(
                 value,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.w500,
                   color: valueColor,
                 ),
@@ -6799,7 +6825,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     return Card(
       elevation: isSelected ? 2 : 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         side: BorderSide(
           color: isSelected ? Colors.amber.shade400 : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.08)),
           width: isSelected ? 1.5 : 1,
@@ -6809,7 +6835,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
           ? (isDark ? Colors.amber.withValues(alpha: 0.08) : Colors.amber.withValues(alpha: 0.05))
           : theme.colorScheme.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -6818,8 +6844,8 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
             Row(
               children: [
                 SizedBox(
-                  width: 24,
-                  height: 24,
+                  width: 22,
+                  height: 22,
                   child: Checkbox(
                     value: isSelected,
                     activeColor: Colors.amber.shade600,
@@ -6830,23 +6856,23 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                 ),
                 const SizedBox(width: 8),
                 CircleAvatar(
-                  radius: 18,
+                  radius: 15,
                   backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                  child: Icon(headerIcon, size: 20, color: Theme.of(context).colorScheme.primary),
+                  child: Icon(headerIcon, size: 16, color: Theme.of(context).colorScheme.primary),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         name,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         'ID: #$id',
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
                       ),
                     ],
                   ),
@@ -7711,37 +7737,45 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isMobile = MediaQuery.of(context).size.width < 768;
     final tabs = _getTabs();
-    double bottomHeight = 56.0;
-    if (tabs.isNotEmpty) bottomHeight += 44.0;
-    if (activeFilterCount > 0) bottomHeight += 44.0;
+
+    double bottomHeight = 0.0;
+    if (!isMobile) {
+      bottomHeight = 56.0;
+      if (tabs.isNotEmpty) bottomHeight += 44.0;
+      if (activeFilterCount > 0) bottomHeight += 44.0;
+    } else {
+      if (tabs.isNotEmpty) bottomHeight += 36.0;
+      if (activeFilterCount > 0) bottomHeight += 34.0;
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.slug.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(bottomHeight),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(
+        toolbarHeight: isMobile ? 48 : null,
+        titleSpacing: isMobile ? 8 : null,
+        title: isMobile
+            ? Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 36,
                       child: TextField(
+                        style: const TextStyle(fontSize: 13),
                         decoration: InputDecoration(
-                          hintText: '${AppLocale.t(widget.currentLocale, "search")} ${widget.slug}...',
-                          prefixIcon: const Icon(Icons.search, size: 20),
+                          hintText: '${AppLocale.t(widget.currentLocale, "search")}...',
+                          hintStyle: const TextStyle(fontSize: 12),
+                          prefixIcon: const Icon(Icons.search, size: 18),
                           suffixIcon: search.isNotEmpty
                               ? IconButton(
-                                  icon: const Icon(Icons.clear, size: 18),
+                                  icon: const Icon(Icons.clear, size: 16),
                                   onPressed: () {
                                     setState(() => search = '');
                                   },
                                 )
                               : null,
                           isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                         onChanged: (v) {
@@ -7749,176 +7783,323 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: _showRelations ? AppLocale.t(widget.currentLocale, 'hide_relations') : AppLocale.t(widget.currentLocale, 'show_relations'),
-                      style: IconButton.styleFrom(
-                        backgroundColor: _showRelations ? Colors.amber.withValues(alpha: 0.2) : null,
-                        foregroundColor: _showRelations ? Colors.amber.shade400 : null,
-                      ),
-                      icon: Icon(_showRelations ? Icons.account_tree : Icons.account_tree_outlined),
-                      onPressed: () {
-                        setState(() {
-                          _showRelations = !_showRelations;
-                        });
-                      },
+                  ),
+                  const SizedBox(width: 6),
+                  IconButton.filledTonal(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: _showRelations ? AppLocale.t(widget.currentLocale, 'hide_relations') : AppLocale.t(widget.currentLocale, 'show_relations'),
+                    style: IconButton.styleFrom(
+                      backgroundColor: _showRelations ? Colors.amber.withValues(alpha: 0.2) : null,
+                      foregroundColor: _showRelations ? Colors.amber.shade400 : null,
+                      padding: const EdgeInsets.all(6),
                     ),
-                    const SizedBox(width: 8),
-                    Badge(
-                      isLabelVisible: activeFilterCount > 0,
-                      label: Text('$activeFilterCount'),
-                      backgroundColor: Colors.amber,
+                    icon: Icon(_showRelations ? Icons.account_tree : Icons.account_tree_outlined, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        _showRelations = !_showRelations;
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  Badge(
+                    isLabelVisible: activeFilterCount > 0,
+                    label: Text('$activeFilterCount', style: const TextStyle(fontSize: 10)),
+                    backgroundColor: Colors.amber,
+                    textColor: Colors.black,
+                    child: IconButton.filledTonal(
+                      visualDensity: VisualDensity.compact,
+                      tooltip: AppLocale.t(widget.currentLocale, 'filters'),
+                      style: IconButton.styleFrom(padding: const EdgeInsets.all(6)),
+                      icon: const Icon(Icons.tune_rounded, size: 18),
+                      onPressed: () => _showFilterModal(context),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  PopupMenuButton<String>(
+                    tooltip: selectedRecordIds.isNotEmpty
+                        ? 'Bulk Actions (${selectedRecordIds.length} selected)'
+                        : 'Bulk Selection & Actions',
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    icon: Badge(
+                      isLabelVisible: selectedRecordIds.isNotEmpty,
+                      label: Text('${selectedRecordIds.length}', style: const TextStyle(fontSize: 10)),
+                      backgroundColor: Colors.amber.shade700,
                       textColor: Colors.black,
                       child: IconButton.filledTonal(
-                        tooltip: AppLocale.t(widget.currentLocale, 'filters'),
-                        icon: const Icon(Icons.tune_rounded),
-                        onPressed: () => _showFilterModal(context),
+                        visualDensity: VisualDensity.compact,
+                        style: IconButton.styleFrom(
+                          backgroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.withValues(alpha: 0.2) : null,
+                          foregroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.shade400 : null,
+                          padding: const EdgeInsets.all(6),
+                        ),
+                        icon: const Icon(Icons.checklist_rtl_rounded, size: 18),
+                        onPressed: null,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    PopupMenuButton<String>(
-                      tooltip: selectedRecordIds.isNotEmpty
-                          ? 'Bulk Actions (${selectedRecordIds.length} selected)'
-                          : 'Bulk Selection & Actions',
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      icon: Badge(
-                        isLabelVisible: selectedRecordIds.isNotEmpty,
-                        label: Text('${selectedRecordIds.length}'),
-                        backgroundColor: Colors.amber.shade700,
-                        textColor: Colors.black,
-                        child: IconButton.filledTonal(
-                          style: IconButton.styleFrom(
-                            backgroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.withValues(alpha: 0.2) : null,
-                            foregroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.shade400 : null,
-                          ),
-                          icon: const Icon(Icons.checklist_rtl_rounded),
-                          onPressed: null,
+                    onSelected: (val) {
+                      if (val == 'select_all') {
+                        _toggleSelectAll();
+                      } else if (val == 'deselect') {
+                        _deselectAll();
+                      } else if (val == 'delete') {
+                        _executeBulkDelete(context);
+                      } else if (val == 'export') {
+                        _exportSelectedRecords(context);
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      PopupMenuItem(
+                        value: 'select_all',
+                        child: Row(
+                          children: [
+                            Icon(isAllSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 18),
+                            const SizedBox(width: 10),
+                            Text(isAllSelected ? AppLocale.t(widget.currentLocale, 'deselect_all') : '${AppLocale.t(widget.currentLocale, "select_all")} (${records.length})', style: const TextStyle(fontSize: 13)),
+                          ],
                         ),
                       ),
-                      onSelected: (val) {
-                        if (val == 'select_all') {
-                          _toggleSelectAll();
-                        } else if (val == 'deselect') {
-                          _deselectAll();
-                        } else if (val == 'delete') {
-                          _executeBulkDelete(context);
-                        } else if (val == 'export') {
-                          _exportSelectedRecords(context);
-                        }
-                      },
-                      itemBuilder: (ctx) => [
+                      if (selectedRecordIds.isNotEmpty) ...[
                         PopupMenuItem(
-                          value: 'select_all',
+                          value: 'delete',
                           child: Row(
                             children: [
-                              Icon(isAllSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 20),
+                              const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 18),
                               const SizedBox(width: 10),
-                              Text(isAllSelected ? AppLocale.t(widget.currentLocale, 'deselect_all') : '${AppLocale.t(widget.currentLocale, "select_all")} (${records.length})'),
+                              Text(AppLocale.t(widget.currentLocale, 'bulk_delete'), style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
                             ],
                           ),
                         ),
-                        if (selectedRecordIds.isNotEmpty) ...[
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: const Row(
-                              children: [
-                                Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
-                                SizedBox(width: 10),
-                                Text('Bulk Delete', style: TextStyle(color: Colors.redAccent)),
-                              ],
-                            ),
+                        PopupMenuItem(
+                          value: 'export',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.download_rounded, size: 18),
+                              const SizedBox(width: 10),
+                              Text(AppLocale.t(widget.currentLocale, 'export_selected'), style: const TextStyle(fontSize: 13)),
+                            ],
                           ),
-                          PopupMenuItem(
-                            value: 'export',
-                            child: const Row(
-                              children: [
-                                Icon(Icons.download_rounded, size: 20),
-                                SizedBox(width: 10),
-                                Text('Export Selected'),
-                              ],
-                            ),
+                        ),
+                        const PopupMenuDivider(),
+                        PopupMenuItem(
+                          value: 'deselect',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.close_rounded, size: 18),
+                              const SizedBox(width: 10),
+                              Text(AppLocale.t(widget.currentLocale, 'clear_selection'), style: const TextStyle(fontSize: 13)),
+                            ],
                           ),
-                          const PopupMenuDivider(),
-                          const PopupMenuItem(
-                            value: 'deselect',
-                            child: Row(
-                              children: [
-                                Icon(Icons.close_rounded, size: 20),
-                                SizedBox(width: 10),
-                                Text('Clear Selection'),
-                              ],
-                            ),
-                          ),
-                        ],
+                        ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-              if (tabs.isNotEmpty)
-                Container(
-                  height: 38,
-                  margin: const EdgeInsets.fromLTRB(16, 2, 16, 4),
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: tabs.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (ctx, idx) {
-                      final tab = tabs[idx];
-                      final isSelected = (_activeTabKey ?? tabs.first['key']) == tab['key'];
-                      final count = _getTabCount(tab);
-                      return ChoiceChip(
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
+                    ],
+                  ),
+                ],
+              )
+            : Text(widget.slug.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        bottom: bottomHeight > 0
+            ? PreferredSize(
+                preferredSize: Size.fromHeight(bottomHeight),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!isMobile)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: Row(
                           children: [
-                            Text(tab['label'] ?? 'Tab'),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.amber.shade700
-                                    : (isDark ? Colors.white12 : Colors.black12),
-                                borderRadius: BorderRadius.circular(10),
+                            Expanded(
+                              child: TextField(
+                                decoration: InputDecoration(
+                                  hintText: '${AppLocale.t(widget.currentLocale, "search")} ${widget.slug}...',
+                                  prefixIcon: const Icon(Icons.search, size: 20),
+                                  suffixIcon: search.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear, size: 18),
+                                          onPressed: () {
+                                            setState(() => search = '');
+                                          },
+                                        )
+                                      : null,
+                                  isDense: true,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                                onChanged: (v) {
+                                  setState(() => search = v);
+                                },
                               ),
-                              child: Text(
-                                '$count',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: isSelected ? Colors.black : (isDark ? Colors.white70 : Colors.black87),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              tooltip: _showRelations ? AppLocale.t(widget.currentLocale, 'hide_relations') : AppLocale.t(widget.currentLocale, 'show_relations'),
+                              style: IconButton.styleFrom(
+                                backgroundColor: _showRelations ? Colors.amber.withValues(alpha: 0.2) : null,
+                                foregroundColor: _showRelations ? Colors.amber.shade400 : null,
+                              ),
+                              icon: Icon(_showRelations ? Icons.account_tree : Icons.account_tree_outlined),
+                              onPressed: () {
+                                setState(() {
+                                  _showRelations = !_showRelations;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            Badge(
+                              isLabelVisible: activeFilterCount > 0,
+                              label: Text('$activeFilterCount'),
+                              backgroundColor: Colors.amber,
+                              textColor: Colors.black,
+                              child: IconButton.filledTonal(
+                                tooltip: AppLocale.t(widget.currentLocale, 'filters'),
+                                icon: const Icon(Icons.tune_rounded),
+                                onPressed: () => _showFilterModal(context),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            PopupMenuButton<String>(
+                              tooltip: selectedRecordIds.isNotEmpty
+                                  ? 'Bulk Actions (${selectedRecordIds.length} selected)'
+                                  : 'Bulk Selection & Actions',
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              icon: Badge(
+                                isLabelVisible: selectedRecordIds.isNotEmpty,
+                                label: Text('${selectedRecordIds.length}'),
+                                backgroundColor: Colors.amber.shade700,
+                                textColor: Colors.black,
+                                child: IconButton.filledTonal(
+                                  style: IconButton.styleFrom(
+                                    backgroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.withValues(alpha: 0.2) : null,
+                                    foregroundColor: selectedRecordIds.isNotEmpty ? Colors.amber.shade400 : null,
+                                  ),
+                                  icon: const Icon(Icons.checklist_rtl_rounded),
+                                  onPressed: null,
                                 ),
                               ),
+                              onSelected: (val) {
+                                if (val == 'select_all') {
+                                  _toggleSelectAll();
+                                } else if (val == 'deselect') {
+                                  _deselectAll();
+                                } else if (val == 'delete') {
+                                  _executeBulkDelete(context);
+                                } else if (val == 'export') {
+                                  _exportSelectedRecords(context);
+                                }
+                              },
+                              itemBuilder: (ctx) => [
+                                PopupMenuItem(
+                                  value: 'select_all',
+                                  child: Row(
+                                    children: [
+                                      Icon(isAllSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 20),
+                                      const SizedBox(width: 10),
+                                      Text(isAllSelected ? AppLocale.t(widget.currentLocale, 'deselect_all') : '${AppLocale.t(widget.currentLocale, "select_all")} (${records.length})'),
+                                    ],
+                                  ),
+                                ),
+                                if (selectedRecordIds.isNotEmpty) ...[
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
+                                        SizedBox(width: 10),
+                                        Text('Bulk Delete', style: TextStyle(color: Colors.redAccent)),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'export',
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.download_rounded, size: 20),
+                                        SizedBox(width: 10),
+                                        Text('Export Selected'),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuDivider(),
+                                  const PopupMenuItem(
+                                    value: 'deselect',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.close_rounded, size: 20),
+                                        SizedBox(width: 10),
+                                        Text('Clear Selection'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ],
                         ),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() {
-                              _activeTabKey = tab['key'];
-                              selectedRecordIds.clear();
-                            });
-                          }
-                        },
-                        selectedColor: Colors.amber.withValues(alpha: 0.25),
-                        backgroundColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            color: isSelected ? Colors.amber : (isDark ? Colors.white24 : Colors.black26),
-                          ),
+                      ),
+                    if (tabs.isNotEmpty)
+                      Container(
+                        height: isMobile ? 32 : 38,
+                        margin: EdgeInsets.fromLTRB(isMobile ? 8 : 16, 2, isMobile ? 8 : 16, 4),
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: tabs.length,
+                          separatorBuilder: (_, __) => SizedBox(width: isMobile ? 6 : 8),
+                          itemBuilder: (ctx, idx) {
+                            final tab = tabs[idx];
+                            final isSelected = (_activeTabKey ?? tabs.first['key']) == tab['key'];
+                            final count = _getTabCount(tab);
+                            return ChoiceChip(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.symmetric(horizontal: isMobile ? 4 : 8, vertical: 0),
+                              label: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(tab['label'] ?? 'Tab', style: TextStyle(fontSize: isMobile ? 11 : 12)),
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Colors.amber.shade700
+                                          : (isDark ? Colors.white12 : Colors.black12),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      '$count',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected ? Colors.black : (isDark ? Colors.white70 : Colors.black87),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setState(() {
+                                    _activeTabKey = tab['key'];
+                                    selectedRecordIds.clear();
+                                  });
+                                }
+                              },
+                              selectedColor: Colors.amber.withValues(alpha: 0.25),
+                              backgroundColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                side: BorderSide(
+                                  color: isSelected ? Colors.amber : (isDark ? Colors.white24 : Colors.black26),
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
-              if (activeFilterCount > 0)
-                Container(
-                  height: 42,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
+                      ),
+                    if (activeFilterCount > 0)
+                      Container(
+                        height: isMobile ? 30 : 42,
+                        padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: 2),
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
                     children: [
                       ActionChip(
                         avatar: const Icon(Icons.close, size: 14),
@@ -7946,7 +8127,8 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                 ),
             ],
           ),
-        ),
+        )
+      : null,
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
