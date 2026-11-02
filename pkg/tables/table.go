@@ -46,8 +46,9 @@ type Table[T any] struct {
 	reorderCol     string
 	softDeletes    bool
 	isTrashed      func(record T) bool
-	listMode       string
-	perPageOptions []int
+	listMode                 string
+	perPageOptions           []int
+	mobilePaginationPosition string
 }
 
 // New creates an empty Table instance.
@@ -128,6 +129,20 @@ func (t *Table[T]) GetPerPageOptions() []int {
 		return []int{10, 15, 25, 50, 100}
 	}
 	return t.perPageOptions
+}
+
+// MobilePaginationPosition sets the mobile pagination position for the table ("top" or "fab").
+func (t *Table[T]) MobilePaginationPosition(pos string) *Table[T] {
+	t.mobilePaginationPosition = pos
+	return t
+}
+
+// GetMobilePaginationPosition returns the mobile pagination position, defaulting to "top".
+func (t *Table[T]) GetMobilePaginationPosition() string {
+	if t.mobilePaginationPosition == "" {
+		return "top"
+	}
+	return t.mobilePaginationPosition
 }
 
 // Toggleable enables or disables the column show/hide toggler.

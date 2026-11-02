@@ -182,9 +182,10 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			Filters         []tables.FilterDTO  `json:"filters,omitempty"`
 			Tabs            []*ResourceTab      `json:"tabs,omitempty"`
 			TabsEnabled     bool                `json:"tabs_enabled"`
-			ListMode        string              `json:"list_mode"`
-			PerPage         int                 `json:"per_page"`
-			PerPageOptions  []int               `json:"per_page_options,omitempty"`
+			ListMode                 string              `json:"list_mode"`
+			PerPage                  int                 `json:"per_page"`
+			PerPageOptions           []int               `json:"per_page_options,omitempty"`
+			MobilePaginationPosition string              `json:"mobile_pagination_position"`
 		}
 
 		var resourceDTOs []resourceDTO
@@ -225,19 +226,28 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					perPageOpts = p.GetDefaultPerPageOptions()
 				}
 
+				mobPos := res.GetMobilePaginationPosition()
+				if mobPos == "" {
+					mobPos = p.GetDefaultMobilePaginationPosition()
+				}
+				if mobPos == "" {
+					mobPos = PaginationPositionTop
+				}
+
 				resourceDTOs = append(resourceDTOs, resourceDTO{
-					Slug:            res.Slug(),
-					ModelName:       item.Label,
-					PluralModelName: item.Label,
-					NavIcon:         item.Icon,
-					NavGroup:        item.Group,
-					Relations:       relsDTO,
-					Filters:         filtersDTO,
-					Tabs:            tabsDTO,
-					TabsEnabled:     tabsEnabled,
-					ListMode:        listMode,
-					PerPage:         perPage,
-					PerPageOptions:  perPageOpts,
+					Slug:                     res.Slug(),
+					ModelName:                item.Label,
+					PluralModelName:          item.Label,
+					NavIcon:                  item.Icon,
+					NavGroup:                 item.Group,
+					Relations:                relsDTO,
+					Filters:                  filtersDTO,
+					Tabs:                     tabsDTO,
+					TabsEnabled:              tabsEnabled,
+					ListMode:                 listMode,
+					PerPage:                  perPage,
+					PerPageOptions:           perPageOpts,
+					MobilePaginationPosition: string(mobPos),
 				})
 			}
 		}
@@ -315,9 +325,10 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"session_duration":      int(p.GetSessionDuration().Seconds()),
 			"remember_me_duration":  int(p.GetRememberMeDuration().Seconds()),
 			"tabs_enabled":          p.IsTabsEnabled(),
-			"default_list_mode":     string(p.GetDefaultListMode()),
-			"default_per_page":      p.GetDefaultPerPage(),
-			"default_per_page_options": p.GetDefaultPerPageOptions(),
+			"default_list_mode":                  string(p.GetDefaultListMode()),
+			"default_per_page":                   p.GetDefaultPerPage(),
+			"default_per_page_options":           p.GetDefaultPerPageOptions(),
+			"default_mobile_pagination_position": string(p.GetDefaultMobilePaginationPosition()),
 		}
 
 		return c.JSON(http.StatusOK, schema)

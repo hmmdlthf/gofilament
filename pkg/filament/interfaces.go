@@ -38,6 +38,14 @@ const (
 	ListModeInfiniteScroll ListMode = "infinite_scroll"
 )
 
+// PaginationPosition defines where pagination controls are displayed on mobile / cards view.
+type PaginationPosition string
+
+const (
+	PaginationPositionTop PaginationPosition = "top"
+	PaginationPositionFAB PaginationPosition = "fab"
+)
+
 // ResourceInterface defines the contract for all CRUD resources.
 type ResourceInterface interface {
 	ID() string
@@ -54,6 +62,7 @@ type ResourceInterface interface {
 	GetListMode() ListMode
 	GetPerPage() int
 	GetPerPageOptions() []int
+	GetMobilePaginationPosition() PaginationPosition
 }
 
 // PageInterface defines the contract for custom panel pages.

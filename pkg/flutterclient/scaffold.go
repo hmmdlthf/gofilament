@@ -6126,6 +6126,7 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
   late String _currentListMode;
   late int _perPage;
   late List<int> _perPageOptions;
+  String _mobilePaginationPos = 'top';
   int _currentPage = 1;
   int _totalRecords = 0;
   bool _isLoadingMore = false;
@@ -7034,6 +7035,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
         schema?['default_list_mode']?.toString() ??
         'pagination';
 
+    _mobilePaginationPos = resMeta?['mobile_pagination_position']?.toString() ??
+        schema?['default_mobile_pagination_position']?.toString() ??
+        'top';
+
     _perPage = widget.configuredPerPage ??
         (resMeta?['per_page'] as num?)?.toInt() ??
         (schema?['default_per_page'] as num?)?.toInt() ??
@@ -7751,25 +7756,38 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
     );
   }
 
+  Widget _buildTopPaginationButton({required bool isMobile}) {
+    return Badge(
+      isLabelVisible: _totalPages > 1 && _currentListMode == 'pagination',
+      label: Text('$_currentPage', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+      backgroundColor: Colors.amber,
+      textColor: Colors.black,
+      child: IconButton.filledTonal(
+        visualDensity: isMobile ? VisualDensity.compact : null,
+        tooltip: AppLocale.t(widget.currentLocale, 'pagination'),
+        style: IconButton.styleFrom(
+          padding: isMobile ? const EdgeInsets.all(6) : null,
+        ),
+        icon: Icon(
+          _currentListMode == 'pagination' ? Icons.auto_stories_outlined : Icons.all_inclusive_rounded,
+          size: isMobile ? 18 : 20,
+        ),
+        onPressed: () => _showPaginationModal(context),
+      ),
+    );
+  }
+
   Widget _buildFloatingActionButtons(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bool showPaginationBtn = _totalRecords > 0 || records.isNotEmpty;
+    final bool showFabPagination = _mobilePaginationPos == 'fab' && (_totalRecords > 0 || records.isNotEmpty);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        if (showPaginationBtn) ...[
-          FloatingActionButton.small(
+        if (showFabPagination) ...[
+          FloatingActionButton(
             heroTag: 'pagination_fab_${widget.slug}',
             tooltip: AppLocale.t(widget.currentLocale, 'pagination'),
-            backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-            foregroundColor: Colors.amber.shade700,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(28),
-              side: BorderSide(color: Colors.amber.shade400, width: 1.5),
-            ),
-            elevation: 4,
             onPressed: () => _showPaginationModal(context),
             child: Stack(
               clipBehavior: Clip.none,
@@ -7777,25 +7795,24 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
               children: [
                 Icon(
                   _currentListMode == 'pagination' ? Icons.auto_stories_outlined : Icons.all_inclusive_rounded,
-                  size: 20,
-                  color: Colors.amber.shade700,
+                  size: 24,
                 ),
                 if (_currentListMode == 'pagination' && _totalPages > 1)
                   Positioned(
-                    right: -6,
-                    top: -6,
+                    right: -8,
+                    top: -8,
                     child: Container(
-                      padding: const EdgeInsets.all(3),
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         color: Colors.amber.shade700,
                         shape: BoxShape.circle,
                       ),
-                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
                       child: Text(
                         '$_currentPage',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 9,
+                          fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
                         textAlign: TextAlign.center,
@@ -8218,6 +8235,81 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                 },
                               );
                             }).toList(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Button Position Card
+                  Card(
+                    margin: const EdgeInsets.only(top: 14),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
+                    ),
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            AppLocale.t(widget.currentLocale, 'pagination_position').toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ChoiceChip(
+                                  label: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.vertical_align_top_rounded, size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(AppLocale.t(widget.currentLocale, 'position_top'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                  selected: _mobilePaginationPos == 'top',
+                                  onSelected: (selected) {
+                                    if (selected && _mobilePaginationPos != 'top') {
+                                      setState(() {
+                                        _mobilePaginationPos = 'top';
+                                      });
+                                      setModalState(() {});
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ChoiceChip(
+                                  label: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.smart_button_rounded, size: 16),
+                                      const SizedBox(width: 6),
+                                      Text(AppLocale.t(widget.currentLocale, 'position_fab'), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                  selected: _mobilePaginationPos == 'fab',
+                                  onSelected: (selected) {
+                                    if (selected && _mobilePaginationPos != 'fab') {
+                                      setState(() {
+                                        _mobilePaginationPos = 'fab';
+                                      });
+                                      setModalState(() {});
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -9297,6 +9389,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                       onPressed: () => _showFilterModal(context),
                     ),
                   ),
+                  if (_mobilePaginationPos == 'top') ...[
+                    const SizedBox(width: 6),
+                    _buildTopPaginationButton(isMobile: true),
+                  ],
                   const SizedBox(width: 6),
                   PopupMenuButton<String>(
                     tooltip: selectedRecordIds.isNotEmpty
@@ -9328,6 +9424,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                         _executeBulkDelete(context);
                       } else if (val == 'export') {
                         _exportSelectedRecords(context);
+                      } else if (val == 'toggle_pagination_pos') {
+                        setState(() {
+                          _mobilePaginationPos = _mobilePaginationPos == 'top' ? 'fab' : 'top';
+                        });
                       }
                     },
                     itemBuilder: (ctx) => [
@@ -9374,6 +9474,25 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                           ),
                         ),
                       ],
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'toggle_pagination_pos',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _mobilePaginationPos == 'top' ? Icons.smart_button_rounded : Icons.vertical_align_top_rounded,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _mobilePaginationPos == 'top'
+                                  ? '${AppLocale.t(widget.currentLocale, "pagination")}: ${AppLocale.t(widget.currentLocale, "position_fab")}'
+                                  : '${AppLocale.t(widget.currentLocale, "pagination")}: ${AppLocale.t(widget.currentLocale, "position_top")}',
+                              style: const TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -9443,6 +9562,8 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            _buildTopPaginationButton(isMobile: false),
+                            const SizedBox(width: 8),
                             PopupMenuButton<String>(
                               tooltip: selectedRecordIds.isNotEmpty
                                   ? 'Bulk Actions (${selectedRecordIds.length} selected)'
@@ -9471,6 +9592,10 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                   _executeBulkDelete(context);
                                 } else if (val == 'export') {
                                   _exportSelectedRecords(context);
+                                } else if (val == 'toggle_pagination_pos') {
+                                  setState(() {
+                                    _mobilePaginationPos = _mobilePaginationPos == 'top' ? 'fab' : 'top';
+                                  });
                                 }
                               },
                               itemBuilder: (ctx) => [
@@ -9517,6 +9642,24 @@ class _ResourceRecordListState extends State<ResourceRecordList> {
                                     ),
                                   ),
                                 ],
+                                const PopupMenuDivider(),
+                                PopupMenuItem(
+                                  value: 'toggle_pagination_pos',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _mobilePaginationPos == 'top' ? Icons.smart_button_rounded : Icons.vertical_align_top_rounded,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        _mobilePaginationPos == 'top'
+                                            ? '${AppLocale.t(widget.currentLocale, "pagination")}: ${AppLocale.t(widget.currentLocale, "position_fab")}'
+                                            : '${AppLocale.t(widget.currentLocale, "pagination")}: ${AppLocale.t(widget.currentLocale, "position_top")}',
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ],

@@ -261,4 +261,27 @@ func TestResourcePaginationAndInfiniteScrollConfig(t *testing.T) {
 	if p.GetDefaultPerPage() != 50 {
 		t.Errorf("Expected panel default perPage 50, got %d", p.GetDefaultPerPage())
 	}
+
+	// 4. Test Mobile Pagination Position defaults and overrides
+	resDefaultPos := filament.NewResource[*ResourceUser]("default_pos")
+	if resDefaultPos.GetMobilePaginationPosition() != filament.PaginationPositionTop {
+		t.Errorf("Expected default mobile pagination position 'top', got %s", resDefaultPos.GetMobilePaginationPosition())
+	}
+
+	resFabPos := filament.NewResource[*ResourceUser]("fab_pos").
+		MobilePaginationPosition(filament.PaginationPositionFAB)
+	if resFabPos.GetMobilePaginationPosition() != filament.PaginationPositionFAB {
+		t.Errorf("Expected mobile pagination position 'fab', got %s", resFabPos.GetMobilePaginationPosition())
+	}
+
+	tblPos := tables.New[*ResourceUser]().MobilePaginationPosition("fab")
+	if tblPos.GetMobilePaginationPosition() != "fab" {
+		t.Errorf("Expected table mobile pagination position 'fab', got %s", tblPos.GetMobilePaginationPosition())
+	}
+
+	pPos := filament.NewPanel("pos_panel").
+		DefaultMobilePaginationPosition(filament.PaginationPositionFAB)
+	if pPos.GetDefaultMobilePaginationPosition() != filament.PaginationPositionFAB {
+		t.Errorf("Expected panel default mobile pagination position 'fab', got %s", pPos.GetDefaultMobilePaginationPosition())
+	}
 }

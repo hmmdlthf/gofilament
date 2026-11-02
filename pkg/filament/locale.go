@@ -116,6 +116,9 @@ var RequiredTranslationKeys = []string{
 	"load_more",
 	"loading_more",
 	"all_records_loaded",
+	"pagination_position",
+	"position_top",
+	"position_fab",
 
 	// Dashboard & Metrics
 	"operational_dashboard",
@@ -258,6 +261,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"load_more":              "Load More",
 		"loading_more":           "Loading more records...",
 		"all_records_loaded":     "All records loaded",
+		"pagination_position":    "Pagination Position",
+		"position_top":           "Top Bar",
+		"position_fab":           "Floating Button",
 	},
 	"ar": {
 		"dashboard":              "لوحة التحكم",
@@ -374,6 +380,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"load_more":              "تحميل المزيد",
 		"loading_more":           "جاري تحميل المزيد من السجلات...",
 		"all_records_loaded":     "تم تحميل جميع السجلات",
+		"pagination_position":    "موضع الترقيم",
+		"position_top":           "الشريط العلوي",
+		"position_fab":           "زر عائم",
 	},
 	"es": {
 		"dashboard":              "Panel de Control",
@@ -490,6 +499,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"load_more":              "Cargar más",
 		"loading_more":           "Cargando más registros...",
 		"all_records_loaded":     "Todos los registros cargados",
+		"pagination_position":    "Posición de paginación",
+		"position_top":           "Barra superior",
+		"position_fab":           "Botón flotante",
 	},
 	"de": {
 		"dashboard":              "Übersicht",
@@ -606,6 +618,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"load_more":              "Mehr laden",
 		"loading_more":           "Weitere Datensätze werden geladen...",
 		"all_records_loaded":     "Alle Datensätze geladen",
+		"pagination_position":    "Seitennummerierungsposition",
+		"position_top":           "Obere Leiste",
+		"position_fab":           "Schwebender Button",
 	},
 	"fr": {
 		"dashboard":              "Tableau de bord",
@@ -722,6 +737,9 @@ var defaultAdminTranslations = map[string]map[string]string{
 		"load_more":              "Charger plus",
 		"loading_more":           "Chargement de plus d'enregistrements...",
 		"all_records_loaded":     "Tous les enregistrements chargés",
+		"pagination_position":    "Position de la pagination",
+		"position_top":           "Barre supérieure",
+		"position_fab":           "Bouton flottant",
 	},
 }
 

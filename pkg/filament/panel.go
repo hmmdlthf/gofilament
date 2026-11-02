@@ -91,9 +91,10 @@ type Panel struct {
 	sessionDuration     time.Duration
 	rememberMeDuration  time.Duration
 	tabsEnabled         bool
-	defaultListMode     ListMode
-	defaultPerPage      int
-	defaultPerPageOptions []int
+	defaultListMode                   ListMode
+	defaultPerPage                    int
+	defaultPerPageOptions             []int
+	defaultMobilePaginationPosition   PaginationPosition
 	authGuard           any
 	authValidator       AuthValidatorFunc
 	tokenValidator      TokenValidatorFunc
@@ -149,9 +150,10 @@ func NewPanel(id string) *Panel {
 		sessionDuration:          24 * time.Hour,
 		rememberMeDuration:       30 * 24 * time.Hour,
 		tabsEnabled:              false,
-		defaultListMode:          ListModePagination,
-		defaultPerPage:           15,
-		defaultPerPageOptions:    []int{10, 15, 25, 50, 100},
+		defaultListMode:                  ListModePagination,
+		defaultPerPage:                   15,
+		defaultPerPageOptions:            []int{10, 15, 25, 50, 100},
+		defaultMobilePaginationPosition:  PaginationPositionTop,
 	}
 
 	// Default user menu
@@ -205,6 +207,20 @@ func (p *Panel) GetDefaultPerPageOptions() []int {
 		return []int{10, 15, 25, 50, 100}
 	}
 	return p.defaultPerPageOptions
+}
+
+// DefaultMobilePaginationPosition sets the panel-wide default position of pagination controls on mobile ("top" or "fab").
+func (p *Panel) DefaultMobilePaginationPosition(pos PaginationPosition) *Panel {
+	p.defaultMobilePaginationPosition = pos
+	return p
+}
+
+// GetDefaultMobilePaginationPosition returns the panel-wide default mobile pagination position, defaulting to PaginationPositionTop ("top").
+func (p *Panel) GetDefaultMobilePaginationPosition() PaginationPosition {
+	if p.defaultMobilePaginationPosition == "" {
+		return PaginationPositionTop
+	}
+	return p.defaultMobilePaginationPosition
 }
 
 // ID returns the unique identifier of the panel.

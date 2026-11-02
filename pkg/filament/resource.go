@@ -146,9 +146,10 @@ type BaseResource[T any] struct {
 	tabsEnabled *bool
 
 	// Pagination & Infinite Scroll
-	listMode       ListMode
-	perPage        int
-	perPageOptions []int
+	listMode                 ListMode
+	perPage                  int
+	perPageOptions           []int
+	mobilePaginationPosition PaginationPosition
 }
 
 // ResourceTab represents a status or query filter tab displayed above the resource records list.
@@ -276,6 +277,20 @@ func (r *BaseResource[T]) GetPerPageOptions() []int {
 		return []int{10, 15, 25, 50, 100}
 	}
 	return r.perPageOptions
+}
+
+// MobilePaginationPosition sets the location of pagination controls on mobile / cards view (PaginationPositionTop or PaginationPositionFAB).
+func (r *BaseResource[T]) MobilePaginationPosition(pos PaginationPosition) *BaseResource[T] {
+	r.mobilePaginationPosition = pos
+	return r
+}
+
+// GetMobilePaginationPosition returns the mobile pagination position, defaulting to PaginationPositionTop ("top").
+func (r *BaseResource[T]) GetMobilePaginationPosition() PaginationPosition {
+	if r.mobilePaginationPosition == "" {
+		return PaginationPositionTop
+	}
+	return r.mobilePaginationPosition
 }
 
 func (r *BaseResource[T]) GloballySearchable(enabled ...bool) *BaseResource[T] {
