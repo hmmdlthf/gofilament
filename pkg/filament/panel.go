@@ -97,6 +97,7 @@ type Panel struct {
 	defaultMobilePaginationPosition   PaginationPosition
 	mobileBottomNavShowLabels         *bool
 	mobileBottomNavItems              []string
+	flutterLoadingConfig              flutter.LoadingConfig
 	authGuard           any
 	authValidator       AuthValidatorFunc
 	tokenValidator      TokenValidatorFunc
@@ -156,6 +157,7 @@ func NewPanel(id string) *Panel {
 		defaultPerPage:                   15,
 		defaultPerPageOptions:            []int{10, 15, 25, 50, 100},
 		defaultMobilePaginationPosition:  PaginationPositionTop,
+		flutterLoadingConfig:             flutter.DefaultLoadingConfig(),
 	}
 
 	// Default user menu
@@ -318,6 +320,52 @@ func (p *Panel) GetFlutterDistDir() string {
 		return "client/build/web"
 	}
 	return p.flutterDistDir
+}
+
+// FlutterLoading configures the visual pre-Flutter HTML/CSS loading screen.
+func (p *Panel) FlutterLoading(fn func(cfg *flutter.LoadingConfig)) *Panel {
+	if fn != nil {
+		fn(&p.flutterLoadingConfig)
+	}
+	return p
+}
+
+// FlutterLoadingStyle sets the pre-Flutter loading animation style (spinner, pulse, bar, dots, minimal).
+func (p *Panel) FlutterLoadingStyle(style flutter.LoadingStyle) *Panel {
+	p.flutterLoadingConfig.Style = style
+	return p
+}
+
+// FlutterLoadingSubtitle sets the subtext displayed under the brand title on the loading screen.
+func (p *Panel) FlutterLoadingSubtitle(subtitle string) *Panel {
+	p.flutterLoadingConfig.Subtitle = subtitle
+	return p
+}
+
+// FlutterLoadingColors configures the background, primary accent, and text colors of the loading screen.
+func (p *Panel) FlutterLoadingColors(bg, primary, text string) *Panel {
+	if bg != "" {
+		p.flutterLoadingConfig.BackgroundColor = bg
+	}
+	if primary != "" {
+		p.flutterLoadingConfig.PrimaryColor = primary
+	}
+	if text != "" {
+		p.flutterLoadingConfig.TextColor = text
+	}
+	return p
+}
+
+// GetFlutterLoadingConfig returns the loading screen configuration.
+func (p *Panel) GetFlutterLoadingConfig() flutter.LoadingConfig {
+	cfg := p.flutterLoadingConfig
+	if cfg.BrandName == "" {
+		cfg.BrandName = p.brandName
+	}
+	if cfg.LogoURL == "" && p.brandLogo != "" {
+		cfg.LogoURL = p.brandLogo
+	}
+	return cfg
 }
 
 // BrandName sets the text branding displayed in the topbar and sidebar.
@@ -1597,11 +1645,12 @@ func (p *Panel) mountFlutter(r *router.Router) {
 	indexPath := filepath.Join(distDir, "index.html")
 
 	if _, err := os.Stat(indexPath); err == nil {
-		// Serve compiled Flutter Web SPA
+		// Serve compiled Flutter Web SPA with customizable pre-loader
 		flutter.ServeWeb(r, flutter.Options{
-			MountPath:   p.path,
-			DistDir:     distDir,
-			FallbackSPA: true,
+			MountPath:     p.path,
+			DistDir:       distDir,
+			FallbackSPA:   true,
+			LoadingConfig: p.GetFlutterLoadingConfig(),
 		})
 		return
 	}
