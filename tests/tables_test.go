@@ -170,3 +170,58 @@ func TestRefinedFilterAndColumnAutoResolve(t *testing.T) {
 		t.Errorf("expected refined filter for type, got: %+v", filters[1])
 	}
 }
+
+func TestTableSelectableAndDefaultColumns(t *testing.T) {
+	tbl := tables.New[*TestUser]().
+		Columns(
+			tables.TextColumn[*TestUser]("id").Sortable(),
+			tables.TextColumn[*TestUser]("name").Sortable().Selectable(),
+			tables.TextColumn[*TestUser]("email").Selectable(),
+			tables.TextColumn[*TestUser]("role").Selectable().Default(false), // selectable, but not default
+			tables.ToggleColumn[*TestUser]("is_active").Selectable(),
+			tables.TextColumn[*TestUser]("created_at").Selectable().Default(false),
+		).
+		DefaultColumns("id", "name", "email", "is_active").
+		SelectableColumns("name", "email", "role", "is_active", "created_at")
+
+	defCols := tbl.GetDefaultColumns()
+	if len(defCols) != 4 || defCols[0] != "id" || defCols[1] != "name" {
+		t.Errorf("unexpected default columns: %+v", defCols)
+	}
+
+	selCols := tbl.GetSelectableColumns()
+	if len(selCols) != 5 {
+		t.Errorf("expected 5 selectable columns, got %d: %+v", len(selCols), selCols)
+	}
+
+	dtos := tbl.GetColumnDTOs()
+	if len(dtos) != 6 {
+		t.Fatalf("expected 6 column DTOs, got %d", len(dtos))
+	}
+
+	for _, dto := range dtos {
+		switch dto.Name {
+		case "id":
+			if !dto.IsDefault {
+				t.Errorf("expected id to be default")
+			}
+			if dto.Selectable {
+				t.Errorf("expected id not to be in selectable columns (it is fixed)")
+			}
+		case "role":
+			if dto.IsDefault {
+				t.Errorf("expected role not to be default")
+			}
+			if !dto.Selectable {
+				t.Errorf("expected role to be selectable")
+			}
+		case "name":
+			if !dto.IsDefault {
+				t.Errorf("expected name to be default")
+			}
+			if !dto.Selectable {
+				t.Errorf("expected name to be selectable")
+			}
+		}
+	}
+}

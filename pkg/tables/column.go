@@ -11,6 +11,7 @@ import (
 type BaseColumn[T any] struct {
 	name                   string
 	label                  string
+	columnType             string // text, badge, icon, image, toggle, color
 	sortable               bool
 	searchable             bool
 	weight                 string // bold, medium, normal
@@ -72,6 +73,9 @@ func (c *BaseColumn[T]) Editable(e ...bool) *BaseColumn[T] {
 
 func (c *BaseColumn[T]) Toggleable(t ...bool) *BaseColumn[T] {
 	c.toggleable = len(t) == 0 || t[0]
+	if len(t) > 1 {
+		c.toggledHiddenByDefault = t[1]
+	}
 	return c
 }
 
@@ -83,6 +87,30 @@ func (c *BaseColumn[T]) ToggledHiddenByDefault(h ...bool) *BaseColumn[T] {
 	return c
 }
 
+// Selectable marks whether a column can be selected / toggled by the user in the UI.
+// If an optional second bool is provided, it configures whether the column is hidden by default.
+func (c *BaseColumn[T]) Selectable(s ...bool) *BaseColumn[T] {
+	c.toggleable = len(s) == 0 || s[0]
+	if len(s) > 1 {
+		c.toggledHiddenByDefault = s[1]
+	}
+	return c
+}
+
+// Default marks whether a column is displayed by default (true) or hidden by default (false).
+// Calling Default(false) marks it as selectable and hidden by default.
+func (c *BaseColumn[T]) Default(d ...bool) *BaseColumn[T] {
+	isDef := len(d) == 0 || d[0]
+	c.toggledHiddenByDefault = !isDef
+	c.toggleable = true
+	return c
+}
+
+// HiddenByDefault marks the column as hidden by default (alias for ToggledHiddenByDefault).
+func (c *BaseColumn[T]) HiddenByDefault(h ...bool) *BaseColumn[T] {
+	return c.ToggledHiddenByDefault(h...)
+}
+
 func (c *BaseColumn[T]) IsEditable() bool {
 	return c.editable
 }
@@ -91,8 +119,40 @@ func (c *BaseColumn[T]) IsToggleable() bool {
 	return c.toggleable
 }
 
+func (c *BaseColumn[T]) IsSelectable() bool {
+	return c.toggleable
+}
+
 func (c *BaseColumn[T]) IsToggledHiddenByDefault() bool {
 	return c.toggledHiddenByDefault
+}
+
+func (c *BaseColumn[T]) IsDefault() bool {
+	return !c.toggledHiddenByDefault
+}
+
+func (c *BaseColumn[T]) IsSortable() bool {
+	return c.sortable
+}
+
+func (c *BaseColumn[T]) IsSearchable() bool {
+	return c.searchable
+}
+
+func (c *BaseColumn[T]) GetAlign() string {
+	return c.align
+}
+
+func (c *BaseColumn[T]) ColumnType(ct string) *BaseColumn[T] {
+	c.columnType = ct
+	return c
+}
+
+func (c *BaseColumn[T]) GetColumnType() string {
+	if c.columnType != "" {
+		return c.columnType
+	}
+	return "text"
 }
 
 func (c *BaseColumn[T]) Filterable(enabled ...bool) *BaseColumn[T] {
@@ -250,6 +310,21 @@ func (c *TextColumnDef[T]) ToggledHiddenByDefault(h ...bool) *TextColumnDef[T] {
 	return c
 }
 
+func (c *TextColumnDef[T]) Selectable(s ...bool) *TextColumnDef[T] {
+	c.BaseColumn.Selectable(s...)
+	return c
+}
+
+func (c *TextColumnDef[T]) Default(d ...bool) *TextColumnDef[T] {
+	c.BaseColumn.Default(d...)
+	return c
+}
+
+func (c *TextColumnDef[T]) HiddenByDefault(h ...bool) *TextColumnDef[T] {
+	c.BaseColumn.HiddenByDefault(h...)
+	return c
+}
+
 func (c *TextColumnDef[T]) RenderCell(record T, rawValue any) string {
 	val := ""
 	if c.valueFunc != nil {
@@ -321,13 +396,38 @@ type BadgeColumnDef[T any] struct {
 
 func BadgeColumn[T any](name string) *BadgeColumnDef[T] {
 	return &BadgeColumnDef[T]{
-		BaseColumn: BaseColumn[T]{name: name},
+		BaseColumn: BaseColumn[T]{name: name, columnType: "badge"},
 		colors:     make(map[string]string),
 	}
 }
 
 func (c *BadgeColumnDef[T]) Label(l string) *BadgeColumnDef[T] {
 	c.BaseColumn.Label(l)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) Toggleable(t ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.Toggleable(t...)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) ToggledHiddenByDefault(h ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) Selectable(s ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.Selectable(s...)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) Default(d ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.Default(d...)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) HiddenByDefault(h ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.HiddenByDefault(h...)
 	return c
 }
 
@@ -383,13 +483,38 @@ type ImageColumnDef[T any] struct {
 
 func ImageColumn[T any](name string) *ImageColumnDef[T] {
 	return &ImageColumnDef[T]{
-		BaseColumn: BaseColumn[T]{name: name},
+		BaseColumn: BaseColumn[T]{name: name, columnType: "image"},
 		size:       "2.25rem",
 	}
 }
 
 func (c *ImageColumnDef[T]) Label(l string) *ImageColumnDef[T] {
 	c.BaseColumn.Label(l)
+	return c
+}
+
+func (c *ImageColumnDef[T]) Toggleable(t ...bool) *ImageColumnDef[T] {
+	c.BaseColumn.Toggleable(t...)
+	return c
+}
+
+func (c *ImageColumnDef[T]) ToggledHiddenByDefault(h ...bool) *ImageColumnDef[T] {
+	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
+func (c *ImageColumnDef[T]) Selectable(s ...bool) *ImageColumnDef[T] {
+	c.BaseColumn.Selectable(s...)
+	return c
+}
+
+func (c *ImageColumnDef[T]) Default(d ...bool) *ImageColumnDef[T] {
+	c.BaseColumn.Default(d...)
+	return c
+}
+
+func (c *ImageColumnDef[T]) HiddenByDefault(h ...bool) *ImageColumnDef[T] {
+	c.BaseColumn.HiddenByDefault(h...)
 	return c
 }
 
@@ -427,12 +552,37 @@ type ToggleColumnDef[T any] struct {
 
 func ToggleColumn[T any](name string) *ToggleColumnDef[T] {
 	return &ToggleColumnDef[T]{
-		BaseColumn: BaseColumn[T]{name: name},
+		BaseColumn: BaseColumn[T]{name: name, columnType: "toggle"},
 	}
 }
 
 func (c *ToggleColumnDef[T]) Label(l string) *ToggleColumnDef[T] {
 	c.BaseColumn.Label(l)
+	return c
+}
+
+func (c *ToggleColumnDef[T]) Toggleable(t ...bool) *ToggleColumnDef[T] {
+	c.BaseColumn.Toggleable(t...)
+	return c
+}
+
+func (c *ToggleColumnDef[T]) ToggledHiddenByDefault(h ...bool) *ToggleColumnDef[T] {
+	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
+func (c *ToggleColumnDef[T]) Selectable(s ...bool) *ToggleColumnDef[T] {
+	c.BaseColumn.Selectable(s...)
+	return c
+}
+
+func (c *ToggleColumnDef[T]) Default(d ...bool) *ToggleColumnDef[T] {
+	c.BaseColumn.Default(d...)
+	return c
+}
+
+func (c *ToggleColumnDef[T]) HiddenByDefault(h ...bool) *ToggleColumnDef[T] {
+	c.BaseColumn.HiddenByDefault(h...)
 	return c
 }
 
@@ -469,4 +619,59 @@ func (c *ToggleColumnDef[T]) RenderCellWithContext(record T, recordID, basePath 
         onclick="const cur = this.getAttribute('aria-checked') === 'true'; const next = !cur; this.setAttribute('aria-checked', next ? 'true' : 'false'); this.style.backgroundColor = next ? 'var(--primary-600, #4f46e5)' : 'var(--gray-300)'; this.firstElementChild.style.transform = next ? 'translateX(1.125rem)' : 'translateX(0.125rem)'; Filament.updateCell('%s/cell', '%s', '%s', next, this);">
   <span style="pointer-events: none; display: inline-block; height: 1.125rem; width: 1.125rem; transform: %s; border-radius: 9999px; background-color: white; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: transform 0.2s;"></span>
 </button>`, checkedAttr, bgColor, basePath, recordID, c.name, transform)
+}
+
+// ----------------------------------------------------
+// ColumnDTO & Metadata Serialization
+// ----------------------------------------------------
+
+// ColumnDTO represents column metadata for JSON API schema exchange.
+type ColumnDTO struct {
+	Name                   string `json:"name"`
+	Label                  string `json:"label"`
+	Type                   string `json:"type,omitempty"`
+	Sortable               bool   `json:"sortable"`
+	Searchable             bool   `json:"searchable"`
+	Toggleable             bool   `json:"toggleable"`
+	Selectable             bool   `json:"selectable"`
+	IsDefault              bool   `json:"is_default"`
+	ToggledHiddenByDefault bool   `json:"toggled_hidden_by_default"`
+	Align                  string `json:"align,omitempty"`
+}
+
+// ColumnToDTO transforms any ColumnRenderer into a ColumnDTO.
+func ColumnToDTO[T any](col ColumnRenderer[T]) ColumnDTO {
+	name := col.GetName()
+	label := col.FormatLabel()
+	dto := ColumnDTO{
+		Name:       name,
+		Label:      label,
+		IsDefault:  true,
+		Selectable: true,
+		Toggleable: true,
+		Type:       "text",
+	}
+
+	if cd, ok := any(col).(interface{ IsSortable() bool }); ok {
+		dto.Sortable = cd.IsSortable()
+	}
+	if cd, ok := any(col).(interface{ IsSearchable() bool }); ok {
+		dto.Searchable = cd.IsSearchable()
+	}
+	if cd, ok := any(col).(interface{ IsToggleable() bool }); ok {
+		dto.Toggleable = cd.IsToggleable()
+		dto.Selectable = dto.Toggleable
+	}
+	if cd, ok := any(col).(interface{ IsToggledHiddenByDefault() bool }); ok {
+		dto.ToggledHiddenByDefault = cd.IsToggledHiddenByDefault()
+		dto.IsDefault = !dto.ToggledHiddenByDefault
+	}
+	if cd, ok := any(col).(interface{ GetColumnType() string }); ok {
+		dto.Type = cd.GetColumnType()
+	}
+	if cd, ok := any(col).(interface{ GetAlign() string }); ok {
+		dto.Align = cd.GetAlign()
+	}
+
+	return dto
 }

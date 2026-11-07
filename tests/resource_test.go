@@ -285,3 +285,52 @@ func TestResourcePaginationAndInfiniteScrollConfig(t *testing.T) {
 		t.Errorf("Expected panel default mobile pagination position 'fab', got %s", pPos.GetDefaultMobilePaginationPosition())
 	}
 }
+
+func TestResourceDefaultAndSelectableColumnsSchema(t *testing.T) {
+	res := filament.NewResource[*ResourceUser]("users").
+		ModelName("User").
+		Table(func(tbl *tables.Table[*ResourceUser]) *tables.Table[*ResourceUser] {
+			return tbl.Columns(
+				tables.TextColumn[*ResourceUser]("id").Sortable(),
+				tables.TextColumn[*ResourceUser]("name").Searchable().Sortable(),
+				tables.TextColumn[*ResourceUser]("email").Searchable(),
+				tables.TextColumn[*ResourceUser]("phone").Selectable().Default(false),
+				tables.TextColumn[*ResourceUser]("bio").Selectable().Default(false),
+			).
+				DefaultColumns("id", "name", "email").
+				SelectableColumns("name", "email", "phone", "bio")
+		})
+
+	cols := res.GetColumns()
+	if len(cols) != 5 {
+		t.Fatalf("expected 5 columns, got %d", len(cols))
+	}
+
+	defCols := res.GetDefaultColumns()
+	if len(defCols) != 3 || defCols[0] != "id" || defCols[1] != "name" || defCols[2] != "email" {
+		t.Errorf("unexpected default columns: %v", defCols)
+	}
+
+	selCols := res.GetSelectableColumns()
+	if len(selCols) != 4 || selCols[0] != "name" || selCols[1] != "email" || selCols[2] != "phone" || selCols[3] != "bio" {
+		t.Errorf("unexpected selectable columns: %v", selCols)
+	}
+
+	// Verify column properties
+	var phoneCol *tables.ColumnDTO
+	for i := range cols {
+		if cols[i].Name == "phone" {
+			phoneCol = &cols[i]
+			break
+		}
+	}
+	if phoneCol == nil {
+		t.Fatalf("phone column not found in ColumnDTOs")
+	}
+	if !phoneCol.Selectable {
+		t.Errorf("expected phone column to be selectable")
+	}
+	if phoneCol.IsDefault {
+		t.Errorf("expected phone column IsDefault to be false")
+	}
+}

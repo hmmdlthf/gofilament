@@ -49,6 +49,8 @@ type Table[T any] struct {
 	listMode                 string
 	perPageOptions           []int
 	mobilePaginationPosition string
+	defaultColumns           []string
+	selectableColumns        []string
 }
 
 // New creates an empty Table instance.
@@ -154,6 +156,85 @@ func (t *Table[T]) Toggleable(enabled ...bool) *Table[T] {
 // IsToggleable returns whether column toggling is enabled.
 func (t *Table[T]) IsToggleable() bool {
 	return t.toggleable
+}
+
+// DefaultColumns configures which columns are visible by default.
+func (t *Table[T]) DefaultColumns(cols ...string) *Table[T] {
+	t.defaultColumns = cols
+	return t
+}
+
+// GetDefaultColumns returns the column names visible by default.
+func (t *Table[T]) GetDefaultColumns() []string {
+	if len(t.defaultColumns) > 0 {
+		return t.defaultColumns
+	}
+	var defs []string
+	for _, col := range t.columns {
+		if ct, ok := any(col).(interface{ IsToggledHiddenByDefault() bool }); ok && ct.IsToggledHiddenByDefault() {
+			continue
+		}
+		defs = append(defs, col.GetName())
+	}
+	return defs
+}
+
+// SelectableColumns configures which columns are available for the user to select / toggle.
+func (t *Table[T]) SelectableColumns(cols ...string) *Table[T] {
+	t.selectableColumns = cols
+	t.toggleable = true
+	return t
+}
+
+// GetSelectableColumns returns the list of column names that can be toggled by the user.
+func (t *Table[T]) GetSelectableColumns() []string {
+	if len(t.selectableColumns) > 0 {
+		return t.selectableColumns
+	}
+	var sels []string
+	for _, col := range t.columns {
+		if ct, ok := any(col).(interface{ IsToggleable() bool }); ok {
+			if ct.IsToggleable() {
+				sels = append(sels, col.GetName())
+			}
+		}
+	}
+	if len(sels) == 0 && len(t.columns) > 0 {
+		for _, col := range t.columns {
+			sels = append(sels, col.GetName())
+		}
+	}
+	return sels
+}
+
+// GetColumnDTOs returns the ColumnDTO representation of all columns in the table.
+func (t *Table[T]) GetColumnDTOs() []ColumnDTO {
+	dtos := make([]ColumnDTO, 0, len(t.columns))
+	defaultSet := make(map[string]bool)
+	for _, d := range t.GetDefaultColumns() {
+		defaultSet[d] = true
+	}
+	selectableSet := make(map[string]bool)
+	for _, s := range t.GetSelectableColumns() {
+		selectableSet[s] = true
+	}
+
+	for _, col := range t.columns {
+		dto := ColumnToDTO(col)
+		if len(t.defaultColumns) > 0 {
+			dto.IsDefault = defaultSet[dto.Name]
+			dto.ToggledHiddenByDefault = !dto.IsDefault
+		}
+		if len(t.selectableColumns) > 0 {
+			dto.Selectable = selectableSet[dto.Name]
+			dto.Toggleable = dto.Selectable
+		} else if !dto.Selectable && len(t.columns) > 0 {
+			dto.Selectable = true
+			dto.Toggleable = true
+		}
+		dtos = append(dtos, dto)
+	}
+	return dtos
 }
 
 // Reorderable enables drag-and-drop row reordering.
@@ -402,12 +483,13 @@ func (t *Table[T]) Render(basePath string) string {
 	alpineData := ""
 	if t.toggleable {
 		var colPairs []string
+		defSet := make(map[string]bool)
+		for _, d := range t.GetDefaultColumns() {
+			defSet[d] = true
+		}
 		for _, col := range t.columns {
-			hidden := false
-			if ct, ok := col.(ColumnToggleable); ok && ct.IsToggledHiddenByDefault() {
-				hidden = true
-			}
-			colPairs = append(colPairs, fmt.Sprintf(`"%s": %t`, col.GetName(), !hidden))
+			visible := defSet[col.GetName()]
+			colPairs = append(colPairs, fmt.Sprintf(`"%s": %t`, col.GetName(), visible))
 		}
 		initialJSON := fmt.Sprintf("{%s}", strings.Join(colPairs, ", "))
 		alpineData = fmt.Sprintf(`x-data="{
@@ -460,7 +542,14 @@ func (t *Table[T]) Render(basePath string) string {
 		sb.WriteString(`<span>Columns</span></button>`)
 		sb.WriteString(`<div x-show="open" @click.outside="open = false" style="display: none; position: absolute; right: 0; margin-top: 0.375rem; width: 14rem; background: white; border: 1px solid var(--gray-200); border-radius: 0.5rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); padding: 0.5rem; z-index: 50;" :style="open ? 'display: block;' : 'display: none;'">`)
 		sb.WriteString(`<div style="font-size: 0.75rem; font-weight: 600; color: var(--gray-500); padding: 0.25rem 0.5rem; text-transform: uppercase;">Toggle Columns</div>`)
+		selSet := make(map[string]bool)
+		for _, s := range t.GetSelectableColumns() {
+			selSet[s] = true
+		}
 		for _, col := range t.columns {
+			if !selSet[col.GetName()] {
+				continue
+			}
 			isTogg := true
 			if ct, ok := col.(ColumnToggleable); ok && !ct.IsToggleable() {
 				isTogg = false

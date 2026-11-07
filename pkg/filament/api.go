@@ -173,15 +173,18 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		}
 
 		type resourceDTO struct {
-			Slug            string              `json:"slug"`
-			ModelName       string              `json:"model_name"`
-			PluralModelName string              `json:"plural_model_name"`
-			NavIcon         string              `json:"icon"`
-			NavGroup        string              `json:"group"`
-			Relations       []relationMetaDTO   `json:"relations,omitempty"`
-			Filters         []tables.FilterDTO  `json:"filters,omitempty"`
-			Tabs            []*ResourceTab      `json:"tabs,omitempty"`
-			TabsEnabled     bool                `json:"tabs_enabled"`
+			Slug                     string              `json:"slug"`
+			ModelName                string              `json:"model_name"`
+			PluralModelName          string              `json:"plural_model_name"`
+			NavIcon                  string              `json:"icon"`
+			NavGroup                 string              `json:"group"`
+			Relations                []relationMetaDTO   `json:"relations,omitempty"`
+			Filters                  []tables.FilterDTO  `json:"filters,omitempty"`
+			Columns                  []tables.ColumnDTO  `json:"columns,omitempty"`
+			DefaultColumns           []string            `json:"default_columns,omitempty"`
+			SelectableColumns        []string            `json:"selectable_columns,omitempty"`
+			Tabs                     []*ResourceTab      `json:"tabs,omitempty"`
+			TabsEnabled              bool                `json:"tabs_enabled"`
 			ListMode                 string              `json:"list_mode"`
 			PerPage                  int                 `json:"per_page"`
 			PerPageOptions           []int               `json:"per_page_options,omitempty"`
@@ -203,6 +206,18 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 				var filtersDTO []tables.FilterDTO
 				if hf, ok := res.(interface{ GetFilters() []tables.FilterDTO }); ok {
 					filtersDTO = hf.GetFilters()
+				}
+				var columnsDTO []tables.ColumnDTO
+				if hc, ok := res.(interface{ GetColumns() []tables.ColumnDTO }); ok {
+					columnsDTO = hc.GetColumns()
+				}
+				var defaultCols []string
+				if hdc, ok := res.(interface{ GetDefaultColumns() []string }); ok {
+					defaultCols = hdc.GetDefaultColumns()
+				}
+				var selectableCols []string
+				if hsc, ok := res.(interface{ GetSelectableColumns() []string }); ok {
+					selectableCols = hsc.GetSelectableColumns()
 				}
 				tabsEnabled := p.IsTabsEnabled() || res.IsTabsEnabled()
 				var tabsDTO []*ResourceTab = res.GetTabs()
@@ -242,6 +257,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					NavGroup:                 item.Group,
 					Relations:                relsDTO,
 					Filters:                  filtersDTO,
+					Columns:                  columnsDTO,
+					DefaultColumns:           defaultCols,
+					SelectableColumns:        selectableCols,
 					Tabs:                     tabsDTO,
 					TabsEnabled:              tabsEnabled,
 					ListMode:                 listMode,

@@ -98,6 +98,8 @@ type BaseResource[T any] struct {
 	navBadge        func(ctx *Context) string
 	formBuilder     func(form *forms.Form) *forms.Form
 	tableBuilder    func(table *tables.Table[T]) *tables.Table[T]
+	defaultColumns  []string
+	selectableColumns []string
 	infolistBuilder func(infolist *infolists.Infolist) *infolists.Infolist
 	idExtractor     func(record T) string
 	relations       []RelationManager
@@ -630,6 +632,60 @@ func (r *BaseResource[T]) GetFilters() []tables.FilterDTO {
 		dtos = append(dtos, f.ToDTO())
 	}
 	return dtos
+}
+
+// DefaultColumns configures which columns are shown by default for this resource.
+func (r *BaseResource[T]) DefaultColumns(cols ...string) *BaseResource[T] {
+	r.defaultColumns = cols
+	return r
+}
+
+// SelectableColumns configures which columns are available for selection in the table UI.
+func (r *BaseResource[T]) SelectableColumns(cols ...string) *BaseResource[T] {
+	r.selectableColumns = cols
+	return r
+}
+
+// GetColumns returns the ColumnDTO metadata for this resource's table.
+func (r *BaseResource[T]) GetColumns() []tables.ColumnDTO {
+	if r.tableBuilder == nil {
+		return nil
+	}
+	tbl := tables.New[T]()
+	tbl = r.tableBuilder(tbl)
+	if len(r.defaultColumns) > 0 {
+		tbl.DefaultColumns(r.defaultColumns...)
+	}
+	if len(r.selectableColumns) > 0 {
+		tbl.SelectableColumns(r.selectableColumns...)
+	}
+	return tbl.GetColumnDTOs()
+}
+
+// GetDefaultColumns returns the default column names for this resource.
+func (r *BaseResource[T]) GetDefaultColumns() []string {
+	if len(r.defaultColumns) > 0 {
+		return r.defaultColumns
+	}
+	if r.tableBuilder == nil {
+		return nil
+	}
+	tbl := tables.New[T]()
+	tbl = r.tableBuilder(tbl)
+	return tbl.GetDefaultColumns()
+}
+
+// GetSelectableColumns returns the selectable column names for this resource.
+func (r *BaseResource[T]) GetSelectableColumns() []string {
+	if len(r.selectableColumns) > 0 {
+		return r.selectableColumns
+	}
+	if r.tableBuilder == nil {
+		return nil
+	}
+	tbl := tables.New[T]()
+	tbl = r.tableBuilder(tbl)
+	return tbl.GetSelectableColumns()
 }
 
 // Handlers binding

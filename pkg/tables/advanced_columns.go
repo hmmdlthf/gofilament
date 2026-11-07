@@ -18,7 +18,7 @@ type IconColumnDef[T any] struct {
 
 func IconColumn[T any](name string) *IconColumnDef[T] {
 	return &IconColumnDef[T]{
-		BaseColumn: BaseColumn[T]{name: name},
+		BaseColumn: BaseColumn[T]{name: name, columnType: "icon"},
 		icons:      make(map[any]string),
 		colors:     make(map[any]string),
 	}
@@ -51,6 +51,21 @@ func (c *IconColumnDef[T]) Toggleable(t ...bool) *IconColumnDef[T] {
 
 func (c *IconColumnDef[T]) ToggledHiddenByDefault(h ...bool) *IconColumnDef[T] {
 	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
+func (c *IconColumnDef[T]) Selectable(s ...bool) *IconColumnDef[T] {
+	c.BaseColumn.Selectable(s...)
+	return c
+}
+
+func (c *IconColumnDef[T]) Default(d ...bool) *IconColumnDef[T] {
+	c.BaseColumn.Default(d...)
+	return c
+}
+
+func (c *IconColumnDef[T]) HiddenByDefault(h ...bool) *IconColumnDef[T] {
+	c.BaseColumn.HiddenByDefault(h...)
 	return c
 }
 
@@ -101,7 +116,7 @@ type ColorColumnDef[T any] struct {
 
 func ColorColumn[T any](name string) *ColorColumnDef[T] {
 	return &ColorColumnDef[T]{
-		BaseColumn: BaseColumn[T]{name: name},
+		BaseColumn: BaseColumn[T]{name: name, columnType: "color"},
 	}
 }
 
@@ -127,6 +142,21 @@ func (c *ColorColumnDef[T]) Toggleable(t ...bool) *ColorColumnDef[T] {
 
 func (c *ColorColumnDef[T]) ToggledHiddenByDefault(h ...bool) *ColorColumnDef[T] {
 	c.BaseColumn.ToggledHiddenByDefault(h...)
+	return c
+}
+
+func (c *ColorColumnDef[T]) Selectable(s ...bool) *ColorColumnDef[T] {
+	c.BaseColumn.Selectable(s...)
+	return c
+}
+
+func (c *ColorColumnDef[T]) Default(d ...bool) *ColorColumnDef[T] {
+	c.BaseColumn.Default(d...)
+	return c
+}
+
+func (c *ColorColumnDef[T]) HiddenByDefault(h ...bool) *ColorColumnDef[T] {
+	c.BaseColumn.HiddenByDefault(h...)
 	return c
 }
 
