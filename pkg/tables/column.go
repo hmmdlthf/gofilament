@@ -21,6 +21,7 @@ type BaseColumn[T any] struct {
 	editable               bool
 	toggleable             bool
 	toggledHiddenByDefault bool
+	advancedSearchable     bool
 	filterable             bool
 	refinedFilter          bool
 	filterOptions          map[string]string
@@ -44,6 +45,15 @@ func (c *BaseColumn[T]) Sortable(s ...bool) *BaseColumn[T] {
 func (c *BaseColumn[T]) Searchable(s ...bool) *BaseColumn[T] {
 	c.searchable = len(s) == 0 || s[0]
 	return c
+}
+
+func (c *BaseColumn[T]) AdvancedSearchable(s ...bool) *BaseColumn[T] {
+	c.advancedSearchable = len(s) == 0 || s[0]
+	return c
+}
+
+func (c *BaseColumn[T]) IsAdvancedSearchable() bool {
+	return c.advancedSearchable
 }
 
 func (c *BaseColumn[T]) Weight(w string) *BaseColumn[T] {
@@ -240,6 +250,11 @@ func (c *TextColumnDef[T]) Searchable(s ...bool) *TextColumnDef[T] {
 	return c
 }
 
+func (c *TextColumnDef[T]) AdvancedSearchable(s ...bool) *TextColumnDef[T] {
+	c.BaseColumn.AdvancedSearchable(s...)
+	return c
+}
+
 func (c *TextColumnDef[T]) Weight(w string) *TextColumnDef[T] {
 	c.BaseColumn.Weight(w)
 	return c
@@ -403,6 +418,16 @@ func BadgeColumn[T any](name string) *BadgeColumnDef[T] {
 
 func (c *BadgeColumnDef[T]) Label(l string) *BadgeColumnDef[T] {
 	c.BaseColumn.Label(l)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) Searchable(s ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.Searchable(s...)
+	return c
+}
+
+func (c *BadgeColumnDef[T]) AdvancedSearchable(s ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.AdvancedSearchable(s...)
 	return c
 }
 
@@ -632,6 +657,7 @@ type ColumnDTO struct {
 	Type                   string `json:"type,omitempty"`
 	Sortable               bool   `json:"sortable"`
 	Searchable             bool   `json:"searchable"`
+	AdvancedSearchable     bool   `json:"advanced_searchable"`
 	Toggleable             bool   `json:"toggleable"`
 	Selectable             bool   `json:"selectable"`
 	IsDefault              bool   `json:"is_default"`
@@ -657,6 +683,9 @@ func ColumnToDTO[T any](col ColumnRenderer[T]) ColumnDTO {
 	}
 	if cd, ok := any(col).(interface{ IsSearchable() bool }); ok {
 		dto.Searchable = cd.IsSearchable()
+	}
+	if cd, ok := any(col).(interface{ IsAdvancedSearchable() bool }); ok {
+		dto.AdvancedSearchable = cd.IsAdvancedSearchable()
 	}
 	if cd, ok := any(col).(interface{ IsToggleable() bool }); ok {
 		dto.Toggleable = cd.IsToggleable()

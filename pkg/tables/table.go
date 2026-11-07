@@ -51,6 +51,8 @@ type Table[T any] struct {
 	mobilePaginationPosition string
 	defaultColumns           []string
 	selectableColumns        []string
+	advancedSearchableColumns []string
+	advancedSearchEnabled     bool
 }
 
 // New creates an empty Table instance.
@@ -207,6 +209,32 @@ func (t *Table[T]) GetSelectableColumns() []string {
 	return sels
 }
 
+// AdvancedSearchable configures which columns are available for user-driven advanced search.
+func (t *Table[T]) AdvancedSearchable(cols ...string) *Table[T] {
+	t.advancedSearchableColumns = cols
+	t.advancedSearchEnabled = len(cols) > 0
+	return t
+}
+
+// GetAdvancedSearchableColumns returns the list of column names enabled for advanced search.
+func (t *Table[T]) GetAdvancedSearchableColumns() []string {
+	if len(t.advancedSearchableColumns) > 0 {
+		return t.advancedSearchableColumns
+	}
+	var advs []string
+	for _, col := range t.columns {
+		if ca, ok := any(col).(interface{ IsAdvancedSearchable() bool }); ok && ca.IsAdvancedSearchable() {
+			advs = append(advs, col.GetName())
+		}
+	}
+	return advs
+}
+
+// IsAdvancedSearchEnabled reports whether advanced search is active on this table.
+func (t *Table[T]) IsAdvancedSearchEnabled() bool {
+	return t.advancedSearchEnabled || len(t.GetAdvancedSearchableColumns()) > 0
+}
+
 // GetColumnDTOs returns the ColumnDTO representation of all columns in the table.
 func (t *Table[T]) GetColumnDTOs() []ColumnDTO {
 	dtos := make([]ColumnDTO, 0, len(t.columns))
@@ -217,6 +245,10 @@ func (t *Table[T]) GetColumnDTOs() []ColumnDTO {
 	selectableSet := make(map[string]bool)
 	for _, s := range t.GetSelectableColumns() {
 		selectableSet[s] = true
+	}
+	advSearchSet := make(map[string]bool)
+	for _, a := range t.GetAdvancedSearchableColumns() {
+		advSearchSet[a] = true
 	}
 
 	for _, col := range t.columns {
@@ -231,6 +263,9 @@ func (t *Table[T]) GetColumnDTOs() []ColumnDTO {
 		} else if !dto.Selectable && len(t.columns) > 0 {
 			dto.Selectable = true
 			dto.Toggleable = true
+		}
+		if len(advSearchSet) > 0 {
+			dto.AdvancedSearchable = advSearchSet[dto.Name]
 		}
 		dtos = append(dtos, dto)
 	}

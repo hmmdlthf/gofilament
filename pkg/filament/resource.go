@@ -98,8 +98,9 @@ type BaseResource[T any] struct {
 	navBadge        func(ctx *Context) string
 	formBuilder     func(form *forms.Form) *forms.Form
 	tableBuilder    func(table *tables.Table[T]) *tables.Table[T]
-	defaultColumns  []string
-	selectableColumns []string
+	defaultColumns            []string
+	selectableColumns         []string
+	advancedSearchableColumns []string
 	infolistBuilder func(infolist *infolists.Infolist) *infolists.Infolist
 	idExtractor     func(record T) string
 	relations       []RelationManager
@@ -646,6 +647,17 @@ func (r *BaseResource[T]) SelectableColumns(cols ...string) *BaseResource[T] {
 	return r
 }
 
+// AdvancedSearchableColumns configures which columns are enabled for user-driven advanced search.
+func (r *BaseResource[T]) AdvancedSearchableColumns(cols ...string) *BaseResource[T] {
+	r.advancedSearchableColumns = cols
+	return r
+}
+
+// AdvancedSearch is a convenient alias for AdvancedSearchableColumns.
+func (r *BaseResource[T]) AdvancedSearch(cols ...string) *BaseResource[T] {
+	return r.AdvancedSearchableColumns(cols...)
+}
+
 // GetColumns returns the ColumnDTO metadata for this resource's table.
 func (r *BaseResource[T]) GetColumns() []tables.ColumnDTO {
 	if r.tableBuilder == nil {
@@ -658,6 +670,9 @@ func (r *BaseResource[T]) GetColumns() []tables.ColumnDTO {
 	}
 	if len(r.selectableColumns) > 0 {
 		tbl.SelectableColumns(r.selectableColumns...)
+	}
+	if len(r.advancedSearchableColumns) > 0 {
+		tbl.AdvancedSearchable(r.advancedSearchableColumns...)
 	}
 	return tbl.GetColumnDTOs()
 }
@@ -686,6 +701,24 @@ func (r *BaseResource[T]) GetSelectableColumns() []string {
 	tbl := tables.New[T]()
 	tbl = r.tableBuilder(tbl)
 	return tbl.GetSelectableColumns()
+}
+
+// GetAdvancedSearchableColumns returns the advanced searchable column names for this resource.
+func (r *BaseResource[T]) GetAdvancedSearchableColumns() []string {
+	if len(r.advancedSearchableColumns) > 0 {
+		return r.advancedSearchableColumns
+	}
+	if r.tableBuilder == nil {
+		return nil
+	}
+	tbl := tables.New[T]()
+	tbl = r.tableBuilder(tbl)
+	return tbl.GetAdvancedSearchableColumns()
+}
+
+// IsAdvancedSearchEnabled reports whether advanced search is active on this resource.
+func (r *BaseResource[T]) IsAdvancedSearchEnabled() bool {
+	return len(r.GetAdvancedSearchableColumns()) > 0
 }
 
 // Handlers binding

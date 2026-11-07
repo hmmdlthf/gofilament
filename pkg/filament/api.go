@@ -185,6 +185,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			Columns                  []tables.ColumnDTO  `json:"columns,omitempty"`
 			DefaultColumns           []string            `json:"default_columns,omitempty"`
 			SelectableColumns        []string            `json:"selectable_columns,omitempty"`
+			AdvancedSearchEnabled    bool                `json:"advanced_search_enabled"`
+			AdvancedSearchColumns    []string            `json:"advanced_search_columns,omitempty"`
 			Tabs                     []*ResourceTab      `json:"tabs,omitempty"`
 			TabsEnabled              bool                `json:"tabs_enabled"`
 			ListMode                 string              `json:"list_mode"`
@@ -220,6 +222,15 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 				var selectableCols []string
 				if hsc, ok := res.(interface{ GetSelectableColumns() []string }); ok {
 					selectableCols = hsc.GetSelectableColumns()
+				}
+				var advSearchEnabled bool
+				var advSearchCols []string
+				if hasc, ok := res.(interface {
+					IsAdvancedSearchEnabled() bool
+					GetAdvancedSearchableColumns() []string
+				}); ok {
+					advSearchEnabled = hasc.IsAdvancedSearchEnabled()
+					advSearchCols = hasc.GetAdvancedSearchableColumns()
 				}
 				tabsEnabled := p.IsTabsEnabled() || res.IsTabsEnabled()
 				var tabsDTO []*ResourceTab = res.GetTabs()
@@ -262,6 +273,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					Columns:                  columnsDTO,
 					DefaultColumns:           defaultCols,
 					SelectableColumns:        selectableCols,
+					AdvancedSearchEnabled:    advSearchEnabled,
+					AdvancedSearchColumns:    advSearchCols,
 					Tabs:                     tabsDTO,
 					TabsEnabled:              tabsEnabled,
 					ListMode:                 listMode,
@@ -770,6 +783,9 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				filters[strings.TrimPrefix(k, "filter_")] = v[0]
 			}
 		}
+		if adv := ctx.Query("advanced_search"); adv != "" {
+			filters["_advanced_search"] = adv
+		}
 
 		// Generic handler invoker
 		if invoker, ok := res.(interface {
@@ -823,6 +839,9 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				if strings.HasPrefix(k, "filter_") && len(v) > 0 {
 					filters[strings.TrimPrefix(k, "filter_")] = v[0]
 				}
+			}
+			if adv := ctx.Query("advanced_search"); adv != "" {
+				filters["_advanced_search"] = adv
 			}
 
 			return exporter.InvokeExport(ctx, format, filterIDs, search, sortCol, sortDir, filters)
