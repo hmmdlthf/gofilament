@@ -15,6 +15,7 @@ import (
 	"github.com/golaravel/gofilament/pkg/colors"
 	"github.com/golaravel/gofilament/pkg/globalsearch"
 	"github.com/golaravel/gofilament/pkg/notifications"
+	"github.com/golaravel/golaravel/pkg/appupdate"
 	"github.com/golaravel/golaravel/pkg/auth"
 	"github.com/golaravel/golaravel/pkg/broadcast"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
@@ -98,6 +99,10 @@ type Panel struct {
 	mobileBottomNavShowLabels         *bool
 	mobileBottomNavItems              []string
 	flutterLoadingConfig              flutter.LoadingConfig
+	version                           string
+	buildID                           string
+	forceReloadOnUpdate               bool
+	appUpdateManager                  *appupdate.Manager
 	authGuard           any
 	authValidator       AuthValidatorFunc
 	tokenValidator      TokenValidatorFunc
@@ -366,6 +371,50 @@ func (p *Panel) GetFlutterLoadingConfig() flutter.LoadingConfig {
 		cfg.LogoURL = p.brandLogo
 	}
 	return cfg
+}
+
+// Version sets the panel's semantic version (e.g. "1.4.0").
+func (p *Panel) Version(v string) *Panel {
+	p.version = v
+	return p
+}
+
+// GetVersion returns the configured panel semantic version.
+func (p *Panel) GetVersion() string {
+	return p.version
+}
+
+// BuildID sets the build identifier (e.g. git hash or release timestamp).
+func (p *Panel) BuildID(id string) *Panel {
+	p.buildID = id
+	return p
+}
+
+// GetBuildID returns the configured build identifier.
+func (p *Panel) GetBuildID() string {
+	return p.buildID
+}
+
+// RequireReloadOnUpdate specifies whether clients must reload immediately upon update detection.
+func (p *Panel) RequireReloadOnUpdate(force bool) *Panel {
+	p.forceReloadOnUpdate = force
+	return p
+}
+
+// IsForceReloadOnUpdate reports whether reload is required on update.
+func (p *Panel) IsForceReloadOnUpdate() bool {
+	return p.forceReloadOnUpdate
+}
+
+// AppUpdate attaches an appupdate.Manager to the panel.
+func (p *Panel) AppUpdate(mgr *appupdate.Manager) *Panel {
+	p.appUpdateManager = mgr
+	return p
+}
+
+// GetAppUpdateManager returns the configured appupdate.Manager, if any.
+func (p *Panel) GetAppUpdateManager() *appupdate.Manager {
+	return p.appUpdateManager
 }
 
 // BrandName sets the text branding displayed in the topbar and sidebar.
@@ -1645,12 +1694,14 @@ func (p *Panel) mountFlutter(r *router.Router) {
 	indexPath := filepath.Join(distDir, "index.html")
 
 	if _, err := os.Stat(indexPath); err == nil {
-		// Serve compiled Flutter Web SPA with customizable pre-loader
+		// Serve compiled Flutter Web SPA with customizable pre-loader and version meta
 		flutter.ServeWeb(r, flutter.Options{
 			MountPath:     p.path,
 			DistDir:       distDir,
 			FallbackSPA:   true,
 			LoadingConfig: p.GetFlutterLoadingConfig(),
+			Version:       p.GetVersion(),
+			BuildID:       p.GetBuildID(),
 		})
 		return
 	}

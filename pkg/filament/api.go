@@ -11,6 +11,7 @@ import (
 
 	"github.com/golaravel/gofilament/pkg/notifications"
 	"github.com/golaravel/gofilament/pkg/tables"
+	"github.com/golaravel/golaravel/pkg/appupdate"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/router"
 	"github.com/golaravel/golaravel/pkg/translation"
@@ -38,6 +39,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// Register CORS preflight handlers
 	r.OPTIONS(apiPrefix+"/schema", corsPreflight)
+	r.OPTIONS(apiPrefix+"/version", corsPreflight)
 	r.OPTIONS(apiPrefix+"/global-search", corsPreflight)
 	r.OPTIONS(apiPrefix+"/tenants", corsPreflight)
 	r.OPTIONS(apiPrefix+"/notifications", corsPreflight)
@@ -349,9 +351,63 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"default_mobile_pagination_position": string(p.GetDefaultMobilePaginationPosition()),
 			"bottom_nav_show_labels":             p.IsBottomNavLabelsVisible(),
 			"default_bottom_nav_items":           p.GetMobileBottomNavItems(),
+			"app_update": map[string]any{
+				"enabled":                p.GetVersion() != "" || p.GetBuildID() != "" || p.GetAppUpdateManager() != nil,
+				"version":                p.GetVersion(),
+				"build_id":               p.GetBuildID(),
+				"force_reload":           p.IsForceReloadOnUpdate(),
+				"check_interval_seconds": 300,
+				"title":                  "System Update Available",
+				"message":                "A new version of the admin panel is available. Please reload the page to apply the latest updates.",
+			},
 		}
 
 		return c.JSON(http.StatusOK, schema)
+	})
+
+	// Version / Update Check Endpoint
+	r.GET(apiPrefix+"/version", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		clientVersion := c.Query("version")
+		if clientVersion == "" {
+			clientVersion = c.Header("X-App-Version")
+		}
+		clientBuildID := c.Query("build_id")
+		if clientBuildID == "" {
+			clientBuildID = c.Header("X-App-Build-ID")
+		}
+
+		serverVersion := p.GetVersion()
+		serverBuildID := p.GetBuildID()
+		forceReload := p.IsForceReloadOnUpdate()
+
+		updateAvailable := false
+		if clientBuildID != "" && serverBuildID != "" {
+			updateAvailable = (clientBuildID != serverBuildID)
+		} else if clientVersion != "" && serverVersion != "" {
+			updateAvailable = (appupdate.CompareVersions(clientVersion, serverVersion) < 0)
+		}
+
+		res := map[string]any{
+			"update_available":       updateAvailable,
+			"force_reload":           forceReload,
+			"version":                serverVersion,
+			"build_id":               serverBuildID,
+			"current_version":        clientVersion,
+			"current_build_id":       clientBuildID,
+			"check_interval_seconds": 300,
+			"title":                  "System Update Available",
+			"message":                "A new version of the admin panel is available. Please reload the page to apply the latest updates.",
+		}
+
+		if updateAvailable {
+			c.SetHeader("X-App-Update-Available", "true")
+			if forceReload {
+				c.SetHeader("X-App-Force-Update", "true")
+			}
+		}
+
+		return c.JSON(http.StatusOK, res)
 	})
 
 	// Global Search REST API Endpoint
@@ -1228,6 +1284,11 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		}
 		r.DELETE(relPath+"/:child_id", deleteRelHandler)
 		r.POST(relPath+"/:child_id/delete", deleteRelHandler)
+	}
+
+	// Mount App Update Manager routes if configured
+	if p.appUpdateManager != nil {
+		p.appUpdateManager.RegisterRoutes(r, apiPrefix+"/app-update")
 	}
 }
 
