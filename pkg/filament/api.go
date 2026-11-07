@@ -671,6 +671,11 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	for _, res := range p.resources {
 		p.registerResourceAPI(res, apiPrefix, r)
 	}
+
+	// Mount App Update Manager routes under this panel if configured
+	if p.appUpdateManager != nil {
+		p.appUpdateManager.RegisterRoutes(r, apiPrefix+"/app-update")
+	}
 }
 
 // EvaluateWidgetDTOs serializes all panel dashboard widgets for headless REST clients and Flutter UI.
@@ -1284,11 +1289,6 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		}
 		r.DELETE(relPath+"/:child_id", deleteRelHandler)
 		r.POST(relPath+"/:child_id/delete", deleteRelHandler)
-	}
-
-	// Mount App Update Manager routes if configured
-	if p.appUpdateManager != nil {
-		p.appUpdateManager.RegisterRoutes(r, apiPrefix+"/app-update")
 	}
 }
 
