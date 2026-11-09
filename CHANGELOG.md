@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.25.0] - 2026-11-09
+
+### Added
+- **Live Chat & AI Support Concierge (`pkg/support`, `support.NewSupportResource`, `support.NewService`)**:
+  - **Support Ticket Engine (`pkg/support/ticket.go`)**:
+    - Complete `Ticket` domain model with `Status` (`open`, `in_progress`, `resolved`, `closed`), `Priority` (`low`, `normal`, `high`, `urgent`), `Department`, and `UserKey`.
+    - Message streams with `SupportMessage` timestamps, sender types (`user`, `agent`, `ai`), and read statuses.
+    - Thread-safe storage layer with `MemoryStore` supporting atomic sequences, department queries, and user history lookups.
+  - **Dual Mode AI / Live Concierge Service (`pkg/support/service.go`)**:
+    - `ModeAI`: Automated Tier-1 AI Concierge answers user questions based on knowledge base policies and FAQ matching.
+    - `ModeLive`: Live human agent takeover with immediate socket/SSE notification and mode switching (`service.SwitchMode`).
+  - **Administrative Support Resource (`pkg/support/resource.go`)**:
+    - Pre-configured Filament Resource with ticket status badges, mode indicators (`AI Chat` vs `Live Chat`), priority styling, and chat timeline inspection.
+- **Advanced Search Engine & Refined Filter Facets (`pkg/tables/advanced_search.go`, `res.AdvancedSearchableColumns`)**:
+  - Multi-attribute refined facet searching with dynamic count calculations (`[x] In Stock (42)`).
+  - Schema API metadata export for client facet rendering.
+
+---
+
+## [v1.24.1] - 2026-11-08
+
+### Fixed
+- **App Update Route Registration**:
+  - Mounted `/version` and update check endpoints at the top panel level instead of inside the resource iteration loop.
+
+---
+
+## [v1.24.0] - 2026-11-08
+
+### Added
+- **Panel Versioning & Hot Update Detection (`panel.Version()`, `panel.BuildID()`, `panel.RequireReloadOnUpdate()`)**:
+  - Configurable application version string and deployment build identifier.
+  - Automatic `GET /admin/api/version` JSON endpoint returning version and force-reload status.
+  - Web and Flutter client update banners prompting users to reload when a newer build is deployed.
+
+---
+
+## [v1.23.0] - 2026-11-07
+
+### Added
+- **Customizable Pre-Flutter Loading Screen (`panel.FlutterLoading()`)**:
+  - Pure HTML/CSS splash loading integration rendering immediately while Flutter engine hydrates.
+  - Configurable loading styles: `LoadingStyleSpinner`, `LoadingStyleBar`, and `LoadingStylePulse`.
+  - Configurable branding text, subtitle, background color, primary accent color, and text color.
+
+---
+
+## [v1.22.0] - 2026-11-06
+
+### Added
+- **Selectable & Default Column Configuration (`res.SelectableColumns()`, `res.DefaultColumns()`)**:
+  - Declarative control over which columns are visible by default and which can be toggled by end users.
+  - Full metadata export in `/admin/api/schema` enabling clients to render dynamic column pickers.
+  - Locale-aware column header labeling and translations.
+
+---
+
+## [v1.21.0] - 2026-11-05
+
+### Added
+- **Customizable Mobile Bottom Navigation (`panel.MobileBottomNavItems()`, `panel.MobileBottomNavShowLabels()`)**:
+  - Dynamic bottom navigation bar slots with customizable resource IDs.
+  - Label visibility toggle (`MobileBottomNavShowLabels`) for compact or detailed icon navigation.
+  - Mobile pagination options: circular Floating Action Button (FAB) modal trigger (`PaginationPositionFab`) vs compact top bar (`PaginationPositionTop`).
+
+---
+
+## [v1.20.0] - 2026-11-03
+
+### Added
+- **Authentication Suite & Session Persistence**:
+  - Panel authentication endpoints: `/admin/login`, `/admin/logout`, and token validation.
+  - Configurable session duration (`SessionDuration`) and remember-me TTL (`RememberMeDuration`).
+  - Scaffolding for native Flutter login screens with validation and error toasts.
+
+---
+
+## [v1.19.0] - 2026-11-01
+
+### Added
+- **Internationalization (i18n) & RTL Layout Mirroring**:
+  - Full Arabic (`ar`), Spanish (`es`), and German (`de`) localization dictionaries.
+  - Zero-dependency RTL directionality flipping across HTML/CSS (`dir="rtl"`) and Flutter (`Directionality`).
+  - Interactive language switcher buttons and modal sheets.
+  - Dynamic translation dictionary API (`GET /admin/api/translations`, `POST /admin/api/locale/switch`).
+
+---
+
 ## [v1.18.0] - 2026-10-31
 
 ### Added

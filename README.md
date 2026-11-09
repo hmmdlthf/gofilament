@@ -1,6 +1,8 @@
 # GoFilament 🚀
 
 > **High-Performance, Type-Safe Full-Stack Admin Panel & Application Toolkit for GoLaravel & Ent ORM**
+>
+> 📖 **Comprehensive AI & Developer Documentation**: See [DOCUMENTATION.md](DOCUMENTATION.md) for the complete API reference, dual-engine architecture guide, and end-to-end code blueprints.
 
 Inspired by Laravel's renowned Filament ecosystem, **GoFilament** reimagines rapid admin panel and portal development for Go. Built natively on top of the **GoLaravel** kernel and **Ent ORM**, GoFilament combines compile-time type safety with sub-millisecond execution, Templ SSR, Alpine.js client reactivity, and HTMX micro-swaps—all within a single compiled Go binary.
 
