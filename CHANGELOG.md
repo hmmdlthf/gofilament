@@ -7,7 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [v1.25.0] - 2026-11-09
+## [v1.26.0] - 2026-11-09
+
+### Added
+- **AI Support Concierge & Multimodal Voice Feature Request System (`pkg/support`, `github.com/golaravel/golaravel/pkg/support`)**:
+  - **Dual Engine Tier-1 AI Concierge & Seamless Live Escalation**:
+    - AI conversational support agent grounded with knowledge of all framework features up to `v1.25.0`.
+    - Auto-escalation trigger detection (e.g. phrases such as "speak to human", "live agent", "human representative", "unresolved") that seamlessly escalates the session to live human operators.
+    - Explicit escalation actions (`EscalateToLive`, `EscalateToSuperAdmin`, `ResolveTicket`).
+  - **Multimodal Voice Feature Requests in Any Language**:
+    - Real-time voice audio recording submission in Sinhala (`si`), Tamil (`ta`), Arabic (`ar`), English (`en`), Spanish (`es`), German (`de`), and more.
+    - Multilingual speech processor preserves original raw audio (`AudioData`, `AudioBase64`) for administrative review and audio playback.
+    - Automatic speech-to-text transcription and English translation for engineering teams.
+    - Automated Knowledge Base checking:
+      - If requested feature already exists in the system: AI explains its presence and how to use it in the customer's native language.
+      - If it is a new capability: AI evaluates complexity (simple vs complex/under review), replies in the customer's language, creates the ticket, and assigns feasibility ratings (`simple`, `complex`).
+  - **Multi-Panel & Multi-Tenant Support Hierarchy**:
+    - **Super Admin Panels (`panel.SuperAdminSupport()`, `support.WithScope(support.ScopeSuperAdmin)`)**: Platform-wide visibility across all tenant tickets, central escalation monitoring, and cross-panel support capabilities.
+    - **Tenant Admin Panels (`panel.TenantAdminSupport("super_admin")`, `support.WithScope(support.ScopeTenantAdmin)`)**: Scoped to the active tenant, providing customer service downstream while maintaining upstream escalation to platform super admins.
+  - **Persistent Support Language Cookie (`golaravel_support_lang`)**:
+    - Automatic language resolution checking query (`?lang=`), cookie (`golaravel_support_lang`), or `Accept-Language` headers.
+    - Seamless switching via `POST /admin/api/support/language` with 1-year persistence.
+  - **Standardized Panel REST API Endpoints**:
+    - `GET /admin/api/support/tickets`: List support tickets scoped to tenant or super-admin.
+    - `POST /admin/api/support/message`: Send user/agent chat message with auto-escalation detection.
+    - `POST /admin/api/support/voice-feature`: Ingest voice feature recordings (JSON base64 or multipart).
+    - `GET /admin/api/support/audio/:id`: Stream preserved original audio files.
+    - `POST /admin/api/support/escalate`: Escalate ticket to live agent or upstream super-admin panel.
+    - `POST /admin/api/support/language`: Set persistent support language cookie.
+    - `GET /admin/api/support/knowledge`: Query system capabilities knowledge base.
+  - **Administrative Support Resource (`support.NewSupportResource`)**:
+    - Pre-configured Filament Resource with inline HTML5 audio player (`RenderVoicePlayerHTML`), language flags, feasibility badges, mode indicators, and quick actions.
 
 ### Added
 - **Live Chat & AI Support Concierge (`pkg/support`, `support.NewSupportResource`, `support.NewService`)**:

@@ -343,6 +343,11 @@ func (f *TextareaField) ColumnSpan(span int) *TextareaField {
 	return f
 }
 
+func (f *TextareaField) Disabled(d ...bool) *TextareaField {
+	f.BaseField.Disabled(d...)
+	return f
+}
+
 func (f *TextareaField) Render(ctx context.Context, state map[string]any, errors map[string]string) string {
 	val := ""
 	if v, ok := state[f.name]; ok && v != nil {

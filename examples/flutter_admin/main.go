@@ -10,6 +10,7 @@ import (
 	"github.com/golaravel/gofilament/pkg/colors"
 	"github.com/golaravel/gofilament/pkg/filament"
 	"github.com/golaravel/gofilament/pkg/flutterclient"
+	"github.com/golaravel/gofilament/pkg/support"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/golaravel"
 )
@@ -1824,6 +1825,8 @@ func main() {
 	adminPanel.Resource(buildTicketResource())
 	adminPanel.Resource(buildFirmwareResource())
 	adminPanel.Resource(buildFleetUserResource())
+	adminPanel.SuperAdminSupport()
+	adminPanel.Resource(support.NewSupportResource(support.WithScope(support.ScopeSuperAdmin)))
 
 	// 6. Register Panel into GoLaravel
 	if err := adminPanel.Register(app); err != nil {

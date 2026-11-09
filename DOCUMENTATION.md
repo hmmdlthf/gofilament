@@ -969,50 +969,118 @@ adminPanel.Resource(activitylog.NewActivityResource())
 
 ---
 
-## 12. Live Chat & AI Support Concierge (`pkg/support`)
+## 12. Live Chat, AI Concierge & Multimodal Voice Feature Requests (`pkg/support`)
 
-Added in release **v1.25.0**, `pkg/support` delivers a complete customer support and automated AI triage system.
+Updated and significantly enhanced in release **v1.26.0**, `pkg/support` delivers an enterprise-grade AI concierge, seamless live operator escalation, multimodal multilingual voice feature requests, and hierarchical multi-panel / multi-tenant routing.
 
-### Concepts & Architecture
+### Core Concepts & Architecture
 
-- **`Ticket`**: Represents a support inquiry with `Status` (`open`, `in_progress`, `resolved`, `closed`), `Priority` (`low`, `normal`, `high`, `urgent`), and `Department`.
-- **`Mode`**:
-  - `ModeAI`: Automated Tier-1 AI Concierge answers user questions based on knowledge base policies.
-  - `ModeLive`: Live human agent takes over conversation.
-- **`Service`**: Orchestrates message sending, automated AI responses, and mode transitions.
-- **`NewSupportResource()`**: Pre-built Filament Resource for administrative ticket inspection and agent reply.
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   Customer / Mobile / Web Client                       │
+│       • Multilingual Chat (English, Sinhala, Tamil, Arabic, etc.)      │
+│       • Multimodal Voice Feature Requests (Microphone Audio Stream)    │
+│       • Language Preference Cookie (golaravel_support_lang)            │
+└──────────────────────────────────┬─────────────────────────────────────┘
+                                   │
+                                   ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│             GoLaravel / GoFilament Support Concierge Engine            │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ 1. AI Support Concierge                                          │  │
+│  │    • Answers inquiries instantly via Grounded Knowledge Base     │  │
+│  │    • Auto-detects escalation triggers ("human agent", "help")    │  │
+│  │    • Seamlessly flips mode to ModeLive for human takeover        │  │
+│  └──────────────────────────────────┬───────────────────────────────┘  │
+│                                     │                                  │
+│  ┌──────────────────────────────────▼───────────────────────────────┐  │
+│  │ 2. Multimodal Voice Feature Request Processor                    │  │
+│  │    • Ingests audio in any language (Sinhala, Tamil, Arabic, etc.)│  │
+│  │    • Preserves original audio bytes + Base64 for playback        │  │
+│  │    • Transcribes & translates to English for engineering teams   │  │
+│  │    • Checks system Knowledge Base:                               │  │
+│  │      - If feature already exists: AI explains how to use it      │  │
+│  │      - If new feature: rates Feasibility (simple vs complex)     │  │
+│  │    • Dispatches real-time alerts to operators                    │  │
+│  └──────────────────────────────────┬───────────────────────────────┘  │
+│                                     │                                  │
+│  ┌──────────────────────────────────▼───────────────────────────────┐  │
+│  │ 3. Multi-Panel & Multi-Tenant Support Hierarchy                  │  │
+│  │    • Tenant Admin Panels: Scoped to active tenant               │  │
+│  │    • Super Admin Panels: Platform-wide visibility & monitoring    │  │
+│  │    • Upstream Escalation: Tenant Admins can escalate to Super    │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────┘
+```
 
-### Usage Example
+- **`Ticket`**: Represents a support inquiry or feature request with `Category` (`support`, `feature_request`, `bug`, `billing`), `Status` (`open`, `pending`, `escalated`, `resolved`, `closed`), `Mode` (`ai`, `live`), `Priority`, `TenantID`, `PanelID`, and `Feasibility` (`simple`, `complex`, `existing_feature`).
+- **`VoiceRecording`**: Preserves original voice audio buffer (`AudioData`), web player payload (`AudioBase64`), original transcript, and English translation.
+- **`KnowledgeBase`**: Pre-seeded knowledge repository containing system capabilities up to `v1.25.0`.
+- **`LanguageCookieName`**: `"golaravel_support_lang"`, persisting customer language across sessions.
+- **`ScopeSuperAdmin` vs `ScopeTenantAdmin`**: Configures whether the panel views all tickets globally or scopes to tenant records with upstream escalation.
+
+### Panel Configuration & Hierarchy
 
 ```go
-import "github.com/golaravel/gofilament/pkg/support"
-
-// 1. Initialize support service with thread-safe store
-store := support.GetDefaultStore()
-service := support.NewService(store)
-
-// 2. Submit user inquiry (AI automatically answers if ticket is in ModeAI)
-userMsg, aiReply, err := service.SendUserMessage(
-    context.Background(),
-    "TICK-101",
-    "user_772",
-    "Sarah Connor",
-    "How do I reset my telemetry sensor encryption keys?",
+import (
+    "github.com/golaravel/gofilament/pkg/filament"
+    "github.com/golaravel/gofilament/pkg/support"
 )
 
-// 3. Human Agent Takes Over (switches ticket to ModeLive)
-err = service.SwitchMode(context.Background(), "TICK-101", support.ModeLive)
-agentMsg, err := service.SendAgentMessage(
-    context.Background(),
-    "TICK-101",
-    "agent_1",
-    "John Ops",
-    "Hello Sarah, I am taking over this ticket. Let me guide you through the enclave reset.",
-)
+// 1. Configure Super Admin Panel (Platform Hub)
+superAdminPanel := filament.NewPanel("super_admin").
+    Path("/super-admin").
+    SuperAdminSupport(). // Enables cross-tenant global support visibility
+    Resource(support.NewSupportResource(
+        support.WithScope(support.ScopeSuperAdmin),
+    ))
 
-// 4. Register Support Resource into Filament Panel
-adminPanel.Resource(support.NewSupportResource(store))
+// 2. Configure Tenant Admin Panel (Customer Portal with Upstream Escalation)
+tenantAdminPanel := filament.NewPanel("admin").
+    Path("/admin").
+    TenantAdminSupport("super_admin"). // Scoped to tenant, escalates to super_admin
+    Resource(support.NewSupportResource(
+        support.WithScope(support.ScopeTenantAdmin),
+        support.WithTenantScoping(true),
+        support.WithSuperAdminPanelID("super_admin"),
+    ))
 ```
+
+### Multimodal Voice Feature Request Ingestion
+
+```go
+service := support.GetDefaultService()
+
+// Ingest voice recording in Sinhala, Tamil, Arabic, English, etc.
+ticket, aiReply, err := service.SubmitVoiceFeatureRequest(ctx, support.VoiceFeatureRequest{
+    AudioBytes:      audioBytes,
+    MimeType:        "audio/webm",
+    DurationSeconds: 12.4,
+    Language:        "si", // Sinhala
+    UserKey:         "user_102",
+    UserName:        "Kasun Perera",
+    UserEmail:       "kasun@example.lk",
+    TenantID:        "tenant_colombo",
+    PanelID:         "admin",
+})
+
+// ticket.Voice.AudioData contains the original preserved audio
+// ticket.Voice.TranslatedEnglish contains the English translation for engineers
+// ticket.Feasibility contains "simple" or "complex"
+// aiReply.Content contains localized AI feedback explaining acceptance or review
+```
+
+### Support REST API Endpoints
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/admin/api/support/tickets` | `GET` | List tickets (tenant-scoped or super-admin global) |
+| `/admin/api/support/message` | `POST` | Send message with automated AI response and auto-escalation |
+| `/admin/api/support/voice-feature` | `POST` | Ingest voice feature request in any language |
+| `/admin/api/support/audio/:id` | `GET` | Stream preserved audio recording for playback |
+| `/admin/api/support/escalate` | `POST` | Escalate ticket to live agent or upstream super admin panel |
+| `/admin/api/support/language` | `POST` | Set persistent `golaravel_support_lang` cookie |
+| `/admin/api/support/knowledge` | `GET` | List known system features and capabilities |
 
 ---
 

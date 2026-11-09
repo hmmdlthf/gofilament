@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/golaravel/golaravel/pkg/appupdate"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/router"
+	gosupport "github.com/golaravel/golaravel/pkg/support"
 	"github.com/golaravel/golaravel/pkg/translation"
 )
 
@@ -46,6 +48,12 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	r.OPTIONS(apiPrefix+"/login", corsPreflight)
 	r.OPTIONS(apiPrefix+"/logout", corsPreflight)
 	r.OPTIONS(apiPrefix+"/me", corsPreflight)
+	r.OPTIONS(apiPrefix+"/support/tickets", corsPreflight)
+	r.OPTIONS(apiPrefix+"/support/message", corsPreflight)
+	r.OPTIONS(apiPrefix+"/support/voice-feature", corsPreflight)
+	r.OPTIONS(apiPrefix+"/support/escalate", corsPreflight)
+	r.OPTIONS(apiPrefix+"/support/language", corsPreflight)
+	r.OPTIONS(apiPrefix+"/support/knowledge", corsPreflight)
 
 	// Panel Auth Login Endpoint (Flutter & Headless Clients)
 	r.POST(apiPrefix+"/login", func(c *gcontext.Context) error {
@@ -373,6 +381,12 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 				"title":                  "System Update Available",
 				"message":                "A new version of the admin panel is available. Please reload the page to apply the latest updates.",
 			},
+			"support": map[string]any{
+				"enabled":              p.IsSupportEnabled(),
+				"scope":                p.GetSupportScope(),
+				"super_admin_panel_id": p.GetSupportSuperAdminPanelID(),
+				"supported_languages":  []string{"en", "si", "ta", "ar", "es", "de"},
+			},
 		}
 
 		return c.JSON(http.StatusOK, schema)
@@ -680,7 +694,330 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		})
 	}
 
-	// 5. Register REST Endpoints for each resource
+	// 5. Support Concierge & Voice Feature Request API
+	// GET /support/tickets - List support tickets scoped to tenant / super admin
+	r.GET(apiPrefix+"/support/tickets", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		filter := gosupport.TicketFilter{
+			Status:     c.Query("status"),
+			Category:   c.Query("category"),
+			Department: c.Query("department"),
+		}
+		if p.GetSupportScope() == "tenant_admin" || p.hasTenantScoping {
+			if tid := ctx.Tenant(); tid != "" {
+				filter.TenantID = tid
+			}
+		}
+		if reqTenant := c.Query("tenant_id"); reqTenant != "" && (p.GetSupportScope() == "super_admin" || filter.TenantID == "") {
+			filter.TenantID = reqTenant
+		}
+
+		tickets, err := gosupport.GetDefaultStore().ListTickets(c.Request.Context(), filter)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusOK, map[string]any{
+			"tickets": tickets,
+			"total":   len(tickets),
+			"scope":   p.GetSupportScope(),
+		})
+	})
+
+	// POST /support/message - Send customer message & get instant AI response / auto-escalation
+	r.POST(apiPrefix+"/support/message", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		ctx, _ := p.AuthorizeAccess(c)
+		var req struct {
+			TicketID  string `json:"ticket_id"`
+			TenantID  string `json:"tenant_id"`
+			UserID    string `json:"user_id"`
+			UserName  string `json:"user_name"`
+			UserEmail string `json:"user_email"`
+			Content   string `json:"content"`
+			Category  string `json:"category"`
+			Language  string `json:"language"`
+		}
+		_ = c.BindJSON(&req)
+		if req.Content == "" {
+			payload := parseRequestData(c)
+			if v, ok := payload["ticket_id"].(string); ok {
+				req.TicketID = v
+			}
+			if v, ok := payload["tenant_id"].(string); ok {
+				req.TenantID = v
+			}
+			if v, ok := payload["user_id"].(string); ok {
+				req.UserID = v
+			}
+			if v, ok := payload["user_name"].(string); ok {
+				req.UserName = v
+			}
+			if v, ok := payload["user_email"].(string); ok {
+				req.UserEmail = v
+			}
+			if v, ok := payload["content"].(string); ok {
+				req.Content = v
+			}
+			if v, ok := payload["category"].(string); ok {
+				req.Category = v
+			}
+			if v, ok := payload["language"].(string); ok {
+				req.Language = v
+			}
+		}
+		if req.Content == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Message content is required"})
+		}
+		if req.Language == "" {
+			req.Language = gosupport.ResolveSupportLanguage(c.Request)
+		}
+		if req.TenantID == "" && ctx != nil {
+			req.TenantID = ctx.Tenant()
+		}
+		if req.UserID == "" && ctx != nil && ctx.User() != nil {
+			req.UserID = ctx.User().GetAuthIdentifier()
+			req.UserName = ctx.User().GetAuthIdentifier()
+		}
+		if req.Category == "" {
+			req.Category = gosupport.CategorySupport
+		}
+
+		userMsg, aiMsg, err := gosupport.GetDefaultService().SendUserMessage(
+			c.Request.Context(),
+			req.TicketID,
+			req.UserID,
+			req.UserName,
+			req.Content,
+			req.Language,
+		)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+
+		ticket, _ := gosupport.GetDefaultStore().GetTicket(c.Request.Context(), userMsg.TicketID)
+		autoEscalated := ticket != nil && (ticket.Status == gosupport.StatusEscalated || ticket.Mode == gosupport.ModeLive)
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"ticket":         ticket,
+			"user_message":   userMsg,
+			"ai_message":     aiMsg,
+			"auto_escalated": autoEscalated,
+		})
+	})
+
+	// POST /support/voice-feature - Submit multimodal voice feature request in any language
+	r.POST(apiPrefix+"/support/voice-feature", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		ctx, _ := p.AuthorizeAccess(c)
+
+		var (
+			ticketID   string
+			tenantID   string
+			userID     string
+			userName   string
+			userEmail  string
+			language   string
+			audioBytes []byte
+			mimeType   = "audio/webm"
+			duration   float64
+		)
+
+		if strings.Contains(c.Header("Content-Type"), "application/json") {
+			var body struct {
+				TicketID    string  `json:"ticket_id"`
+				TenantID    string  `json:"tenant_id"`
+				UserID      string  `json:"user_id"`
+				UserName    string  `json:"user_name"`
+				UserEmail   string  `json:"user_email"`
+				Language    string  `json:"language"`
+				AudioBase64 string  `json:"audio_base64"`
+				MimeType    string  `json:"mime_type"`
+				DurationSec float64 `json:"duration_seconds"`
+			}
+			if err := c.BindJSON(&body); err == nil {
+				ticketID = body.TicketID
+				tenantID = body.TenantID
+				userID = body.UserID
+				userName = body.UserName
+				userEmail = body.UserEmail
+				language = body.Language
+				duration = body.DurationSec
+				if body.MimeType != "" {
+					mimeType = body.MimeType
+				}
+				if body.AudioBase64 != "" {
+					data, decErr := base64.StdEncoding.DecodeString(body.AudioBase64)
+					if decErr == nil {
+						audioBytes = data
+					}
+				}
+			}
+		} else {
+			fh, fileErr := c.FormFile("audio")
+			if fileErr != nil {
+				fh, fileErr = c.FormFile("voice")
+			}
+			if fileErr == nil && fh != nil {
+				f, openErr := fh.Open()
+				if openErr == nil {
+					defer f.Close()
+					audioBytes, _ = io.ReadAll(f)
+					if ct := fh.Header.Get("Content-Type"); ct != "" {
+						mimeType = ct
+					}
+				}
+			}
+			ticketID = c.FormValue("ticket_id")
+			tenantID = c.FormValue("tenant_id")
+			userID = c.FormValue("user_id")
+			userName = c.FormValue("user_name")
+			userEmail = c.FormValue("user_email")
+			language = c.FormValue("language")
+		}
+
+		if len(audioBytes) == 0 {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Audio recording data is required (either 'audio_base64' JSON or 'audio' multipart file)"})
+		}
+
+		if language == "" {
+			language = gosupport.ResolveSupportLanguage(c.Request)
+		}
+		if tenantID == "" && ctx != nil {
+			tenantID = ctx.Tenant()
+		}
+		if userID == "" && ctx != nil && ctx.User() != nil {
+			userID = ctx.User().GetAuthIdentifier()
+			userName = ctx.User().GetAuthIdentifier()
+		}
+
+		ticket, aiReply, err := gosupport.GetDefaultService().SubmitVoiceFeatureRequest(
+			c.Request.Context(),
+			gosupport.VoiceFeatureRequest{
+				TicketID:        ticketID,
+				AudioBytes:      audioBytes,
+				MimeType:        mimeType,
+				DurationSeconds: duration,
+				Language:        language,
+				UserKey:         userID,
+				UserName:        userName,
+				UserEmail:       userEmail,
+				TenantID:        tenantID,
+				PanelID:         p.ID(),
+			},
+		)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"ticket":              ticket,
+			"ai_reply":            aiReply,
+			"feasibility":         ticket.Feasibility,
+			"is_existing_feature": ticket.Status == gosupport.StatusResolved,
+			"audio_url":           fmt.Sprintf("%s/support/audio/%s", apiPrefix, ticket.ID),
+		})
+	})
+
+	// GET /support/audio/:id - Stream preserved voice recording
+	r.GET(apiPrefix+"/support/audio/:id", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		ticketID := c.Param("id")
+		ticket, err := gosupport.GetDefaultStore().GetTicket(c.Request.Context(), ticketID)
+		if err != nil || ticket == nil || ticket.Voice == nil {
+			return c.NoContent(http.StatusNotFound)
+		}
+		c.SetHeader("Content-Type", ticket.Voice.MimeType)
+		c.SetHeader("Content-Disposition", fmt.Sprintf(`inline; filename="feature_request_%s.webm"`, ticket.ID))
+		return c.Bytes(http.StatusOK, ticket.Voice.MimeType, ticket.Voice.AudioData)
+	})
+
+	// POST /support/escalate - Escalate to Live Support Agent or Super Admin Panel
+	r.POST(apiPrefix+"/support/escalate", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		var req struct {
+			TicketID string `json:"ticket_id"`
+			Target   string `json:"target"`
+			Reason   string `json:"reason"`
+		}
+		_ = c.BindJSON(&req)
+		if req.TicketID == "" {
+			payload := parseRequestData(c)
+			if v, ok := payload["ticket_id"].(string); ok {
+				req.TicketID = v
+			}
+			if v, ok := payload["target"].(string); ok {
+				req.Target = v
+			}
+			if v, ok := payload["reason"].(string); ok {
+				req.Reason = v
+			}
+		}
+		if req.TicketID == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Ticket ID is required"})
+		}
+
+		if req.Target == "super_admin" {
+			superAdminID := p.GetSupportSuperAdminPanelID()
+			if err := gosupport.GetDefaultService().EscalateToSuperAdmin(c.Request.Context(), req.TicketID, superAdminID, req.Reason); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+		} else {
+			if err := gosupport.GetDefaultService().EscalateToLive(c.Request.Context(), req.TicketID, req.Reason); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			}
+		}
+
+		ticket, _ := gosupport.GetDefaultStore().GetTicket(c.Request.Context(), req.TicketID)
+		return c.JSON(http.StatusOK, map[string]any{
+			"status": "escalated",
+			"ticket": ticket,
+		})
+	})
+
+	// POST /support/language - Set language preference (persisted in golaravel_support_lang cookie)
+	r.POST(apiPrefix+"/support/language", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		var req struct {
+			Language string `json:"language"`
+		}
+		_ = c.BindJSON(&req)
+		targetLang := req.Language
+		if targetLang == "" {
+			targetLang = c.Query("lang")
+		}
+		if targetLang == "" {
+			payload := parseRequestData(c)
+			if v, ok := payload["language"].(string); ok {
+				targetLang = v
+			}
+		}
+		if targetLang == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Language code is required"})
+		}
+		targetLang = gosupport.NormalizeLanguage(targetLang)
+		c.SetCookie(gosupport.LanguageCookieName, targetLang, 86400*365, "/", "", false, false)
+		gosupport.SetSupportLanguageCookie(&c.Response, targetLang)
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"status":   "success",
+			"language": targetLang,
+		})
+	})
+
+	// GET /support/knowledge - Return system features known up to latest release
+	r.GET(apiPrefix+"/support/knowledge", func(c *gcontext.Context) error {
+		setCorsHeaders(c)
+		return c.JSON(http.StatusOK, map[string]any{
+			"features": gosupport.GetDefaultKnowledgeBase().All(),
+			"count":    len(gosupport.GetDefaultKnowledgeBase().All()),
+		})
+	})
+
+	// 6. Register REST Endpoints for each resource
 	for _, res := range p.resources {
 		p.registerResourceAPI(res, apiPrefix, r)
 	}

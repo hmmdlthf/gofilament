@@ -10,7 +10,7 @@ import (
 )
 
 // Version is the current GoFilament release version.
-const Version = "v1.25.0"
+const Version = "v1.26.0"
 
 // NewPanel creates a new admin panel instance.
 func NewPanel(id string) *filament.Panel {
@@ -43,6 +43,6 @@ func NewActivityResource(store ...activitylog.Store) *filament.BaseResource[*act
 }
 
 // NewSupportResource returns a pre-configured live chat and AI support concierge administrative resource.
-func NewSupportResource(store ...support.Store) *filament.BaseResource[*support.Ticket] {
-	return support.NewSupportResource(store...)
+func NewSupportResource(opts ...support.SupportResourceOption) *filament.BaseResource[*support.Ticket] {
+	return support.NewSupportResource(opts...)
 }

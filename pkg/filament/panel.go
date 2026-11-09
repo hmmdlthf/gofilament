@@ -82,6 +82,9 @@ type Panel struct {
 	globalSearchKeyBinding   string
 	globalSearchResultsLimit int
 	globalSearchFuzzy        bool
+	hasSupport               bool
+	supportScope             string
+	supportSuperAdminPanelID string
 	hasTenantScoping         bool
 	tenantConfig        *TenantConfig
 	hasLogin            bool
@@ -158,6 +161,7 @@ func NewPanel(id string) *Panel {
 		sessionDuration:          24 * time.Hour,
 		rememberMeDuration:       30 * 24 * time.Hour,
 		tabsEnabled:              false,
+		supportScope:             "standard",
 		defaultListMode:                  ListModePagination,
 		defaultPerPage:                   15,
 		defaultPerPageOptions:            []int{10, 15, 25, 50, 100},
@@ -588,6 +592,58 @@ func (p *Panel) TenantScoping(enabled ...bool) *Panel {
 		p.hasTenantScoping = true
 	}
 	return p
+}
+
+// EnableSupport enables the built-in AI concierge, multimodal feature requests, and live support escalation.
+func (p *Panel) EnableSupport(enabled ...bool) *Panel {
+	if len(enabled) > 0 {
+		p.hasSupport = enabled[0]
+	} else {
+		p.hasSupport = true
+	}
+	return p
+}
+
+// SuperAdminSupport configures this panel as the Super Admin platform support hub, granting visibility across all tenants and tickets.
+func (p *Panel) SuperAdminSupport(enabled ...bool) *Panel {
+	p.supportScope = "super_admin"
+	p.hasSupport = len(enabled) == 0 || enabled[0]
+	return p
+}
+
+// TenantAdminSupport configures this panel as a Tenant Admin portal, scoping tickets to the active tenant and allowing escalation up to the platform super admin panel.
+func (p *Panel) TenantAdminSupport(superAdminPanelID ...string) *Panel {
+	p.supportScope = "tenant_admin"
+	p.hasSupport = true
+	if len(superAdminPanelID) > 0 && superAdminPanelID[0] != "" {
+		p.supportSuperAdminPanelID = superAdminPanelID[0]
+	}
+	return p
+}
+
+// SupportScope explicitly sets the support hierarchy tier ("super_admin", "tenant_admin", "standard").
+func (p *Panel) SupportScope(scope string) *Panel {
+	p.supportScope = scope
+	p.hasSupport = true
+	return p
+}
+
+// IsSupportEnabled returns whether support concierge is enabled for this panel.
+func (p *Panel) IsSupportEnabled() bool {
+	return p.hasSupport
+}
+
+// GetSupportScope returns the configured support hierarchy tier ("super_admin", "tenant_admin", "standard").
+func (p *Panel) GetSupportScope() string {
+	if p.supportScope == "" {
+		return "standard"
+	}
+	return p.supportScope
+}
+
+// GetSupportSuperAdminPanelID returns the upstream Super Admin panel ID for escalation.
+func (p *Panel) GetSupportSuperAdminPanelID() string {
+	return p.supportSuperAdminPanelID
 }
 
 // AuthValidatorFunc authenticates credentials and returns the user, token, and optional error.

@@ -421,6 +421,11 @@ func (c *BadgeColumnDef[T]) Label(l string) *BadgeColumnDef[T] {
 	return c
 }
 
+func (c *BadgeColumnDef[T]) Sortable(s ...bool) *BadgeColumnDef[T] {
+	c.BaseColumn.Sortable(s...)
+	return c
+}
+
 func (c *BadgeColumnDef[T]) Searchable(s ...bool) *BadgeColumnDef[T] {
 	c.BaseColumn.Searchable(s...)
 	return c
