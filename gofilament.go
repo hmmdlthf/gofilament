@@ -6,10 +6,11 @@ import (
 	"github.com/golaravel/gofilament/pkg/activitylog"
 	"github.com/golaravel/gofilament/pkg/entdriver"
 	"github.com/golaravel/gofilament/pkg/filament"
+	"github.com/golaravel/gofilament/pkg/support"
 )
 
 // Version is the current GoFilament release version.
-const Version = "v1.18.0"
+const Version = "v1.25.0"
 
 // NewPanel creates a new admin panel instance.
 func NewPanel(id string) *filament.Panel {
@@ -39,4 +40,9 @@ func EnableAuditLog[T any](res *filament.BaseResource[T], store ...activitylog.S
 // NewActivityResource returns a pre-configured audit trail administrative resource.
 func NewActivityResource(store ...activitylog.Store) *filament.BaseResource[*activitylog.Activity] {
 	return activitylog.NewActivityResource(store...)
+}
+
+// NewSupportResource returns a pre-configured live chat and AI support concierge administrative resource.
+func NewSupportResource(store ...support.Store) *filament.BaseResource[*support.Ticket] {
+	return support.NewSupportResource(store...)
 }
