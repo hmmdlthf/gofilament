@@ -110,6 +110,9 @@ type Panel struct {
 	authValidator       AuthValidatorFunc
 	tokenValidator      TokenValidatorFunc
 	apiErrorMapper      APIErrorMapper
+	brandResolver       BrandResolver
+	maxPerPage          int
+	exportMaxRows       func(ctx *Context) int
 	canAccess           func(ctx *Context) bool
 	middlewares         []gcontext.HandlerFunc
 	resources           []ResourceInterface

@@ -40,6 +40,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		return c.NoContent(http.StatusNoContent)
 	}
 
+	p.registerClientRoutes(r)
+
 	// Register CORS preflight handlers
 	r.OPTIONS(apiPrefix+"/schema", corsPreflight)
 	r.OPTIONS(apiPrefix+"/version", corsPreflight)
@@ -273,7 +275,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 				resourceDTOs = append(resourceDTOs, resourceDTO{
 					Slug:                     res.Slug(),
-					ModelName:                item.Label,
+					ModelName:                res.GetModelName(),
 					PluralModelName:          item.Label,
 					NavIcon:                  item.Icon,
 					NavGroup:                 item.Group,
@@ -390,6 +392,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			},
 		}
 
+		p.decorateSchema(ctx, schema)
 		return c.JSON(http.StatusOK, schema)
 	})
 
@@ -1113,6 +1116,10 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			if pVal, err := strconv.Atoi(perPageStr); err == nil && pVal > 0 {
 				perPage = pVal
 			}
+		}
+
+		if max := p.GetMaxPerPage(); perPage > max {
+			perPage = max
 		}
 
 		filters := make(map[string]string)

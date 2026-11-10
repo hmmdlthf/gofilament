@@ -668,6 +668,19 @@ type ColumnDTO struct {
 	IsDefault              bool   `json:"is_default"`
 	ToggledHiddenByDefault bool   `json:"toggled_hidden_by_default"`
 	Align                  string `json:"align,omitempty"`
+
+	// Presentation details for clients that render cells themselves.
+	Weight         string            `json:"weight,omitempty"`
+	Icon           string            `json:"icon,omitempty"`
+	Copyable       bool              `json:"copyable,omitempty"`
+	Editable       bool              `json:"editable,omitempty"`
+	DateTime       bool              `json:"date_time,omitempty"`
+	DateTimeFormat string            `json:"date_time_format,omitempty"`
+	Currency       string            `json:"currency,omitempty"`
+	Limit          int               `json:"limit,omitempty"`
+	Circular       bool              `json:"circular,omitempty"`
+	Colors         map[string]string `json:"colors,omitempty"`
+	Options        map[string]string `json:"options,omitempty"`
 }
 
 // ColumnToDTO transforms any ColumnRenderer into a ColumnDTO.
@@ -705,6 +718,9 @@ func ColumnToDTO[T any](col ColumnRenderer[T]) ColumnDTO {
 	}
 	if cd, ok := any(col).(interface{ GetAlign() string }); ok {
 		dto.Align = cd.GetAlign()
+	}
+	if cd, ok := any(col).(columnDescriber); ok {
+		cd.describeColumn(&dto)
 	}
 
 	return dto

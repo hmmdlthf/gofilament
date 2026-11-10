@@ -383,6 +383,11 @@ type SelectField struct {
 	order      []string
 	searchable bool
 	multiple   bool
+
+	ordered     bool // options were given in an explicit order (OptionList)
+	optionsFunc OptionsFunc
+	searchFunc  OptionSearchFunc
+	labelFunc   OptionLabelFunc
 }
 
 func Select(name string) *SelectField {
@@ -455,13 +460,20 @@ func (f *SelectField) Render(ctx context.Context, state map[string]any, errors m
 
 	var optHTML strings.Builder
 	optHTML.WriteString(`<option value="">Choose an option...</option>`)
-	for _, k := range f.order {
-		label := f.options[k]
+	resolved := f.ResolveOptions(ctx)
+	if f.searchFunc != nil {
+		// remote select: only the current value is rendered server-side
+		resolved = nil
+		if currentVal != "" {
+			resolved = []Option{{Value: currentVal, Label: f.OptionLabel(ctx, currentVal)}}
+		}
+	}
+	for _, o := range resolved {
 		selected := ""
-		if k == currentVal {
+		if o.Value == currentVal {
 			selected = "selected"
 		}
-		optHTML.WriteString(fmt.Sprintf(`<option value="%s" %s>%s</option>`, html.EscapeString(k), selected, html.EscapeString(label)))
+		optHTML.WriteString(fmt.Sprintf(`<option value="%s" %s>%s</option>`, html.EscapeString(o.Value), selected, html.EscapeString(o.Label)))
 	}
 
 	liveAttr := ""
@@ -503,6 +515,12 @@ func Toggle(name string) *ToggleField {
 
 func (f *ToggleField) Label(l string) *ToggleField {
 	f.BaseField.Label(l)
+	return f
+}
+
+// Default sets the initial state of the toggle on create forms.
+func (f *ToggleField) Default(on bool) *ToggleField {
+	f.defaultValue = on
 	return f
 }
 
