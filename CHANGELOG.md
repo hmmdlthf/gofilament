@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.27.0] - 2026-11-10
+
+### Added
+- **Ent Adapter List Options (`pkg/entdriver`)**:
+  - Resource lists bound with `entdriver.Bind` now apply quick search, equality filters and ordering. Configure with `Config.SearchColumns`, `SortColumns`, `FilterColumns` and `DefaultSort`.
+  - New `ListOptions`, `ApplyListFilters`, `ApplyListOrder`, `ApplyListOptions` and `ExecuteListQuery`; the total is counted before `ORDER BY` / `LIMIT`.
+- **API Error Mapping (`pkg/filament`)**:
+  - `ErrForbidden`: operations denied by an authorization callback now answer `403` instead of `500` / `400`.
+  - `Panel.APIErrorHandler(fn)`: map handler errors to an HTTP status and a client-safe message (for example unique-constraint violations to `409`).
+
+### Fixed
+- **Ent Adapter Form Mapping (`pkg/entdriver`)**:
+  - Form keys are mapped to Ent setters using Go initialisms (`category_id` -> `SetCategoryID`, `image_url` -> `SetImageURL`); such fields were silently skipped before.
+  - Empty input clears optional fields on update and is skipped for non-string fields on create.
+  - JSON numbers convert without exponent notation; `encoding.TextUnmarshaler` targets such as `uuid.UUID` are supported.
+- **Flutter Client Generator (`pkg/flutterclient`)**:
+  - The generated client compiles again (duplicate `saveLocale` / `restoreLocale`, missing `shared_preferences` import).
+  - On web the API base is derived from the page origin and first path segment, so one build serves several panels and any host.
+
 ## [v1.26.0] - 2026-11-09
 
 ### Added
