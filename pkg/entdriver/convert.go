@@ -1,7 +1,9 @@
 package entdriver
 
 import (
+	"encoding"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -18,6 +20,8 @@ var timeLayouts = []string{
 	"2006-01-02",
 }
 
+var textUnmarshalerType = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
+
 // ConvertValue converts a raw form input (usually string) to target reflect.Type.
 func ConvertValue(targetType reflect.Type, raw any) (reflect.Value, error) {
 	if raw == nil {
@@ -30,6 +34,19 @@ func ConvertValue(targetType reflect.Type, raw any) (reflect.Value, error) {
 	}
 
 	strVal := fmt.Sprintf("%v", raw)
+
+	// JSON numbers arrive as float64: format integers without an exponent
+	// (fmt prints 1000000.0 as "1e+06", which strconv.Atoi rejects).
+	switch n := raw.(type) {
+	case float64:
+		if n == math.Trunc(n) && math.Abs(n) < 1e15 {
+			strVal = strconv.FormatInt(int64(n), 10)
+		} else {
+			strVal = strconv.FormatFloat(n, 'f', -1, 64)
+		}
+	case float32:
+		strVal = strconv.FormatFloat(float64(n), 'f', -1, 32)
+	}
 
 	// Pointer target
 	if targetType.Kind() == reflect.Pointer {
@@ -56,9 +73,18 @@ func ConvertValue(targetType reflect.Type, raw any) (reflect.Value, error) {
 		return reflect.Value{}, fmt.Errorf("cannot parse %q as time.Time", strVal)
 	}
 
+	// Types that parse themselves from text (uuid.UUID, net.IP, custom enums, ...)
+	if targetType.Kind() != reflect.String && reflect.PointerTo(targetType).Implements(textUnmarshalerType) {
+		ptr := reflect.New(targetType)
+		if err := ptr.Interface().(encoding.TextUnmarshaler).UnmarshalText([]byte(strVal)); err != nil {
+			return reflect.Value{}, err
+		}
+		return ptr.Elem(), nil
+	}
+
 	switch targetType.Kind() {
 	case reflect.String:
-		return reflect.ValueOf(strVal), nil
+		return reflect.ValueOf(strVal).Convert(targetType), nil
 
 	case reflect.Bool:
 		s := strings.ToLower(strings.TrimSpace(strVal))

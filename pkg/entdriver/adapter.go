@@ -18,6 +18,20 @@ type Config[T any] struct {
 
 	// ID is an optional custom ID extractor closure
 	ID func(record T) string
+
+	// SearchColumns are the database columns matched by the table's quick search.
+	SearchColumns []string
+
+	// SortColumns optionally restricts which columns may be sorted on
+	// (default: any plain column name sent by the table header).
+	SortColumns []string
+
+	// FilterColumns optionally restricts which "filter_<column>" equality
+	// filters are honoured (default: any plain column name).
+	FilterColumns []string
+
+	// DefaultSort is applied when the request carries no sort, e.g. "name" or "id desc".
+	DefaultSort string
 }
 
 // BindClient binds an Ent entity client (e.g. client.User, client.Invoice) directly with sensible defaults.
@@ -63,7 +77,19 @@ func Bind[T any](res *filament.BaseResource[T], cfg Config[T]) *filament.BaseRes
 		}
 
 		offset := (page - 1) * perPage
-		return ExecuteQuery[T](ctx.GoContext(), q, perPage, offset)
+		if offset < 0 {
+			offset = 0
+		}
+		return ExecuteListQuery[T](ctx.GoContext(), q, ListOptions{
+			Search:        search,
+			SearchColumns: cfg.SearchColumns,
+			SortColumn:    sortCol,
+			SortDirection: sortDir,
+			SortColumns:   cfg.SortColumns,
+			DefaultSort:   cfg.DefaultSort,
+			Filters:       filters,
+			FilterColumns: cfg.FilterColumns,
+		}, perPage, offset)
 	})
 
 	// 3. OnFind Handler

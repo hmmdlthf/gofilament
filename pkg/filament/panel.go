@@ -109,6 +109,7 @@ type Panel struct {
 	authGuard           any
 	authValidator       AuthValidatorFunc
 	tokenValidator      TokenValidatorFunc
+	apiErrorMapper      APIErrorMapper
 	canAccess           func(ctx *Context) bool
 	middlewares         []gcontext.HandlerFunc
 	resources           []ResourceInterface

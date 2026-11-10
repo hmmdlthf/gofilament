@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"errors"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -718,7 +719,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 		tickets, err := gosupport.GetDefaultStore().ListTickets(c.Request.Context(), filter)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return p.apiError(c, err)
 		}
 		return c.JSON(http.StatusOK, map[string]any{
 			"tickets": tickets,
@@ -795,7 +796,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			req.Language,
 		)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return p.apiError(c, err)
 		}
 
 		ticket, _ := gosupport.GetDefaultStore().GetTicket(c.Request.Context(), userMsg.TicketID)
@@ -910,7 +911,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			},
 		)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return p.apiError(c, err)
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{
@@ -963,11 +964,11 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		if req.Target == "super_admin" {
 			superAdminID := p.GetSupportSuperAdminPanelID()
 			if err := gosupport.GetDefaultService().EscalateToSuperAdmin(c.Request.Context(), req.TicketID, superAdminID, req.Reason); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 		} else {
 			if err := gosupport.GetDefaultService().EscalateToLive(c.Request.Context(), req.TicketID, req.Reason); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 		}
 
@@ -1130,7 +1131,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		}); ok {
 			records, total, err := invoker.InvokeList(ctx, search, sortCol, sortDir, page, perPage, filters)
 			if err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"data":     records,
@@ -1220,7 +1221,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			}); ok {
 				result, err := importer.InvokeImportCSV(ctx, file, mapping)
 				if err != nil {
-					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+					return p.apiError(c, err)
 				}
 				return c.JSON(http.StatusOK, result)
 			}
@@ -1240,7 +1241,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				}); ok {
 					result, err := importer.InvokeImportRecords(ctx, jsonBody.Data)
 					if err != nil {
-						return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+						return p.apiError(c, err)
 					}
 					return c.JSON(http.StatusOK, result)
 				}
@@ -1250,7 +1251,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				}); ok {
 					result, err := importer.InvokeImportCSV(ctx, strings.NewReader(jsonBody.CSV), jsonBody.Map)
 					if err != nil {
-						return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+						return p.apiError(c, err)
 					}
 					return c.JSON(http.StatusOK, result)
 				}
@@ -1294,7 +1295,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				InvokeDeleteBulk(ctx *Context, ids []string) error
 			}); ok {
 				if err := invoker.InvokeDeleteBulk(ctx, ids); err != nil {
-					return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+					return p.apiError(c, err)
 				}
 				return c.JSON(http.StatusOK, map[string]any{
 					"success": true,
@@ -1345,7 +1346,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			InvokeReorder(ctx *Context, orderedIDs []string) error
 		}); ok {
 			if err := invoker.InvokeReorder(ctx, order); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"success": true,
@@ -1427,7 +1428,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			InvokeCreate(ctx *Context, data map[string]any) error
 		}); ok {
 			if err := invoker.InvokeCreate(ctx, data); err != nil {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return p.apiErrorStatus(c, err, http.StatusBadRequest)
 			}
 			return c.JSON(http.StatusCreated, map[string]any{
 				"success": true,
@@ -1452,7 +1453,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			InvokeUpdate(ctx *Context, id string, data map[string]any) error
 		}); ok {
 			if err := invoker.InvokeUpdate(ctx, id, data); err != nil {
-				return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return p.apiErrorStatus(c, err, http.StatusBadRequest)
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"success": true,
@@ -1478,7 +1479,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			InvokeDelete(ctx *Context, id string) error
 		}); ok {
 			if err := invoker.InvokeDelete(ctx, id); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"success": true,
@@ -1510,7 +1511,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			InvokeCellUpdate(ctx *Context, id, column string, value any) error
 		}); ok {
 			if err := invoker.InvokeCellUpdate(ctx, id, col, val); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"success": true,
@@ -1572,7 +1573,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 			data, total, err := relManager.HandleList(ctx, parentID, search, sortCol, sortDir, page, perPage)
 			if err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"relationship": relName,
@@ -1595,7 +1596,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			payload := parseRequestData(c)
 
 			if err := relManager.HandleCreate(ctx, parentID, payload); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 			return c.JSON(http.StatusCreated, map[string]any{
 				"success": true,
@@ -1615,7 +1616,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			payload := parseRequestData(c)
 
 			if err := relManager.HandleUpdate(ctx, parentID, childID, payload); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"success": true,
@@ -1636,7 +1637,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			childID := c.Param("child_id")
 
 			if err := relManager.HandleDelete(ctx, parentID, childID); err != nil {
-				return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return p.apiError(c, err)
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"success": true,
@@ -1663,4 +1664,47 @@ func parseRequestData(c *gcontext.Context) map[string]any {
 		}
 	}
 	return data
+}
+
+// ErrForbidden is returned by the Invoke* resource methods when an
+// authorization callback denies the operation. The API answers it with 403.
+var ErrForbidden = errors.New("403 Forbidden: Access denied")
+
+// APIErrorMapper translates a handler error into the HTTP status and message
+// sent to API clients. Return handled=false to fall back to the default
+// (403 for ErrForbidden, the error's own StatusCode() if it has one, else 500).
+type APIErrorMapper func(err error) (status int, message string, handled bool)
+
+// APIErrorHandler installs a mapper for errors returned by resource handlers,
+// e.g. to turn unique-constraint violations into a friendly 409 and to keep
+// raw database messages out of responses.
+func (p *Panel) APIErrorHandler(fn APIErrorMapper) *Panel {
+	p.apiErrorMapper = fn
+	return p
+}
+
+// apiError writes the JSON error response for err (500 unless mapped).
+func (p *Panel) apiError(c *gcontext.Context, err error) error {
+	return p.apiErrorStatus(c, err, http.StatusInternalServerError)
+}
+
+// apiErrorStatus writes the JSON error response for err, using fallback as the
+// status when neither the error itself nor the panel's mapper decides one.
+func (p *Panel) apiErrorStatus(c *gcontext.Context, err error, fallback int) error {
+	status, message := fallback, err.Error()
+	var coded interface{ StatusCode() int }
+	switch {
+	case errors.Is(err, ErrForbidden):
+		status = http.StatusForbidden
+	case errors.As(err, &coded):
+		if sc := coded.StatusCode(); sc >= 400 && sc < 600 {
+			status = sc
+		}
+	}
+	if p.apiErrorMapper != nil {
+		if s, m, ok := p.apiErrorMapper(err); ok {
+			status, message = s, m
+		}
+	}
+	return c.JSON(status, map[string]string{"error": message})
 }
