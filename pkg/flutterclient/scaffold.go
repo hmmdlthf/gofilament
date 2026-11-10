@@ -182,28 +182,6 @@ class FilamentApiClient {
     return null;
   }
 
-  Future<void> saveLocale(String locale, bool isRTL) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final prefix = _storageKeyPrefix;
-      await prefs.setString('${prefix}_locale', locale);
-      await prefs.setBool('${prefix}_is_rtl', isRTL);
-    } catch (_) {}
-  }
-
-  Future<Map<String, dynamic>?> restoreLocale() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final prefix = _storageKeyPrefix;
-      final loc = prefs.getString('${prefix}_locale');
-      if (loc != null && loc.isNotEmpty) {
-        final rtl = prefs.getBool('${prefix}_is_rtl') ?? (loc.toLowerCase() == 'ar');
-        return {'locale': loc, 'is_rtl': rtl};
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Future<Map<String, dynamic>> login(String username, String password, {bool remember = false}) async {
     final res = await http.post(
       Uri.parse('$baseUrl/api/login'),
@@ -238,15 +216,12 @@ class FilamentApiClient {
 
   static String _defaultBaseUrl() {
     if (kIsWeb) {
-      final origin = Uri.base.origin;
-      final host = Uri.base.host;
-      if (host.isNotEmpty && host != 'localhost' && host != '127.0.0.1') {
-        return '$origin%s';
-      }
-      if (Uri.base.port == 8081 || Uri.base.port == 8080 || Uri.base.port == 80 || Uri.base.port == 443) {
-        return '$origin%s';
-      }
-      return '%s';
+      // One web build can serve several panels and any host (tenant subdomains,
+      // custom domains): the API lives under the panel path, which is the first
+      // segment of the page URL (the <base href> the server injects).
+      final segments = Uri.base.pathSegments.where((s) => s.isNotEmpty).toList();
+      final panelPath = segments.isNotEmpty ? '/${segments.first}' : '%s';
+      return '${Uri.base.origin}$panelPath';
     }
     return '%s';
   }
@@ -495,7 +470,7 @@ class FilamentApiClient {
     return null;
   }
 }
-`, panelPath, panelPath, apiBaseURL, apiBaseURL)
+`, panelPath, apiBaseURL)
 	if err := os.WriteFile(filepath.Join(libDir, "api.dart"), []byte(apiDart), 0644); err != nil {
 		return err
 	}
@@ -3068,6 +3043,7 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
 	// 6. lib/main.dart - Mobile-First Responsive Flutter Admin Application
 	mainDartTemplate := `import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
 import 'locale.dart';
 import 'relation_record_screen.dart';
