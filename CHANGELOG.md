@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.28.1] - 2026-11-11
+
+### Added
+- **Flutter admin (`flutter/gofilament_admin`)**: `AdminApi.getText` for panel endpoints that return HTML or CSV (for example printable receipts).
+
+### Changed
+- **Flutter admin deep links**: `#/pages/<id>` now also opens full-screen pages, so a device such as a till terminal can bookmark a full-screen page directly.
+
 ## [v1.28.0] - 2026-11-11
 
 ### Security
