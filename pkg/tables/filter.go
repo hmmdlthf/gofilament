@@ -64,10 +64,10 @@ func Filter(name string) *FilterDef {
 	}
 }
 
-func (f *FilterDef) GetName() string       { return f.name }
-func (f *FilterDef) GetType() FilterType   { return FilterTypeCustom }
-func (f *FilterDef) GetColumn() string     { return f.column }
-func (f *FilterDef) IsMultiple() bool      { return f.multiple }
+func (f *FilterDef) GetName() string            { return f.name }
+func (f *FilterDef) GetType() FilterType        { return FilterTypeCustom }
+func (f *FilterDef) GetColumn() string          { return f.column }
+func (f *FilterDef) IsMultiple() bool           { return f.multiple }
 func (f *FilterDef) GetOptions() []FilterOption { return f.options }
 
 func (f *FilterDef) Label(l string) *FilterDef {
@@ -137,10 +137,10 @@ func SelectFilter(name string) *SelectFilterDef {
 	}
 }
 
-func (f *SelectFilterDef) GetName() string       { return f.name }
-func (f *SelectFilterDef) GetType() FilterType   { return FilterTypeSelect }
-func (f *SelectFilterDef) GetColumn() string     { return f.column }
-func (f *SelectFilterDef) IsMultiple() bool      { return f.multiple }
+func (f *SelectFilterDef) GetName() string     { return f.name }
+func (f *SelectFilterDef) GetType() FilterType { return FilterTypeSelect }
+func (f *SelectFilterDef) GetColumn() string   { return f.column }
+func (f *SelectFilterDef) IsMultiple() bool    { return f.multiple }
 
 func (f *SelectFilterDef) Column(c string) *SelectFilterDef {
 	f.column = c
@@ -260,10 +260,10 @@ func RefinedFilter(name string) *RefinedFilterDef {
 	}
 }
 
-func (f *RefinedFilterDef) GetName() string       { return f.name }
-func (f *RefinedFilterDef) GetType() FilterType   { return FilterTypeRefined }
-func (f *RefinedFilterDef) GetColumn() string     { return f.column }
-func (f *RefinedFilterDef) IsMultiple() bool      { return f.multiple }
+func (f *RefinedFilterDef) GetName() string     { return f.name }
+func (f *RefinedFilterDef) GetType() FilterType { return FilterTypeRefined }
+func (f *RefinedFilterDef) GetColumn() string   { return f.column }
+func (f *RefinedFilterDef) IsMultiple() bool    { return f.multiple }
 
 func (f *RefinedFilterDef) Label(l string) *RefinedFilterDef {
 	f.label = l
@@ -395,10 +395,10 @@ func TernaryFilter(name string) *TernaryFilterDef {
 	}
 }
 
-func (f *TernaryFilterDef) GetName() string       { return f.name }
-func (f *TernaryFilterDef) GetType() FilterType   { return FilterTypeTernary }
-func (f *TernaryFilterDef) GetColumn() string     { return f.column }
-func (f *TernaryFilterDef) IsMultiple() bool      { return false }
+func (f *TernaryFilterDef) GetName() string     { return f.name }
+func (f *TernaryFilterDef) GetType() FilterType { return FilterTypeTernary }
+func (f *TernaryFilterDef) GetColumn() string   { return f.column }
+func (f *TernaryFilterDef) IsMultiple() bool    { return false }
 
 func (f *TernaryFilterDef) Column(c string) *TernaryFilterDef {
 	f.column = c
@@ -446,9 +446,19 @@ func (f *TernaryFilterDef) Render(currentValue string) string {
 </div>`,
 		html.EscapeString(f.GetLabel()),
 		f.name,
-		func() string { if currentValue == "true" { return "selected" }; return "" }(),
+		func() string {
+			if currentValue == "true" {
+				return "selected"
+			}
+			return ""
+		}(),
 		html.EscapeString(f.trueLabel),
-		func() string { if currentValue == "false" { return "selected" }; return "" }(),
+		func() string {
+			if currentValue == "false" {
+				return "selected"
+			}
+			return ""
+		}(),
 		html.EscapeString(f.falseLabel),
 	)
 }
@@ -463,4 +473,3 @@ func (f *TernaryFilterDef) ToDTO() FilterDTO {
 		Options:  f.GetOptions(),
 	}
 }
-

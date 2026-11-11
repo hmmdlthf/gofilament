@@ -1,8 +1,11 @@
 package tables
 
 import (
+	"context"
 	"fmt"
 	"html"
+
+	"github.com/golaravel/gofilament/pkg/forms"
 )
 
 // TableAction represents an interactive operation on a single row or header.
@@ -17,6 +20,11 @@ type TableAction[T any] struct {
 	visibleFunc          func(record T) bool
 	urlFunc              func(record T) string
 	handler              func(record T) error
+
+	runner         ActionHandler[T]
+	formBuilder    func(f *forms.Form) *forms.Form
+	authorize      func(ctx context.Context, record T) bool
+	successMessage string
 }
 
 func Action[T any](name string) *TableAction[T] {

@@ -27,30 +27,30 @@ type ColumnToggleable interface {
 
 // Table represents a complete data table specification for model type T.
 type Table[T any] struct {
-	columns       []ColumnRenderer[T]
-	filters       []FilterInterface
-	actions       []*TableAction[T]
-	bulkActions   []*BulkActionDef
-	headerActions []*TableAction[T]
-	records       []T
-	totalCount    int
-	page          int
-	perPage       int
-	searchQuery   string
-	sortCol       string
-	sortDir       string
-	activeFilters map[string]string
-	idFunc        func(record T) string
-	toggleable    bool
-	reorderable    bool
-	reorderCol     string
-	softDeletes    bool
-	isTrashed      func(record T) bool
-	listMode                 string
-	perPageOptions           []int
-	mobilePaginationPosition string
-	defaultColumns           []string
-	selectableColumns        []string
+	columns                   []ColumnRenderer[T]
+	filters                   []FilterInterface
+	actions                   []*TableAction[T]
+	bulkActions               []*BulkActionDef
+	headerActions             []*TableAction[T]
+	records                   []T
+	totalCount                int
+	page                      int
+	perPage                   int
+	searchQuery               string
+	sortCol                   string
+	sortDir                   string
+	activeFilters             map[string]string
+	idFunc                    func(record T) string
+	toggleable                bool
+	reorderable               bool
+	reorderCol                string
+	softDeletes               bool
+	isTrashed                 func(record T) bool
+	listMode                  string
+	perPageOptions            []int
+	mobilePaginationPosition  string
+	defaultColumns            []string
+	selectableColumns         []string
 	advancedSearchableColumns []string
 	advancedSearchEnabled     bool
 }
@@ -691,9 +691,19 @@ func (t *Table[T]) Render(basePath string) string {
 			isRecTrashed := t.softDeletes && t.isTrashed != nil && t.isTrashed(rec)
 			trAttrs := ""
 			if t.reorderable {
-				trAttrs = fmt.Sprintf(`data-id="%s" class="table-row-draggable%s" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', this.dataset.id); this.classList.add('table-row-dragging');" ondragend="this.classList.remove('table-row-dragging');" ondragover="event.preventDefault(); const dragging = document.querySelector('.table-row-draggable.table-row-dragging'); if (dragging && dragging !== this) { const rect = this.getBoundingClientRect(); const next = (event.clientY - rect.top)/(rect.bottom - rect.top) > 0.5; this.parentNode.insertBefore(dragging, next ? this.nextSibling : this); }" ondrop="event.preventDefault(); Filament.reorderRows('%s/reorder', this.closest('table'));"`, recID, func() string { if isRecTrashed { return " table-row-trashed" }; return "" }(), basePath)
+				trAttrs = fmt.Sprintf(`data-id="%s" class="table-row-draggable%s" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', this.dataset.id); this.classList.add('table-row-dragging');" ondragend="this.classList.remove('table-row-dragging');" ondragover="event.preventDefault(); const dragging = document.querySelector('.table-row-draggable.table-row-dragging'); if (dragging && dragging !== this) { const rect = this.getBoundingClientRect(); const next = (event.clientY - rect.top)/(rect.bottom - rect.top) > 0.5; this.parentNode.insertBefore(dragging, next ? this.nextSibling : this); }" ondrop="event.preventDefault(); Filament.reorderRows('%s/reorder', this.closest('table'));"`, recID, func() string {
+					if isRecTrashed {
+						return " table-row-trashed"
+					}
+					return ""
+				}(), basePath)
 			} else {
-				trAttrs = fmt.Sprintf(`data-id="%s"%s`, recID, func() string { if isRecTrashed { return ` class="table-row-trashed" style="background-color: rgba(254, 242, 242, 0.4);"` }; return "" }())
+				trAttrs = fmt.Sprintf(`data-id="%s"%s`, recID, func() string {
+					if isRecTrashed {
+						return ` class="table-row-trashed" style="background-color: rgba(254, 242, 242, 0.4);"`
+					}
+					return ""
+				}())
 			}
 
 			sb.WriteString(fmt.Sprintf(`<tr %s>`, trAttrs))

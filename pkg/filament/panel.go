@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"errors"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -112,6 +113,7 @@ type Panel struct {
 	apiErrorMapper      APIErrorMapper
 	brandResolver       BrandResolver
 	maxPerPage          int
+	currencyResolver    func(ctx *Context) string
 	exportMaxRows       func(ctx *Context) int
 	canAccess           func(ctx *Context) bool
 	middlewares         []gcontext.HandlerFunc
@@ -778,22 +780,37 @@ func (p *Panel) Middleware(mw ...gcontext.HandlerFunc) *Panel {
 	return p
 }
 
-// AuthorizeAccess verifies panel authorization for the incoming request context.
-func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
-	ctx := NewContext(c, p)
+// ErrAccessDenied is returned by AuthorizeAccess after it has written the
+// 401 / 403 response (or the redirect to the login page). Handlers must stop
+// and return it: the request is already answered.
+var ErrAccessDenied = errors.New("filament: access denied")
 
-	// 1. Resolve user from Authorization header if present
+func denied(err error) error {
+	if err != nil {
+		return err
+	}
+	return ErrAccessDenied
+}
+
+// resolveUser builds the request context and authenticates a bearer token
+// when one is sent. It never writes a response.
+func (p *Panel) resolveUser(c *gcontext.Context) *Context {
+	ctx := NewContext(c, p)
 	authHeader := c.Header("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") {
-		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
-		if p.tokenValidator != nil {
-			if u, err := p.tokenValidator(ctx, tokenStr); err == nil && u != nil {
-				c.Set(auth.ContextUserKey, u)
-			}
+	if strings.HasPrefix(authHeader, "Bearer ") && p.tokenValidator != nil {
+		if u, err := p.tokenValidator(ctx, strings.TrimPrefix(authHeader, "Bearer ")); err == nil && u != nil {
+			c.Set(auth.ContextUserKey, u)
 		}
 	}
+	return ctx
+}
 
-	// 2. Check if panel requires authentication
+// AuthorizeAccess verifies panel authorization for the incoming request.
+// When access is refused it writes the response and returns ErrAccessDenied
+// (or the write error): callers must return immediately on any error.
+func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
+	ctx := p.resolveUser(c)
+
 	reqPath := ""
 	if c.Request != nil && c.Request.URL != nil {
 		reqPath = c.Request.URL.Path
@@ -801,24 +818,23 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 	if p.requiresAuth && ctx.User() == nil {
 		if strings.Contains(reqPath, "/api/") {
 			setCorsHeaders(c)
-			return ctx, c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized: Authentication required"})
+			return ctx, denied(c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized: Authentication required"}))
 		}
 		if p.hasLogin {
-			return ctx, c.Redirect(http.StatusSeeOther, p.path+"/login")
+			return ctx, denied(c.Redirect(http.StatusSeeOther, p.path+"/login"))
 		}
-		return ctx, c.String(http.StatusUnauthorized, "401 Unauthorized: Authentication required")
+		return ctx, denied(c.String(http.StatusUnauthorized, "401 Unauthorized: Authentication required"))
 	}
 
-	// 3. Check custom canAccess authorization rule
 	if p.canAccess != nil && !p.canAccess(ctx) {
 		if strings.Contains(reqPath, "/api/") {
 			setCorsHeaders(c)
-			return ctx, c.JSON(http.StatusForbidden, map[string]string{"error": "Forbidden: Panel access denied"})
+			return ctx, denied(c.JSON(http.StatusForbidden, map[string]string{"error": "Forbidden: Panel access denied"}))
 		}
 		if p.hasLogin && ctx.User() == nil {
-			return ctx, c.Redirect(http.StatusSeeOther, p.path+"/login")
+			return ctx, denied(c.Redirect(http.StatusSeeOther, p.path+"/login"))
 		}
-		return ctx, c.String(http.StatusForbidden, "403 Forbidden: Panel access denied")
+		return ctx, denied(c.String(http.StatusForbidden, "403 Forbidden: Panel access denied"))
 	}
 
 	return ctx, nil

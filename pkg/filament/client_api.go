@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -136,6 +137,7 @@ type ResourceMeta struct {
 // DescribeForm returns the resource form as JSON nodes with dynamic options
 // resolved for the request.
 func (r *BaseResource[T]) DescribeForm(ctx *Context) []forms.Node {
+	withSelf(ctx)
 	if r.formBuilder == nil {
 		return []forms.Node{}
 	}
@@ -183,6 +185,9 @@ func (r *BaseResource[T]) RecordAbilities(ctx *Context, id string) (any, map[str
 		"view":   true,
 		"update": r.onUpdate != nil && (r.canEdit == nil || r.canEdit(ctx, record)),
 		"delete": r.onDelete != nil && (r.canDelete == nil || r.canDelete(ctx, record)),
+		// may_edit ignores whether the resource itself has an update handler:
+		// it is the permission that governs changes to related rows.
+		"may_edit": r.canEdit == nil || r.canEdit(ctx, record),
 	}, nil
 }
 
@@ -204,11 +209,16 @@ func (p *Panel) decorateSchema(ctx *Context, schema map[string]any) {
 		if res.NavigationItem(ctx) == nil {
 			continue
 		}
-		if d, ok := res.(interface{ Meta(ctx *Context) ResourceMeta }); ok {
+		if d, ok := res.(interface {
+			Meta(ctx *Context) ResourceMeta
+		}); ok {
 			meta[res.Slug()] = d.Meta(ctx)
 		}
 	}
 	schema["resource_meta"] = meta
+	if p.currencyResolver != nil {
+		schema["currency"] = p.currencyResolver(ctx)
+	}
 
 	maxRows := 5000
 	if p.exportMaxRows != nil {
@@ -339,6 +349,9 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 			})
 		})
 
+		p.registerRelationClientRoutes(r, res, resPath, preflight)
+		p.registerActionRoutes(r, res, resPath, preflight)
+
 		// GET .../form/options?field=<name>&q=<text>&limit=<n>
 		r.OPTIONS(resPath+"/form/options", preflight)
 		r.GET(resPath+"/form/options", func(c *gcontext.Context) error {
@@ -359,6 +372,154 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 				return p.apiError(c, ErrForbidden)
 			}
 			sel, ok := finder.FormField(c.Query("field")).(*forms.SelectField)
+			if !ok {
+				return c.JSON(http.StatusNotFound, map[string]string{"error": "Unknown field"})
+			}
+			limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
+			if limit <= 0 || limit > 100 {
+				limit = 25
+			}
+			opts := sel.SearchOptions(ctx.GoContext(), c.Query("q"), limit)
+			if opts == nil {
+				opts = []forms.Option{}
+			}
+			return c.JSON(http.StatusOK, map[string]any{"options": opts})
+		})
+	}
+}
+
+// authorizeRelation checks that the user may see (or, for writes, edit) the
+// parent record before any of its related rows are read or changed.
+func (p *Panel) authorizeRelation(ctx *Context, res ResourceInterface, parentID string, write bool) error {
+	guard, ok := res.(interface {
+		RecordAbilities(ctx *Context, id string) (any, map[string]bool, error)
+	})
+	if !ok {
+		return nil
+	}
+	finder, hasFinder := res.(interface{ HasFinder() bool })
+	if hasFinder && !finder.HasFinder() {
+		return nil // the resource cannot load records, so there is nothing to check against
+	}
+	_, abilities, err := guard.RecordAbilities(ctx, parentID)
+	if err != nil {
+		return err
+	}
+	if write && !abilities["may_edit"] {
+		return ErrForbidden
+	}
+	return nil
+}
+
+// HasFinder reports whether the resource can load a single record.
+func (r *BaseResource[T]) HasFinder() bool { return r.onFind != nil }
+
+type relationParentKey struct{}
+
+// RelationParentID returns the id of the parent record while a relation
+// manager's form or options are being resolved ("" otherwise). Option loaders
+// use it to offer choices that depend on the parent.
+func RelationParentID(ctx context.Context) string {
+	id, _ := ctx.Value(relationParentKey{}).(string)
+	return id
+}
+
+func withRelationParent(ctx *Context, parentID string) {
+	if ctx.Request != nil {
+		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), relationParentKey{}, parentID))
+	}
+}
+
+// relationFormer is implemented by relation managers that can describe their form.
+type relationFormer interface {
+	DescribeForm(ctx *Context) []forms.Node
+	FormField(name string) forms.Component
+	HandleFind(ctx *Context, parentID, childID string) (any, error)
+}
+
+// registerRelationClientRoutes mounts the form endpoints of a resource's relation managers.
+func (p *Panel) registerRelationClientRoutes(r *router.Router, res ResourceInterface, resPath string, preflight gcontext.HandlerFunc) {
+	for _, rel := range res.GetRelations() {
+		rel := rel
+		former, ok := rel.(relationFormer)
+		if !ok {
+			continue
+		}
+		relPath := resPath + "/:id/relations/" + rel.Relationship()
+
+		// GET .../relations/<rel>/form[?child_id=<id>]
+		r.OPTIONS(relPath+"/form", preflight)
+		r.GET(relPath+"/form", func(c *gcontext.Context) error {
+			setCorsHeaders(c)
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			parentID := c.Param("id")
+			childID := c.Query("child_id")
+			if err := p.authorizeRelation(ctx, res, parentID, childID == ""); err != nil {
+				return p.apiErrorStatus(c, err, http.StatusNotFound)
+			}
+			withRelationParent(ctx, parentID)
+			nodes := former.DescribeForm(ctx)
+			abilities, _ := rel.GetAPISchema()["abilities"].(map[string]bool)
+			if childID == "" {
+				return c.JSON(http.StatusOK, map[string]any{
+					"mode": "create", "schema": nodes, "state": map[string]any{}, "abilities": abilities,
+				})
+			}
+			record, err := former.HandleFind(ctx, parentID, childID)
+			if err != nil {
+				return p.apiErrorStatus(c, err, http.StatusNotFound)
+			}
+			state := map[string]any{}
+			if raw, err := json.Marshal(record); err == nil {
+				_ = json.Unmarshal(raw, &state)
+			}
+			labels := map[string]string{}
+			var walk func(ns []forms.Node)
+			walk = func(ns []forms.Node) {
+				for _, n := range ns {
+					if n.Kind == "field" && n.Remote {
+						if v, ok := state[n.Name]; ok && v != nil {
+							if sel, ok := former.FormField(n.Name).(*forms.SelectField); ok {
+								labels[n.Name] = sel.OptionLabel(ctx.GoContext(), formatScalar(v))
+							}
+						}
+					}
+					walk(n.Children)
+				}
+			}
+			walk(nodes)
+			parentAbilities := map[string]bool{"may_edit": true}
+			if guard, ok := res.(interface {
+				RecordAbilities(ctx *Context, id string) (any, map[string]bool, error)
+			}); ok {
+				_, parentAbilities, _ = guard.RecordAbilities(ctx, parentID)
+			}
+			return c.JSON(http.StatusOK, map[string]any{
+				"mode": "edit", "schema": nodes, "state": record, "option_labels": labels,
+				"abilities": map[string]bool{
+					"view":   true,
+					"update": abilities["update"] && parentAbilities["may_edit"],
+					"delete": abilities["delete"] && parentAbilities["may_edit"],
+				},
+			})
+		})
+
+		// GET .../relations/<rel>/form/options?field=&q=
+		r.OPTIONS(relPath+"/form/options", preflight)
+		r.GET(relPath+"/form/options", func(c *gcontext.Context) error {
+			setCorsHeaders(c)
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			if err := p.authorizeRelation(ctx, res, c.Param("id"), false); err != nil {
+				return p.apiErrorStatus(c, err, http.StatusNotFound)
+			}
+			withRelationParent(ctx, c.Param("id"))
+			sel, ok := former.FormField(c.Query("field")).(*forms.SelectField)
 			if !ok {
 				return c.JSON(http.StatusNotFound, map[string]string{"error": "Unknown field"})
 			}

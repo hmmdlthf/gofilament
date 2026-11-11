@@ -734,7 +734,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	// POST /support/message - Send customer message & get instant AI response / auto-escalation
 	r.POST(apiPrefix+"/support/message", func(c *gcontext.Context) error {
 		setCorsHeaders(c)
-		ctx, _ := p.AuthorizeAccess(c)
+		ctx := p.resolveUser(c) // anonymous visitors may write to support
 		var req struct {
 			TicketID  string `json:"ticket_id"`
 			TenantID  string `json:"tenant_id"`
@@ -816,7 +816,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	// POST /support/voice-feature - Submit multimodal voice feature request in any language
 	r.POST(apiPrefix+"/support/voice-feature", func(c *gcontext.Context) error {
 		setCorsHeaders(c)
-		ctx, _ := p.AuthorizeAccess(c)
+		ctx := p.resolveUser(c) // anonymous visitors may write to support
 
 		var (
 			ticketID   string
@@ -1140,12 +1140,20 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			if err != nil {
 				return p.apiError(c, err)
 			}
-			return c.JSON(http.StatusOK, map[string]any{
+			out := map[string]any{
 				"data":     records,
 				"total":    total,
 				"page":     page,
 				"per_page": perPage,
-			})
+			}
+			if rm, ok := res.(interface {
+				RowMeta(ctx *Context, records any) map[string]map[string]any
+			}); ok {
+				if meta := rm.RowMeta(ctx, records); meta != nil {
+					out["row_meta"] = meta
+				}
+			}
+			return c.JSON(http.StatusOK, out)
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{
@@ -1545,7 +1553,9 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		if err != nil {
 			return err
 		}
-		_ = ctx
+		if err := p.authorizeRelation(ctx, res, c.Param("id"), false); err != nil {
+			return p.apiErrorStatus(c, err, http.StatusNotFound)
+		}
 
 		var relationsMeta []map[string]any
 		for _, rel := range res.GetRelations() {
@@ -1572,11 +1582,24 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				return err
 			}
 			parentID := c.Param("id")
+			if err := p.authorizeRelation(ctx, res, parentID, false); err != nil {
+				return p.apiErrorStatus(c, err, http.StatusNotFound)
+			}
 			search := ctx.Query("search")
 			sortCol := ctx.Query("sort")
 			sortDir := ctx.DefaultQuery("direction", "asc")
 			page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-			perPage, _ := strconv.Atoi(ctx.DefaultQuery("perPage", "15"))
+			perPageRaw := ctx.Query("per_page")
+			if perPageRaw == "" {
+				perPageRaw = ctx.DefaultQuery("perPage", "15")
+			}
+			perPage, _ := strconv.Atoi(perPageRaw)
+			if perPage <= 0 {
+				perPage = 15
+			}
+			if max := p.GetMaxPerPage(); perPage > max {
+				perPage = max
+			}
 
 			data, total, err := relManager.HandleList(ctx, parentID, search, sortCol, sortDir, page, perPage)
 			if err != nil {
@@ -1600,6 +1623,9 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				return err
 			}
 			parentID := c.Param("id")
+			if err := p.authorizeRelation(ctx, res, parentID, true); err != nil {
+				return p.apiErrorStatus(c, err, http.StatusNotFound)
+			}
 			payload := parseRequestData(c)
 
 			if err := relManager.HandleCreate(ctx, parentID, payload); err != nil {
@@ -1620,6 +1646,9 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			}
 			parentID := c.Param("id")
 			childID := c.Param("child_id")
+			if err := p.authorizeRelation(ctx, res, parentID, true); err != nil {
+				return p.apiErrorStatus(c, err, http.StatusNotFound)
+			}
 			payload := parseRequestData(c)
 
 			if err := relManager.HandleUpdate(ctx, parentID, childID, payload); err != nil {
@@ -1642,6 +1671,9 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			}
 			parentID := c.Param("id")
 			childID := c.Param("child_id")
+			if err := p.authorizeRelation(ctx, res, parentID, true); err != nil {
+				return p.apiErrorStatus(c, err, http.StatusNotFound)
+			}
 
 			if err := relManager.HandleDelete(ctx, parentID, childID); err != nil {
 				return p.apiError(c, err)

@@ -10,6 +10,9 @@ type ActionDTO struct {
 	ModalHeading         string   `json:"modal_heading,omitempty"`
 	ModalDescription     string   `json:"modal_description,omitempty"`
 	Formats              []string `json:"formats,omitempty"`
+	// Custom marks actions run through the API (not view / edit / delete).
+	Custom  bool `json:"custom,omitempty"`
+	HasForm bool `json:"has_form,omitempty"`
 }
 
 // ToDTO describes the action.
@@ -18,6 +21,8 @@ func (a *TableAction[T]) ToDTO() ActionDTO {
 		Name: a.name, Label: a.label, Icon: a.icon, Color: a.color,
 		RequiresConfirmation: a.requiresConfirmation,
 		ModalHeading:         a.modalHeading, ModalDescription: a.modalDescription,
+		Custom:  a.runner != nil,
+		HasForm: a.formBuilder != nil,
 	}
 }
 
@@ -73,7 +78,7 @@ func (c *TextColumnDef[T]) describeColumn(dto *ColumnDTO) {
 	switch {
 	case c.isDateTime:
 		dto.Type = "datetime"
-	case c.currency != "":
+	case c.currency != "" || c.isMoney:
 		dto.Type = "money"
 	}
 }
@@ -82,6 +87,7 @@ func (c *BadgeColumnDef[T]) describeColumn(dto *ColumnDTO) {
 	c.BaseColumn.describeColumn(dto)
 	dto.Type = "badge"
 	dto.Colors = c.colors
+	dto.Options = c.labels
 }
 
 func (c *ToggleColumnDef[T]) describeColumn(dto *ColumnDTO) {

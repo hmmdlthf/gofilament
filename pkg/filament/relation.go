@@ -47,6 +47,7 @@ type BaseRelationManager[T any] struct {
 	onDelete func(ctx *Context, parentID, childID string) error
 	onAttach func(ctx *Context, parentID, childID string) error
 	onDetach func(ctx *Context, parentID, childID string) error
+	onFind   func(ctx *Context, parentID, childID string) (T, error)
 }
 
 // NewRelationManager creates a new typed relation manager.
@@ -355,13 +356,77 @@ func (rm *BaseRelationManager[T]) Render(ctx *Context, parentBasePath, parentID 
 	)
 }
 
+// GetOnCreate returns the create handler (to wrap it with extra behaviour).
+func (rm *BaseRelationManager[T]) GetOnCreate() func(ctx *Context, parentID string, data map[string]any) error {
+	return rm.onCreate
+}
+
+// GetOnUpdate returns the update handler.
+func (rm *BaseRelationManager[T]) GetOnUpdate() func(ctx *Context, parentID, childID string, data map[string]any) error {
+	return rm.onUpdate
+}
+
+// GetOnDelete returns the delete handler.
+func (rm *BaseRelationManager[T]) GetOnDelete() func(ctx *Context, parentID, childID string) error {
+	return rm.onDelete
+}
+
+// OnFind loads one related record (used by the edit form of API clients).
+func (rm *BaseRelationManager[T]) OnFind(fn func(ctx *Context, parentID, childID string) (T, error)) *BaseRelationManager[T] {
+	rm.onFind = fn
+	return rm
+}
+
+// HandleFind loads one related record.
+func (rm *BaseRelationManager[T]) HandleFind(ctx *Context, parentID, childID string) (any, error) {
+	if rm.onFind == nil {
+		return nil, fmt.Errorf("record not found")
+	}
+	return rm.onFind(ctx, parentID, childID)
+}
+
+func (rm *BaseRelationManager[T]) formComponents() []forms.Component {
+	if rm.formBuilder != nil {
+		return rm.formBuilder(forms.New()).GetSchema()
+	}
+	if rm.formDef != nil {
+		return rm.formDef.GetSchema()
+	}
+	return nil
+}
+
+// DescribeForm returns the relation's form as JSON nodes.
+func (rm *BaseRelationManager[T]) DescribeForm(ctx *Context) []forms.Node {
+	return forms.Describe(ctx.GoContext(), rm.formComponents())
+}
+
+// FormField returns a field of the relation's form by name.
+func (rm *BaseRelationManager[T]) FormField(name string) forms.Component {
+	return forms.FindField(rm.formComponents(), name)
+}
+
 // GetAPISchema returns schema metadata for REST/Flutter integration.
 func (rm *BaseRelationManager[T]) GetAPISchema() map[string]any {
+	tbl := rm.GetTable()
+	columns := []tables.ColumnDTO{}
+	meta := tables.TableMeta{Actions: []tables.ActionDTO{}, BulkActions: []tables.ActionDTO{}, HeaderActions: []tables.ActionDTO{}}
+	if tbl != nil {
+		columns = tbl.GetColumnDTOs()
+		meta = tbl.Meta()
+	}
 	return map[string]any{
 		"relationship":           rm.relationship,
 		"title":                  rm.title,
 		"icon":                   rm.GetIcon(),
 		"record_title_attribute": rm.recordTitleAttribute,
+		"columns":                columns,
+		"table":                  meta,
+		"has_form":               len(rm.formComponents()) > 0,
+		"abilities": map[string]bool{
+			"create": rm.onCreate != nil,
+			"update": rm.onUpdate != nil && rm.onFind != nil,
+			"delete": rm.onDelete != nil,
+		},
 	}
 }
 

@@ -222,11 +222,12 @@ func (c *BaseColumn[T]) FormatLabel() string {
 // ----------------------------------------------------
 
 type TextColumnDef[T any] struct {
+	isMoney bool
 	BaseColumn[T]
-	isDateTime   bool
-	dateTimeFmt  string
-	currency     string
-	limit        int
+	isDateTime  bool
+	dateTimeFmt string
+	currency    string
+	limit       int
 }
 
 func TextColumn[T any](name string) *TextColumnDef[T] {
@@ -280,8 +281,12 @@ func (c *TextColumnDef[T]) DateTime(fmt ...string) *TextColumnDef[T] {
 	return c
 }
 
+// Money formats the column as an amount. An empty currency means "the
+// panel's currency" (see Panel.CurrencyUsing).
 func (c *TextColumnDef[T]) Money(currency string) *TextColumnDef[T] {
 	c.currency = currency
+	c.isMoney = true
+	c.align = "right"
 	return c
 }
 
@@ -405,6 +410,7 @@ func (c *TextColumnDef[T]) RenderCellWithContext(record T, recordID, basePath st
 // ----------------------------------------------------
 
 type BadgeColumnDef[T any] struct {
+	labels map[string]string
 	BaseColumn[T]
 	colors map[string]string // "admin": "danger", "editor": "warning"
 }
@@ -463,6 +469,12 @@ func (c *BadgeColumnDef[T]) HiddenByDefault(h ...bool) *BadgeColumnDef[T] {
 
 func (c *BadgeColumnDef[T]) Colors(colors map[string]string) *BadgeColumnDef[T] {
 	c.colors = colors
+	return c
+}
+
+// Labels sets the text shown for each value (e.g. "true" -> "Posted").
+func (c *BadgeColumnDef[T]) Labels(labels map[string]string) *BadgeColumnDef[T] {
+	c.labels = labels
 	return c
 }
 
