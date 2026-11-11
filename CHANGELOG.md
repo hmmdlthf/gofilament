@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.28.0] - 2026-11-11
+
+### Security
+- **Access checks (`pkg/filament`)**: `AuthorizeAccess` wrote the 401 / 403 response but returned a nil error, so handlers continued running for refused requests (an unauthenticated request could run a create, update or row action). It now returns `ErrAccessDenied`; every caller stops on it.
+- **Relation endpoints**: previously had no permission check. Reading related rows now needs view rights on the parent record; changing them needs edit rights.
+
+### Added
+- **Reusable Flutter admin (`flutter/gofilament_admin`)**: schema-driven admin client (login, grouped navigation, dashboard stats, lists, forms, relation panels, row actions, client-side CSV / Excel export, deep links, custom page slots). `flutterclient.GenerateAdminApp` scaffolds a thin app on it.
+- **Client API**: form schema JSON (`forms.Describe`), `GET /api/boot`, `/resources/{slug}/form` and `/form/options`, relation form endpoints, row action endpoints, `row_meta` in list responses, `resource_meta` and `export` in the schema.
+- **Forms**: `SelectField.OptionList`, `OptionsUsing`, `SearchUsing`; `ToggleField.Default`.
+- **Panels**: `BrandUsing` (per-request brand), `CurrencyUsing`, `MaxPerPage`, `ExportMaxRows` / `ExportMaxRowsUsing`, `APIErrorHandler`; `FromContext`, `RelationParentID`.
+- **Tables**: `TableAction.Handle` / `Form` / `Authorize` / `SuccessMessage`, `BadgeColumn.Labels`, `Money("")` uses the panel currency, richer column metadata.
+- **Ent adapter**: list search / sort / filter, `BindRelation`, eager-loading `Query` hooks.
+
+### Fixed
+- Ent adapter form mapping (initialism setters such as `SetCategoryID`, empty values, JSON numbers, `TextUnmarshaler` targets).
+- Generated Flutter client compiled with errors (duplicate methods, missing import).
+
 ## [v1.27.0] - 2026-11-10
 
 ### Added
