@@ -296,7 +296,13 @@ class FakePanel {
           '${r['id']}': {
             'update': r['id'] != 2,
             'delete': r['id'] != 2,
-            'actions': [if (r['archived'] != true) 'archive', 'discount'],
+            'actions': [
+              if (r['archived'] != true) 'archive',
+              'discount',
+              if (r['id'] == 1) 'receipt',
+            ],
+            if (r['id'] == 1)
+              'links': {'receipt': 'https://example.test/receipt/1'},
           },
       },
       'data': start >= rows.length
@@ -514,6 +520,12 @@ class FakePanel {
                   'custom': true,
                   'has_form': true,
                   'modal_description': 'Reduce the price by a percentage.'
+                },
+                {
+                  'name': 'receipt',
+                  'label': 'Receipt',
+                  'custom': true,
+                  'link': true
                 },
               ],
               'bulk_actions': [

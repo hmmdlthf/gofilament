@@ -4,3 +4,6 @@ import 'dart:typed_data';
 Future<bool> saveFile(
         String filename, Uint8List bytes, String mimeType) async =>
     false;
+
+/// Non-web platforms: opening links is left to the host app (see [openLink]).
+Future<bool> openUrl(String url) async => false;

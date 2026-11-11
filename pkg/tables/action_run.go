@@ -49,6 +49,17 @@ func (a *TableAction[T]) SuccessMessage(s string) *TableAction[T] {
 // IsRunnable reports whether the action can be run through the API.
 func (a *TableAction[T]) IsRunnable() bool { return a.runner != nil }
 
+// IsLink reports whether the action only opens a URL (set with URL and no Handle).
+func (a *TableAction[T]) IsLink() bool { return a.urlFunc != nil && a.runner == nil }
+
+// LinkFor returns the URL a link action opens for record.
+func (a *TableAction[T]) LinkFor(record T) string {
+	if a.urlFunc == nil {
+		return ""
+	}
+	return a.urlFunc(record)
+}
+
 // IsAvailable reports whether the action is visible and allowed for record.
 func (a *TableAction[T]) IsAvailable(ctx context.Context, record T) bool {
 	if a.visibleFunc != nil && !a.visibleFunc(record) {

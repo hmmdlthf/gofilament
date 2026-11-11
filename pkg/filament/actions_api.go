@@ -52,7 +52,7 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 	var custom []*tables.TableAction[T]
 	if tbl != nil {
 		for _, a := range tbl.GetActions() {
-			if a.IsRunnable() {
+			if a.IsRunnable() || a.IsLink() {
 				custom = append(custom, a)
 			}
 		}
@@ -69,16 +69,32 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 			continue
 		}
 		actions := []string{}
+		var links map[string]string
 		for _, a := range custom {
-			if a.IsAvailable(ctx.GoContext(), rec) {
-				actions = append(actions, a.GetName())
+			if !a.IsAvailable(ctx.GoContext(), rec) {
+				continue
 			}
+			if a.IsLink() {
+				u := a.LinkFor(rec)
+				if u == "" {
+					continue
+				}
+				if links == nil {
+					links = map[string]string{}
+				}
+				links[a.GetName()] = u
+			}
+			actions = append(actions, a.GetName())
 		}
-		out[id] = map[string]any{
+		meta := map[string]any{
 			"update":  r.onUpdate != nil && (r.canEdit == nil || r.canEdit(ctx, rec)),
 			"delete":  r.onDelete != nil && (r.canDelete == nil || r.canDelete(ctx, rec)),
 			"actions": actions,
 		}
+		if links != nil {
+			meta["links"] = links
+		}
+		out[id] = meta
 	}
 	return out
 }

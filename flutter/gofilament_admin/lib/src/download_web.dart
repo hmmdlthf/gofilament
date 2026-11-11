@@ -16,3 +16,10 @@ Future<bool> saveFile(String filename, Uint8List bytes, String mimeType) async {
   web.URL.revokeObjectURL(url);
   return true;
 }
+
+/// Opens [url] in a new browser tab.
+Future<bool> openUrl(String url) async {
+  // With "noopener" the browser returns null even when the tab opened.
+  web.window.open(url, '_blank', 'noopener');
+  return true;
+}

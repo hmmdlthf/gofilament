@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.29.0] - 2026-11-11
+
+### Added
+- **Link row actions**: a `tables.Action` with `URL(...)` and no `Handle` is now a link action. The schema marks it `link: true`, and each visible row's metadata carries its URL under `links`. Hidden rows never receive the URL. Link actions are never run on the server.
+- **Flutter admin (`flutter/gofilament_admin`)**: link actions open their URL in a new browser tab. `openLink` is exported so host apps (or tests) on other platforms can replace it, for example with url_launcher. When a URL cannot be opened, it is copied to the clipboard instead.
+
 ## [v1.28.1] - 2026-11-11
 
 ### Added

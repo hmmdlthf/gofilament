@@ -386,6 +386,29 @@ void main() {
       expect(find.byKey(const Key('row-action-archive-1')), findsNothing);
     });
 
+    testWidgets('link action opens the row URL without calling the server',
+        (tester) async {
+      final panel = FakePanel();
+      final opened = <String>[];
+      final previous = openLink;
+      openLink = (url) async {
+        opened.add(url);
+        return true;
+      };
+      addTearDown(() => openLink = previous);
+      await pumpApp(tester, panel);
+      await signIn(tester);
+      await openItems(tester);
+
+      expect(find.byKey(const Key('row-action-receipt-2')), findsNothing);
+      await tester.tap(find.byKey(const Key('row-action-receipt-1')));
+      await tester.pumpAndSettle();
+      expect(opened, ['https://example.test/receipt/1']);
+      expect(
+          panel.requests.where((r) => r.url.path.contains('/actions/receipt')),
+          isEmpty);
+    });
+
     testWidgets('action with a form collects input before running',
         (tester) async {
       final panel = FakePanel();

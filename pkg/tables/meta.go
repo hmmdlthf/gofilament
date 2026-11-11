@@ -13,6 +13,9 @@ type ActionDTO struct {
 	// Custom marks actions run through the API (not view / edit / delete).
 	Custom  bool `json:"custom,omitempty"`
 	HasForm bool `json:"has_form,omitempty"`
+	// Link marks actions that open a per-row URL (row meta "links") instead
+	// of running on the server.
+	Link bool `json:"link,omitempty"`
 }
 
 // ToDTO describes the action.
@@ -21,8 +24,9 @@ func (a *TableAction[T]) ToDTO() ActionDTO {
 		Name: a.name, Label: a.label, Icon: a.icon, Color: a.color,
 		RequiresConfirmation: a.requiresConfirmation,
 		ModalHeading:         a.modalHeading, ModalDescription: a.modalDescription,
-		Custom:  a.runner != nil,
+		Custom:  a.runner != nil || a.IsLink(),
 		HasForm: a.formBuilder != nil,
+		Link:    a.IsLink(),
 	}
 }
 

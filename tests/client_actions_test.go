@@ -66,6 +66,9 @@ func newActionApp(t *testing.T) (*golaravel.Engine, map[string]*actDoc, *string)
 						d.Total = d.Total * (100 - pct) / 100
 						return nil
 					}),
+				tables.Action[*actDoc]("pay").Label("Pay").
+					Visible(func(d *actDoc) bool { return !d.Posted }).
+					URL(func(d *actDoc) string { return "https://pay.example.test/" + d.Number }),
 			)
 	})
 	res.OnList(func(ctx *filament.Context, search, sortCol, sortDir string, page, perPage int, filters map[string]string) ([]*actDoc, int, error) {
@@ -108,8 +111,14 @@ func TestRowMetaAndActionMetadata(t *testing.T) {
 	if open["update"] != true || posted["update"] != false {
 		t.Fatalf("per-row update ability: %v / %v", open, posted)
 	}
-	if fmt.Sprint(open["actions"]) != "[post discount]" || fmt.Sprint(posted["actions"]) != "[discount]" {
+	if fmt.Sprint(open["actions"]) != "[post discount pay]" || fmt.Sprint(posted["actions"]) != "[discount]" {
 		t.Fatalf("per-row actions: %v / %v", open["actions"], posted["actions"])
+	}
+	if links, _ := open["links"].(map[string]any); links["pay"] != "https://pay.example.test/PUR-1" {
+		t.Fatalf("link action URL in row meta: %v", open["links"])
+	}
+	if _, ok := posted["links"]; ok {
+		t.Fatalf("hidden link action must not leak its URL: %v", posted)
 	}
 
 	_, schema := relDo(t, app, "GET", "/admin/api/schema", "good", nil)
@@ -123,6 +132,12 @@ func TestRowMetaAndActionMetadata(t *testing.T) {
 	}
 	if actions[2].(map[string]any)["has_form"] != true {
 		t.Fatalf("form action metadata: %v", actions[2])
+	}
+	if pay := actions[3].(map[string]any); pay["link"] != true || pay["custom"] != true {
+		t.Fatalf("link action metadata: %v", pay)
+	}
+	if code, _ := relDo(t, app, "POST", "/admin/api/resources/docs/1/actions/pay", "good", nil); code == 200 {
+		t.Fatal("link actions are not run on the server")
 	}
 	col := schema["resources"].([]any)[0].(map[string]any)["columns"].([]any)[1].(map[string]any)
 	if col["type"] != "money" || col["align"] != "right" {

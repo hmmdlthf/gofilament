@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'api.dart';
 import 'cells.dart';
@@ -8,6 +9,7 @@ import 'controller.dart';
 import 'export.dart';
 import 'format.dart';
 import 'icons.dart';
+import 'links.dart';
 import 'resource_form.dart';
 import 'theme.dart';
 
@@ -104,6 +106,16 @@ class _ResourceListPageState extends State<ResourceListPage> {
       Map<String, dynamic> row, Map<String, dynamic> action) async {
     final id = recordId(row);
     final name = '${action['name']}';
+    if (action['link'] == true) {
+      final links = _rowMeta[id]?['links'];
+      final url = links is Map ? links[name]?.toString() : null;
+      if (url == null || url.isEmpty) return;
+      if (!await openLink(url)) {
+        await Clipboard.setData(ClipboardData(text: url));
+        _toast('Link copied');
+      }
+      return;
+    }
     if (action['has_form'] == true) {
       final done = await showResourceForm(context,
           admin: admin, slug: widget.slug, id: id, action: action);
