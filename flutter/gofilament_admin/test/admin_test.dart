@@ -519,6 +519,28 @@ void main() {
     });
   });
 
+  group('deep links to pages', () {
+    testWidgets('a link to a full-screen page opens it after sign-in',
+        (tester) async {
+      final panel = FakePanel();
+      final admin = AdminController(api: panel.api(), pages: [
+        AdminPage(
+            id: 'pos',
+            label: 'Till',
+            fullscreen: true,
+            builder: (_, __) => const Scaffold(body: Text('TILL'))),
+      ])
+        ..initialLocation = '/pages/pos';
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(GoFilamentAdmin(controller: admin));
+      await tester.pumpAndSettle();
+      await signIn(tester);
+      expect(find.text('TILL'), findsOneWidget);
+    });
+  });
+
   group('session', () {
     testWidgets('an expired session sends the user back to sign in',
         (tester) async {

@@ -407,6 +407,16 @@ class AdminApi {
   Future<dynamic> get(String path, [Map<String, String>? query]) =>
       _get(path, query);
 
+  /// Authenticated GET returning the raw response text (HTML, CSV, ...).
+  Future<String> getText(String path, [Map<String, String>? query]) async {
+    final res = await _http.get(_uri(path, query), headers: _headers);
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      return utf8.decode(res.bodyBytes);
+    }
+    _decode(res); // throws ApiException with the server's message
+    return '';
+  }
+
   /// Authenticated request with a JSON body against a custom panel endpoint.
   Future<dynamic> send(String method, String path, [Object? body]) =>
       _send(method, path, body);

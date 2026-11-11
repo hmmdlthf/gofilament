@@ -53,8 +53,18 @@ class _AdminShellState extends State<AdminShell> {
       _current = 'resource:${parts[1]}';
       if (parts.length >= 3) _pendingRecord = parts[2];
     } else if (parts.length >= 2 && parts[0] == 'pages') {
-      final page = admin.pages.where((p) => p.id == parts[1] && !p.fullscreen);
-      if (page.isNotEmpty) _current = 'page:${parts[1]}';
+      final page = admin.pages.where((p) =>
+          p.id == parts[1] && (p.visible == null || p.visible!(admin.user)));
+      if (page.isNotEmpty) {
+        if (page.first.fullscreen) {
+          // full-screen pages (e.g. a till) open over the shell once it is built
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _go('page:${parts[1]}');
+          });
+        } else {
+          _current = 'page:${parts[1]}';
+        }
+      }
     }
     admin.initialLocation = '';
   }
