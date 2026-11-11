@@ -36,6 +36,10 @@ class FakePanel {
       'is_active': true
     },
   ];
+  final List<Map<String, dynamic>> variants = [
+    {'id': 10, 'item_id': 1, 'sku': 'RING-S', 'price': 1500},
+    {'id': 11, 'item_id': 2, 'sku': 'CHAIN-L', 'price': 800},
+  ];
   bool canCreate = true;
   bool canDelete = true;
   String? failNextSaveWith;
@@ -138,9 +142,106 @@ class FakePanel {
       items.add(data);
       return _json({'success': true}, 201);
     }
+    final act = RegExp(r'^/resources/items/(\d+)/actions/(\w+)(/form)?$')
+        .firstMatch(path);
+    if (act != null) {
+      final item = items.firstWhere((i) => '${i['id']}' == act.group(1));
+      if (act.group(3) != null) {
+        return _json({
+          'mode': 'action',
+          'schema': [
+            {
+              'kind': 'field',
+              'type': 'number',
+              'name': 'percent',
+              'label': 'Percent',
+              'required': true
+            },
+          ],
+        });
+      }
+      if (act.group(2) == 'archive') {
+        item['archived'] = true;
+        return _json({'success': true, 'message': 'Archived'});
+      }
+      final pct = num.parse('${(json.decode(req.body) as Map)['percent']}');
+      item['price'] = (item['price'] as num) * (100 - pct) / 100;
+      return _json({'success': true, 'message': 'Discount applied'});
+    }
     if (path == '/resources/items/bulk') {
       final ids = (json.decode(req.body) as Map)['ids'] as List;
       items.removeWhere((i) => ids.contains('${i['id']}'));
+      return _json({'success': true});
+    }
+    final rel = RegExp(
+            r'^/resources/items/(\d+)/relations(/variants)?(/form)?(/(\d+))?$')
+        .firstMatch(path);
+    if (rel != null) {
+      final parent = int.parse(rel.group(1)!);
+      final mine = variants.where((v) => v['item_id'] == parent).toList();
+      if (rel.group(2) == null) {
+        return _json({
+          'relations': [
+            {
+              'relationship': 'variants',
+              'title': 'Variants',
+              'has_form': true,
+              'abilities': {'create': true, 'update': true, 'delete': true},
+              'columns': [
+                {'name': 'sku', 'label': 'SKU', 'type': 'text'},
+                {'name': 'price', 'label': 'Price', 'type': 'money'},
+              ],
+            },
+          ],
+        });
+      }
+      const schema = [
+        {
+          'kind': 'field',
+          'type': 'text',
+          'name': 'sku',
+          'label': 'SKU',
+          'required': true
+        },
+        {'kind': 'field', 'type': 'number', 'name': 'price', 'label': 'Price'},
+      ];
+      if (rel.group(3) != null) {
+        final childId = req.url.queryParameters['child_id'];
+        if (childId == null) {
+          return _json({
+            'mode': 'create',
+            'schema': schema,
+            'state': {},
+            'abilities': {'create': true}
+          });
+        }
+        final child = mine.where((v) => '${v['id']}' == childId);
+        if (child.isEmpty) return _json({'error': 'Record not found'}, 404);
+        return _json({
+          'mode': 'edit',
+          'schema': schema,
+          'state': child.first,
+          'abilities': {'update': true, 'delete': true}
+        });
+      }
+      final childId = rel.group(5);
+      if (childId == null && req.method == 'GET') {
+        return _json({'data': mine, 'total': mine.length});
+      }
+      if (childId == null && req.method == 'POST') {
+        final data = Map<String, dynamic>.from(json.decode(req.body) as Map);
+        variants.add({...data, 'id': 100 + variants.length, 'item_id': parent});
+        return _json({'success': true}, 201);
+      }
+      final index = variants
+          .indexWhere((v) => '${v['id']}' == childId && v['item_id'] == parent);
+      if (index < 0) return _json({'error': 'Record not found'}, 404);
+      if (req.method == 'DELETE') {
+        variants.removeAt(index);
+      } else {
+        variants[index]
+            .addAll(Map<String, dynamic>.from(json.decode(req.body) as Map));
+      }
       return _json({'success': true});
     }
     final cell = RegExp(r'^/resources/items/(\d+)/cell$').firstMatch(path);
@@ -186,7 +287,18 @@ class FakePanel {
     final perPage = int.parse(q['per_page'] ?? '25');
     final page = int.parse(q['page'] ?? '1');
     final start = (page - 1) * perPage;
+    final page0 = start >= rows.length
+        ? <Map<String, dynamic>>[]
+        : rows.sublist(start, (start + perPage).clamp(0, rows.length));
     return {
+      'row_meta': {
+        for (final r in page0)
+          '${r['id']}': {
+            'update': r['id'] != 2,
+            'delete': r['id'] != 2,
+            'actions': [if (r['archived'] != true) 'archive', 'discount'],
+          },
+      },
       'data': start >= rows.length
           ? []
           : rows.sublist(start, (start + perPage).clamp(0, rows.length)),
@@ -318,6 +430,7 @@ class FakePanel {
         ],
         'widgets': _widgets(),
         'export': {'max_rows': 1000},
+        'currency': 'LKR',
         'resources': [
           {
             'slug': 'items',
@@ -325,6 +438,9 @@ class FakePanel {
             'plural_model_name': 'Items',
             'icon': 'cube',
             'group': 'Catalogue',
+            'relations': [
+              {'relationship': 'variants', 'title': 'Variants'},
+            ],
             'per_page': 2,
             'per_page_options': [2, 25, 50],
             'columns': [
@@ -342,12 +458,7 @@ class FakePanel {
                 'sortable': true,
                 'weight': 'bold'
               },
-              {
-                'name': 'price',
-                'label': 'Price',
-                'type': 'money',
-                'currency': 'Rs.'
-              },
+              {'name': 'price', 'label': 'Price', 'type': 'money'},
               {
                 'name': 'status',
                 'label': 'Status',
@@ -389,7 +500,21 @@ class FakePanel {
               'actions': [
                 {'name': 'view'},
                 {'name': 'edit'},
-                {'name': 'delete'}
+                {'name': 'delete'},
+                {
+                  'name': 'archive',
+                  'label': 'Archive',
+                  'custom': true,
+                  'requires_confirmation': true,
+                  'modal_heading': 'Archive item?'
+                },
+                {
+                  'name': 'discount',
+                  'label': 'Apply discount',
+                  'custom': true,
+                  'has_form': true,
+                  'modal_description': 'Reduce the price by a percentage.'
+                },
               ],
               'bulk_actions': [
                 {'name': 'delete_bulk'}

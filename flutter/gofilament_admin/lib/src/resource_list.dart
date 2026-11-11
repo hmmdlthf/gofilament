@@ -1,12 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'api.dart';
+import 'cells.dart';
 import 'controller.dart';
 import 'export.dart';
 import 'format.dart';
+import 'icons.dart';
 import 'resource_form.dart';
 import 'theme.dart';
 
@@ -38,6 +39,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
   bool _descending = false;
   final Map<String, String> _filters = {};
   final Set<String> _selected = {};
+  Map<String, Map<String, dynamic>> _rowMeta = const {};
   bool _loading = true;
   bool _exporting = false;
   String? _error;
@@ -72,6 +74,74 @@ class _ResourceListPageState extends State<ResourceListPage> {
     return list is List
         ? list.whereType<Map>().map((a) => '${a['name']}').toSet()
         : const {};
+  }
+
+  List<Map<String, dynamic>> get _customActions {
+    final table = _meta['table'];
+    final list = table is Map ? table['actions'] : null;
+    return list is List
+        ? list
+            .whereType<Map>()
+            .map((a) => Map<String, dynamic>.from(a))
+            .where((a) => a['custom'] == true)
+            .toList()
+        : const [];
+  }
+
+  bool _rowAllows(Map<String, dynamic> row, String ability) {
+    final m = _rowMeta[recordId(row)];
+    return m == null || m[ability] != false;
+  }
+
+  List<Map<String, dynamic>> _rowCustomActions(Map<String, dynamic> row) {
+    final m = _rowMeta[recordId(row)];
+    final allowed = m?['actions'];
+    if (allowed is! List) return const [];
+    return _customActions.where((a) => allowed.contains(a['name'])).toList();
+  }
+
+  Future<void> _runAction(
+      Map<String, dynamic> row, Map<String, dynamic> action) async {
+    final id = recordId(row);
+    final name = '${action['name']}';
+    if (action['has_form'] == true) {
+      final done = await showResourceForm(context,
+          admin: admin, slug: widget.slug, id: id, action: action);
+      if (done == true) {
+        _toast('${action['label'] ?? 'Done'}');
+        _load();
+      }
+      return;
+    }
+    if (action['requires_confirmation'] == true) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(
+              '${action['modal_heading'] ?? '${action['label'] ?? name}?'}'),
+          content: Text(
+              '${action['modal_description'] ?? 'Do you want to continue?'}'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              key: const Key('confirm-action'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('${action['label'] ?? 'Continue'}'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    try {
+      final message = await api.runAction(widget.slug, id, name);
+      _toast(message);
+      _load();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
   }
 
   Set<String> get _bulkActions {
@@ -133,6 +203,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (!mounted || request != _requestId) return;
       setState(() {
         _rows = page.rows;
+        _rowMeta = page.rowMeta;
         _total = page.total;
         _loading = false;
         _selected.removeWhere((id) => !_rows.any((r) => recordId(r) == id));
@@ -300,7 +371,10 @@ class _ResourceListPageState extends State<ResourceListPage> {
         ],
         rows: [
           for (final r in rows)
-            [for (final c in columns) _exportText(c, r[c['name']])]
+            [
+              for (final c in columns)
+                _exportText(c, valueAt(r, '${c['name']}'))
+            ]
         ],
       );
       final name = '${widget.slug}-${formatDate(DateTime.now())}';
@@ -630,13 +704,14 @@ class _ResourceListPageState extends State<ResourceListPage> {
         final row = _rows[i];
         final title = columns.isEmpty
             ? recordId(row)
-            : displayValue(row[columns.first['name']]);
+            : displayValue(valueAt(row, '${columns.first['name']}'));
         return InkWell(
-          onTap: _actions.contains('edit') && _hasForm
-              ? () => _openForm(id: recordId(row))
-              : (_actions.contains('view') && _hasForm
-                  ? () => _openForm(id: recordId(row), readOnly: true)
-                  : null),
+          onTap:
+              _actions.contains('edit') && _hasForm && _rowAllows(row, 'update')
+                  ? () => _openForm(id: recordId(row))
+                  : (_actions.contains('view') && _hasForm
+                      ? () => _openForm(id: recordId(row), readOnly: true)
+                      : null),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child:
@@ -677,7 +752,20 @@ class _ResourceListPageState extends State<ResourceListPage> {
           icon: const Icon(Icons.visibility_outlined, size: 19),
           onPressed: () => _openForm(id: id, readOnly: true),
         ),
-      if (_actions.contains('edit') && _hasForm)
+      for (final action in _rowCustomActions(row))
+        IconButton(
+          key: Key('row-action-${action['name']}-$id'),
+          tooltip: '${action['label'] ?? action['name']}',
+          visualDensity: VisualDensity.compact,
+          icon: Icon(
+              adminIcon(action['icon'] as String?,
+                  fallback: Icons.play_circle_outline),
+              size: 19,
+              color: AdminPalette.of(context)
+                  .color('${action['color'] ?? 'primary'}', 500)),
+          onPressed: () => _runAction(row, action),
+        ),
+      if (_actions.contains('edit') && _hasForm && _rowAllows(row, 'update'))
         IconButton(
           key: Key('row-edit-$id'),
           tooltip: 'Edit',
@@ -685,7 +773,9 @@ class _ResourceListPageState extends State<ResourceListPage> {
           icon: const Icon(Icons.edit_outlined, size: 19),
           onPressed: () => _openForm(id: id),
         ),
-      if (_actions.contains('delete') && _canDeleteAny)
+      if (_actions.contains('delete') &&
+          _canDeleteAny &&
+          _rowAllows(row, 'delete'))
         IconButton(
           key: Key('row-delete-$id'),
           tooltip: 'Delete',
@@ -699,108 +789,10 @@ class _ResourceListPageState extends State<ResourceListPage> {
 
   Widget _cell(BuildContext context, Map<String, dynamic> column,
       Map<String, dynamic> row) {
-    final theme = Theme.of(context);
-    final palette = AdminPalette.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    final name = '${column['name']}';
-    final value = row[name];
-
-    switch ('${column['type']}') {
-      case 'toggle':
-        return Switch(
-          key: Key('cell-$name-${recordId(row)}'),
-          value: value == true,
-          onChanged: column['editable'] == true
-              ? (v) => _toggleCell(row, name, v)
-              : null,
-        );
-      case 'icon':
-        if (value is bool || value == null) {
-          final on = value == true;
-          return Icon(on ? Icons.check_circle : Icons.remove_circle_outline,
-              size: 18,
-              color: on
-                  ? palette.color('success', dark ? 400 : 600)
-                  : theme.colorScheme.onSurfaceVariant);
-        }
-        return Text(displayValue(value));
-      case 'badge':
-        final text = displayValue(value);
-        if (text.isEmpty) return const SizedBox.shrink();
-        final colors = column['colors'];
-        final role = colors is Map ? '${colors[text] ?? 'gray'}' : 'gray';
-        final options = column['options'];
-        final label =
-            options is Map && options[text] != null ? '${options[text]}' : text;
-        final color = palette.color(role, dark ? 300 : 700);
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-          decoration: BoxDecoration(
-            color:
-                palette.color(role, 500).withValues(alpha: dark ? 0.2 : 0.12),
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(label,
-              style: TextStyle(
-                  color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-        );
-      case 'money':
-        return Text(formatMoney(value, '${column['currency'] ?? ''}'),
-            style:
-                const TextStyle(fontFeatures: [FontFeature.tabularFigures()]));
-      case 'datetime':
-        return Text(formatDateTime(value));
-      case 'image':
-        final url = displayValue(value);
-        if (url.isEmpty) return const SizedBox.shrink();
-        return ClipRRect(
-          borderRadius:
-              BorderRadius.circular(column['circular'] == true ? 999 : 6),
-          child: Image.network(url,
-              width: 34,
-              height: 34,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) =>
-                  const Icon(Icons.image_not_supported_outlined, size: 18)),
-        );
-      case 'color':
-        final c = parseColor(displayValue(value));
-        return Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                  color: c, borderRadius: BorderRadius.circular(4))),
-          const SizedBox(width: 6),
-          Text(displayValue(value)),
-        ]);
-    }
-
-    var text = displayValue(value);
-    final limit = (column['limit'] as num?)?.toInt() ?? 0;
-    if (limit > 0 && text.length > limit) text = '${text.substring(0, limit)}…';
-    final label = Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-          fontWeight: column['weight'] == 'bold' ? FontWeight.w600 : null),
-    );
-    if (column['copyable'] == true && text.isNotEmpty) {
-      return InkWell(
-        onTap: () {
-          Clipboard.setData(ClipboardData(text: displayValue(value)));
-          _toast('Copied');
-        },
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Flexible(child: label),
-          const SizedBox(width: 4),
-          Icon(Icons.copy, size: 13, color: theme.colorScheme.onSurfaceVariant),
-        ]),
-      );
-    }
-    return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360), child: label);
+    return adminCell(context, column, row,
+        onToggle: (name, v) => _toggleCell(row, name, v),
+        onNotice: _toast,
+        currency: '${admin.schema['currency'] ?? ''}');
   }
 
   Widget _pagination(BuildContext context) {

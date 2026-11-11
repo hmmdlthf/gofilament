@@ -22,10 +22,13 @@ Scaffold an app that uses it with `flutterclient.GenerateAdminApp`.
 | Navigation, groups, permissions | `GET /api/schema` (`resources`, `navigation`, `resource_meta`) |
 | Lists: search, sort, filters, paging, typed cells, inline toggles, row and bulk delete | `GET /api/resources/{slug}` + column / filter metadata |
 | Forms: sections, grids, text, number, select (local, searchable, server-searched), toggle, date, textarea, checkbox list | `GET /api/resources/{slug}/form`, `.../form/options` |
+| Relation managers under a record: list, add, edit, delete | `GET /api/resources/{slug}/{id}/relations` and `.../relations/{rel}/form` |
 | Export to CSV and Excel, built in the client | list pages, capped by `export.max_rows` |
 | Dashboard | `GET /api/widgets` (stats) |
 
 One web build serves every panel and every host: the panel path is read from the page URL.
+Column names may be dotted paths (`edges.category.name`) to show fields of eager-loaded related records.
+
 Deep links: `#/resources/<slug>`, `#/resources/<slug>/<id>`, `#/resources/<slug>/new`, `#/pages/<id>`.
 
 ## Adding application pages
@@ -49,7 +52,7 @@ GoFilamentAdmin(
 ## Not covered yet
 
 Repeaters, file / image upload, key-value, tabs and wizards as real tabs (shown as consecutive
-sections), chart widgets, relation managers, global search, soft-delete restore, column picker,
+sections), chart widgets, global search, soft-delete restore, column picker,
 non-web file saving for exports.
 
 ## Development

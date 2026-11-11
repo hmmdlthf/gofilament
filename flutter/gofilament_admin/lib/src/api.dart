@@ -29,6 +29,9 @@ class ListPage {
 
   final List<Map<String, dynamic>> rows;
   final int total;
+
+  /// Per-record abilities: `{id: {update, delete, actions: [...]}}`.
+  Map<String, Map<String, dynamic>> rowMeta = const {};
   final int page;
   final int perPage;
 }
@@ -245,12 +248,13 @@ class AdminApi {
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
+    final meta = _map(data['row_meta']);
     return ListPage(
       rows: rows,
       total: (data['total'] as num?)?.toInt() ?? rows.length,
       page: (data['page'] as num?)?.toInt() ?? page,
       perPage: (data['per_page'] as num?)?.toInt() ?? perPage,
-    );
+    )..rowMeta = meta.map((k, v) => MapEntry(k, _map(v)));
   }
 
   Future<FormPayload> form(String slug, {String? id}) async {
@@ -292,6 +296,102 @@ class AdminApi {
           String slug, String id, String column, dynamic value) =>
       _send('POST', '/resources/$slug/$id/cell',
           {'column': column, 'value': value});
+
+  // ---------------------------------------------------------------- actions
+
+  /// The input form of a row action.
+  Future<FormPayload> actionForm(String slug, String id, String action) async {
+    final data = _map(await _get('/resources/$slug/$id/actions/$action/form'));
+    return FormPayload(
+      mode: 'action',
+      schema: (data['schema'] is List ? data['schema'] as List : const [])
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList(),
+      state: const {},
+      abilities: const {'run': true},
+      optionLabels: const {},
+    );
+  }
+
+  /// Runs a row action; returns the server's success message.
+  Future<String> runAction(String slug, String id, String action,
+      [Map<String, dynamic> data = const {}]) async {
+    final out =
+        _map(await _send('POST', '/resources/$slug/$id/actions/$action', data));
+    return '${out['message'] ?? 'Done'}';
+  }
+
+  // ---------------------------------------------------------------- relations
+
+  FormPayload _formPayload(Map<String, dynamic> data, bool edit) => FormPayload(
+        mode: '${data['mode'] ?? (edit ? 'edit' : 'create')}',
+        schema: (data['schema'] is List ? data['schema'] as List : const [])
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList(),
+        state: _map(data['state']),
+        abilities:
+            _map(data['abilities']).map((k, v) => MapEntry(k, v == true)),
+        optionLabels:
+            _map(data['option_labels']).map((k, v) => MapEntry(k, '$v')),
+      );
+
+  /// The relation managers of a record, with their columns and abilities.
+  Future<List<Map<String, dynamic>>> relations(String slug, String id) async {
+    final data = _map(await _get('/resources/$slug/$id/relations'));
+    return (data['relations'] is List ? data['relations'] as List : const [])
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+  }
+
+  Future<ListPage> relationList(String slug, String id, String relation,
+      {int page = 1, int perPage = 50, String search = ''}) async {
+    final data = _map(await _get('/resources/$slug/$id/relations/$relation', {
+      'page': '$page',
+      'per_page': '$perPage',
+      if (search.isNotEmpty) 'search': search,
+    }));
+    final rows = (data['data'] is List ? data['data'] as List : const [])
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+    return ListPage(
+      rows: rows,
+      total: (data['total'] as num?)?.toInt() ?? rows.length,
+      page: page,
+      perPage: perPage,
+    );
+  }
+
+  Future<FormPayload> relationForm(String slug, String id, String relation,
+      {String? childId}) async {
+    final data = _map(await _get(
+        '/resources/$slug/$id/relations/$relation/form',
+        {if (childId != null) 'child_id': childId}));
+    return _formPayload(data, childId != null);
+  }
+
+  Future<List<FieldOption>> relationOptions(String slug, String id,
+      String relation, String field, String query) async {
+    final data = _map(await _get(
+        '/resources/$slug/$id/relations/$relation/form/options',
+        {'field': field, 'q': query}));
+    return FieldOption.listFrom(data['options']);
+  }
+
+  Future<void> relationCreate(
+          String slug, String id, String relation, Map<String, dynamic> data) =>
+      _send('POST', '/resources/$slug/$id/relations/$relation', data);
+
+  Future<void> relationUpdate(String slug, String id, String relation,
+          String childId, Map<String, dynamic> data) =>
+      _send('PUT', '/resources/$slug/$id/relations/$relation/$childId', data);
+
+  Future<void> relationDelete(
+          String slug, String id, String relation, String childId) =>
+      _send('DELETE', '/resources/$slug/$id/relations/$relation/$childId');
 
   // ---------------------------------------------------------------- dashboard
 

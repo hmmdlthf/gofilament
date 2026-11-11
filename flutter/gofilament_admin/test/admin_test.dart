@@ -151,7 +151,7 @@ void main() {
       expect(find.text('Chains'), findsOneWidget);
       expect(find.text('Bangles'), findsNothing);
       expect(find.text('1–2 of 3'), findsOneWidget);
-      expect(find.text('Rs. 1,500.50'), findsOneWidget); // money
+      expect(find.text('LKR 1,500.50'), findsOneWidget); // money
       expect(find.text('live'), findsOneWidget); // badge
       expect(find.text('HIDDEN'), findsNothing); // hidden-by-default column
 
@@ -356,6 +356,130 @@ void main() {
     });
   });
 
+  group('row actions', () {
+    testWidgets('per-row abilities hide edit and delete on locked records',
+        (tester) async {
+      final panel = FakePanel();
+      await pumpApp(tester, panel);
+      await signIn(tester);
+      await openItems(tester);
+
+      expect(find.byKey(const Key('row-edit-1')), findsOneWidget);
+      expect(find.byKey(const Key('row-edit-2')), findsNothing);
+      expect(find.byKey(const Key('row-delete-2')), findsNothing);
+      expect(find.byKey(const Key('row-view-2')), findsOneWidget);
+    });
+
+    testWidgets('confirmed action runs and refreshes the row', (tester) async {
+      final panel = FakePanel();
+      await pumpApp(tester, panel);
+      await signIn(tester);
+      await openItems(tester);
+
+      await tester.tap(find.byKey(const Key('row-action-archive-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Archive item?'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('confirm-action')));
+      await tester.pumpAndSettle();
+      expect(panel.items[0]['archived'], isTrue);
+      expect(find.text('Archived'), findsOneWidget);
+      expect(find.byKey(const Key('row-action-archive-1')), findsNothing);
+    });
+
+    testWidgets('action with a form collects input before running',
+        (tester) async {
+      final panel = FakePanel();
+      await pumpApp(tester, panel);
+      await signIn(tester);
+      await openItems(tester);
+
+      await tester.tap(find.byKey(const Key('row-action-discount-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Reduce the price by a percentage.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('form-save')));
+      await tester.pumpAndSettle();
+      expect(find.text('Percent is required'), findsOneWidget);
+
+      await tester.enterText(find.byKey(const Key('field-percent')), '10');
+      await tester.tap(find.byKey(const Key('form-save')));
+      await tester.pumpAndSettle();
+      expect(panel.items[0]['price'], closeTo(1350.45, 0.001));
+      expect(find.text('LKR 1,350.45'), findsOneWidget);
+    });
+  });
+
+  group('relations', () {
+    testWidgets(
+        'a record lists its related rows and can add, edit and delete them',
+        (tester) async {
+      final panel = FakePanel();
+      await pumpApp(tester, panel);
+      await signIn(tester);
+      await openItems(tester);
+
+      await tester.tap(find.byKey(const Key('row-edit-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Variants (1)'), findsOneWidget);
+      expect(find.text('RING-S'), findsOneWidget);
+      expect(find.text('CHAIN-L'), findsNothing); // belongs to another record
+
+      // add
+      await tester.ensureVisible(find.byKey(const Key('rel-variants-add')));
+      await tester.tap(find.byKey(const Key('rel-variants-add')));
+      await tester.pumpAndSettle();
+      expect(find.text('New Variant'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('field-sku')).last, 'RING-M');
+      await tester.enterText(find.byKey(const Key('field-price')).last, '1750');
+      await tester.tap(find.byKey(const Key('form-save')).last);
+      await tester.pumpAndSettle();
+      expect(panel.variants.last['sku'], 'RING-M');
+      expect(panel.variants.last['item_id'], 1);
+      expect(find.text('Variants (2)'), findsOneWidget);
+      expect(find.text('Edit Item'), findsOneWidget); // parent form still open
+
+      // edit
+      await tester.ensureVisible(find.byKey(const Key('rel-variants-edit-10')));
+      await tester.tap(find.byKey(const Key('rel-variants-edit-10')));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Variant'), findsOneWidget);
+      await tester.enterText(
+          find.byKey(const Key('field-sku')).last, 'RING-SMALL');
+      await tester.tap(find.byKey(const Key('form-save')).last);
+      await tester.pumpAndSettle();
+      expect(panel.variants.first['sku'], 'RING-SMALL');
+
+      // delete
+      await tester
+          .ensureVisible(find.byKey(const Key('rel-variants-delete-10')));
+      await tester.tap(find.byKey(const Key('rel-variants-delete-10')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm-delete')));
+      await tester.pumpAndSettle();
+      expect(panel.variants.any((v) => v['id'] == 10), isFalse);
+      expect(find.text('Variants (1)'), findsOneWidget);
+    });
+
+    testWidgets('relations are read only in view mode and absent on create',
+        (tester) async {
+      final panel = FakePanel();
+      await pumpApp(tester, panel);
+      await signIn(tester);
+      await openItems(tester);
+
+      await tester.tap(find.byKey(const Key('row-view-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Variants (1)'), findsOneWidget);
+      expect(find.byKey(const Key('rel-variants-add')), findsNothing);
+      expect(find.byKey(const Key('rel-variants-edit-10')), findsNothing);
+      await tester.tap(find.byKey(const Key('form-close')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('list-create')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Variants'), findsNothing);
+    });
+  });
+
   group('deep links', () {
     testWidgets('a link to a record opens its form after sign-in',
         (tester) async {
@@ -470,6 +594,15 @@ void main() {
       expect(formatNumber(-950), '-950.00');
       expect(formatMoney('250', 'Rs.'), 'Rs. 250.00');
       expect(humanize('created_at'), 'Created At');
+      expect(formatDateOnly('2026-11-09T00:00:00+03:00'), '2026-11-09');
+      expect(
+          valueAt({
+            'edges': {
+              'category': {'name': 'Rings'}
+            }
+          }, 'edges.category.name'),
+          'Rings');
+      expect(valueAt({'a': 1}, 'edges.category.name'), isNull);
       expect(displayValue(7.0), '7');
       expect(displayValue(true), 'Yes');
     });

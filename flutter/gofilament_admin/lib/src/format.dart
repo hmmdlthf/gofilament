@@ -55,3 +55,27 @@ String displayValue(dynamic value) {
 /// Reads a record's id as a string.
 String recordId(Map<String, dynamic> row) =>
     displayValue(row['id'] ?? row['ID'] ?? row['uuid']);
+
+/// Reads a column value from a record. Dotted names walk into nested objects,
+/// so a column named `edges.category.name` shows a related record's field.
+dynamic valueAt(Map<String, dynamic> row, String name) {
+  if (row.containsKey(name) || !name.contains('.')) return row[name];
+  dynamic current = row;
+  for (final part in name.split('.')) {
+    if (current is Map && current.containsKey(part)) {
+      current = current[part];
+    } else {
+      return null;
+    }
+  }
+  return current;
+}
+
+/// Calendar date of a value without timezone conversion ("2026-11-09T00:00:00Z"
+/// stays 2026-11-09 everywhere), for date-only columns.
+String formatDateOnly(dynamic value) {
+  if (value == null) return '';
+  final text = '$value';
+  final match = RegExp(r'^(\d{4}-\d{2}-\d{2})').firstMatch(text);
+  return match?.group(1) ?? text;
+}

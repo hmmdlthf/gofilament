@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'api.dart';
 import 'controller.dart';
 import 'format.dart';
+import 'relations.dart';
 
 /// Opens the create / edit / view form of a resource. Resolves to true when a
 /// record was saved.
@@ -15,10 +16,21 @@ Future<bool?> showResourceForm(
   required String slug,
   String? id,
   bool readOnly = false,
+  String? relation,
+  String? parentId,
+  String? title,
+  Map<String, dynamic>? action,
 }) {
   final wide = MediaQuery.sizeOf(context).width >= 760;
-  final form =
-      ResourceForm(admin: admin, slug: slug, id: id, readOnly: readOnly);
+  final form = ResourceForm(
+      admin: admin,
+      slug: slug,
+      id: id,
+      readOnly: readOnly,
+      relation: relation,
+      parentId: parentId,
+      title: title,
+      action: action);
   return showDialog<bool>(
     context: context,
     barrierDismissible: false,
@@ -42,12 +54,30 @@ class ResourceForm extends StatefulWidget {
       required this.admin,
       required this.slug,
       this.id,
-      this.readOnly = false});
+      this.readOnly = false,
+      this.relation,
+      this.parentId,
+      this.title,
+      this.action});
 
   final AdminController admin;
   final String slug;
+
+  /// Record id (the related row's id when [relation] is set).
   final String? id;
   final bool readOnly;
+
+  /// When set, the form edits a row of this relation of record [parentId]
+  /// instead of a record of the resource itself.
+  final String? relation;
+  final String? parentId;
+
+  /// Singular name shown in the title; defaults to the resource model name.
+  final String? title;
+
+  /// When set, the form collects the input of this row action (its metadata
+  /// from the schema) and runs it on record [id] instead of saving.
+  final Map<String, dynamic>? action;
 
   @override
   State<ResourceForm> createState() => _ResourceFormState();
@@ -66,8 +96,17 @@ class _ResourceFormState extends State<ResourceForm> {
   bool _saving = false;
 
   bool get _isEdit => widget.id != null;
+  bool get _isRelation => widget.relation != null && widget.parentId != null;
+  bool get _isAction => widget.action != null;
+
+  Future<List<FieldOption>> _searchOptions(String field, String query) =>
+      _isRelation
+          ? widget.admin.api.relationOptions(
+              widget.slug, widget.parentId!, widget.relation!, field, query)
+          : widget.admin.api.options(widget.slug, field, query);
   bool get _locked =>
-      widget.readOnly || (_isEdit && _payload?.abilities['update'] != true);
+      !_isAction &&
+      (widget.readOnly || (_isEdit && _payload?.abilities['update'] != true));
 
   static const _textTypes = {
     'text',
@@ -101,7 +140,15 @@ class _ResourceFormState extends State<ResourceForm> {
 
   Future<void> _load() async {
     try {
-      final payload = await widget.admin.api.form(widget.slug, id: widget.id);
+      final api = widget.admin.api;
+      final payload = _isAction
+          ? await api.actionForm(
+              widget.slug, widget.id!, '${widget.action!['name']}')
+          : _isRelation
+              ? await api.relationForm(
+                  widget.slug, widget.parentId!, widget.relation!,
+                  childId: widget.id)
+              : await api.form(widget.slug, id: widget.id);
       _collectFields(payload.schema);
       for (final f in _fields) {
         final name = '${f['name']}';
@@ -187,10 +234,26 @@ class _ResourceFormState extends State<ResourceForm> {
     });
     try {
       final data = _collect();
+      if (_isAction) {
+        await widget.admin.api.runAction(
+            widget.slug, widget.id!, '${widget.action!['name']}', data);
+        if (mounted) Navigator.of(context).pop(true);
+        return;
+      }
       if (_isEdit) {
-        await widget.admin.api.update(widget.slug, widget.id!, data);
+        if (_isRelation) {
+          await widget.admin.api.relationUpdate(widget.slug, widget.parentId!,
+              widget.relation!, widget.id!, data);
+        } else {
+          await widget.admin.api.update(widget.slug, widget.id!, data);
+        }
       } else {
-        await widget.admin.api.create(widget.slug, data);
+        if (_isRelation) {
+          await widget.admin.api.relationCreate(
+              widget.slug, widget.parentId!, widget.relation!, data);
+        } else {
+          await widget.admin.api.create(widget.slug, data);
+        }
       }
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -209,9 +272,11 @@ class _ResourceFormState extends State<ResourceForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final model = '${widget.admin.resource(widget.slug)?['model_name'] ?? ''}';
-    final title =
-        widget.readOnly ? model : (_isEdit ? 'Edit $model' : 'New $model');
+    final model = widget.title ??
+        '${widget.admin.resource(widget.slug)?['model_name'] ?? ''}';
+    final title = _isAction
+        ? '${widget.action!['modal_heading'] ?? widget.action!['label'] ?? ''}'
+        : (widget.readOnly ? model : (_isEdit ? 'Edit $model' : 'New $model'));
 
     Widget body;
     if (_loadError != null) {
@@ -242,6 +307,12 @@ class _ResourceFormState extends State<ResourceForm> {
                     style: TextStyle(color: theme.colorScheme.error)),
               ),
             ..._nodes(context, _payload!.schema, 1),
+            if (!_isRelation && !_isAction && _isEdit)
+              RelationPanels(
+                  admin: widget.admin,
+                  slug: widget.slug,
+                  parentId: widget.id!,
+                  readOnly: _locked),
           ],
         ),
       );
@@ -266,6 +337,14 @@ class _ResourceFormState extends State<ResourceForm> {
             ),
           ]),
         ),
+        if (_isAction &&
+            '${widget.action!['modal_description'] ?? ''}'.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text('${widget.action!['modal_description']}',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          ),
         const Divider(),
         Flexible(child: body),
         const Divider(),
@@ -286,7 +365,9 @@ class _ResourceFormState extends State<ResourceForm> {
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text(_isEdit ? 'Save changes' : 'Create'),
+                    : Text(_isAction
+                        ? '${widget.action!['label'] ?? 'Run'}'
+                        : (_isEdit ? 'Save changes' : 'Create')),
               ),
             ],
           ]),
@@ -522,8 +603,7 @@ class _ResourceFormState extends State<ResourceForm> {
       case 'radio':
         return _SelectInput(
           key: Key('field-$name'),
-          api: widget.admin.api,
-          slug: widget.slug,
+          search: (q) => _searchOptions(name, q),
           field: f,
           value: _values[name] as String?,
           valueLabel: _labels[name],
@@ -613,8 +693,7 @@ class _ResourceFormState extends State<ResourceForm> {
 class _SelectInput extends StatelessWidget {
   const _SelectInput({
     super.key,
-    required this.api,
-    required this.slug,
+    required this.search,
     required this.field,
     required this.value,
     required this.valueLabel,
@@ -624,8 +703,7 @@ class _SelectInput extends StatelessWidget {
     required this.onChanged,
   });
 
-  final AdminApi api;
-  final String slug;
+  final Future<List<FieldOption>> Function(String query) search;
   final Map<String, dynamic> field;
   final String? value;
   final String? valueLabel;
@@ -678,9 +756,7 @@ class _SelectInput extends StatelessWidget {
                   builder: (_) => _OptionPicker(
                     title: '${field['label'] ?? ''}',
                     options: options,
-                    search: remote
-                        ? (q) => api.options(slug, '${field['name']}', q)
-                        : null,
+                    search: remote ? search : null,
                     allowClear: !required,
                   ),
                 );

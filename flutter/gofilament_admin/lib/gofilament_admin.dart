@@ -9,6 +9,7 @@
 library;
 
 export 'src/api.dart';
+export 'src/cells.dart';
 export 'src/app.dart';
 export 'src/controller.dart';
 export 'src/dashboard.dart';
@@ -16,6 +17,7 @@ export 'src/export.dart' show TableExport, saveFile;
 export 'src/format.dart';
 export 'src/icons.dart';
 export 'src/login.dart';
+export 'src/relations.dart';
 export 'src/resource_form.dart';
 export 'src/resource_list.dart';
 export 'src/session_store.dart';
