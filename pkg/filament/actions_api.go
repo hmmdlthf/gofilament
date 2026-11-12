@@ -148,6 +148,11 @@ func (r *BaseResource[T]) InvokeAction(ctx *Context, id, name string, data map[s
 	if err != nil {
 		return "", err
 	}
+	if comps := action.FormComponents(); comps != nil {
+		if data, err = forms.Validate(ctx.GoContext(), comps, data, true); err != nil {
+			return "", err
+		}
+	}
 	if err := action.Run(ctx.GoContext(), record, data); err != nil {
 		return "", err
 	}

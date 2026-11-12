@@ -3,6 +3,7 @@ package filament
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -127,6 +128,8 @@ type BaseResource[T any] struct {
 	// Authorization
 	canViewAny     func(ctx *Context) bool
 	canView        func(ctx *Context, record T) bool
+	// acceptUnvalidated skips server-side form validation (AcceptUnvalidatedInput).
+	acceptUnvalidated bool
 	canCreate      func(ctx *Context) bool
 	canEdit        func(ctx *Context, record T) bool
 	canDelete      func(ctx *Context, record T) bool
@@ -1325,15 +1328,25 @@ func (r *BaseResource[T]) handleStore(ctx *Context, basePath string) error {
 	}
 
 	if r.onCreate != nil {
-		if err := r.onCreate(ctx, data); err != nil {
+		clean, err := r.validateInput(ctx, data, true)
+		if err == nil {
+			err = r.onCreate(ctx, clean)
+		}
+		if err != nil {
 			form := forms.New()
 			if r.formBuilder != nil {
 				form = r.formBuilder(form)
 			}
 			form.Fill(data)
+			status := http.StatusOK
+			var verr *forms.ValidationError
+			if errors.As(err, &verr) {
+				form.SetErrors(verr.Errors)
+				status = http.StatusUnprocessableEntity
+			}
 			form.AddError("error", err.Error())
-			content := fmt.Sprintf(`<div class="badge badge-danger mb-4">%s</div>%s`, err.Error(), form.Render(ctx.GoContext()))
-			return r.renderPage(ctx, fmt.Sprintf("Create %s", r.modelName), content)
+			content := fmt.Sprintf(`<div class="badge badge-danger mb-4">%s</div>%s`, html.EscapeString(err.Error()), form.Render(ctx.GoContext()))
+			return r.renderPageStatus(ctx, status, fmt.Sprintf("Create %s", r.modelName), content)
 		}
 	}
 
@@ -1485,11 +1498,8 @@ func (r *BaseResource[T]) renderRelations(ctx *Context, basePath, id string) str
 }
 
 func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error {
-	if r.onFind != nil && r.canEdit != nil {
-		record, err := r.onFind(ctx, id)
-		if err == nil && !r.canEdit(ctx, record) {
-			return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
-		}
+	if err := r.authorizeRecord(ctx, id, r.canEdit); err != nil {
+		return ctx.String(webStatus(err), "%s", err.Error())
 	}
 
 	_ = ctx.Request.ParseMultipartForm(32 << 20)
@@ -1524,7 +1534,21 @@ func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error 
 	}
 
 	if r.onUpdate != nil {
-		if err := r.onUpdate(ctx, id, data); err != nil {
+		clean, err := r.validateInput(ctx, data, false)
+		if err != nil {
+			form := forms.New()
+			if r.formBuilder != nil {
+				form = r.formBuilder(form)
+			}
+			form.Fill(data)
+			var verr *forms.ValidationError
+			if errors.As(err, &verr) {
+				form.SetErrors(verr.Errors)
+			}
+			content := fmt.Sprintf(`<div class="badge badge-danger mb-4">%s</div>%s`, html.EscapeString(err.Error()), form.Render(ctx.GoContext()))
+			return r.renderPageStatus(ctx, http.StatusUnprocessableEntity, fmt.Sprintf("Edit %s", r.modelName), content)
+		}
+		if err := r.onUpdate(ctx, id, clean); err != nil {
 			return ctx.String(http.StatusInternalServerError, "Update error: %v", err)
 		}
 	}
@@ -1533,11 +1557,8 @@ func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error 
 }
 
 func (r *BaseResource[T]) handleDelete(ctx *Context, basePath, id string) error {
-	if r.onFind != nil && r.canDelete != nil {
-		record, err := r.onFind(ctx, id)
-		if err == nil && !r.canDelete(ctx, record) {
-			return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
-		}
+	if err := r.authorizeRecord(ctx, id, r.canDelete); err != nil {
+		return ctx.String(webStatus(err), "%s", err.Error())
 	}
 
 	if r.onDelete != nil {
@@ -1557,8 +1578,25 @@ func (r *BaseResource[T]) handleBulk(ctx *Context, basePath string) error {
 	action := ctx.Request.PostFormValue("bulk_action")
 	selectedIDs := ctx.Request.PostForm["selected_ids[]"]
 
+	if (action == "restore_bulk" || action == "force_delete_bulk") && len(selectedIDs) > 0 {
+		// the per-record callbacks apply to bulk actions too
+		check := r.canRestore
+		if action == "force_delete_bulk" {
+			check = r.canForceDelete
+		}
+		if check != nil {
+			for _, sid := range selectedIDs {
+				if !check(ctx, sid) {
+					return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+				}
+			}
+		}
+	}
+
 	if action == "delete_bulk" && r.onDeleteBulk != nil && len(selectedIDs) > 0 {
-		_ = r.onDeleteBulk(ctx, selectedIDs)
+		if err := r.InvokeDeleteBulk(ctx, selectedIDs); err != nil {
+			return ctx.String(webStatus(err), "%s", err.Error())
+		}
 	} else if action == "restore_bulk" && len(selectedIDs) > 0 {
 		if r.onRestoreBulk != nil {
 			_ = r.onRestoreBulk(ctx, selectedIDs)
@@ -2133,28 +2171,30 @@ func (r *BaseResource[T]) InvokeCreate(ctx *Context, data map[string]any) error 
 	if r.onCreate == nil {
 		return fmt.Errorf("create not implemented")
 	}
+	data, err := r.validateInput(ctx, data, true)
+	if err != nil {
+		return err
+	}
 	return r.onCreate(ctx, data)
 }
 
 func (r *BaseResource[T]) InvokeUpdate(ctx *Context, id string, data map[string]any) error {
-	if r.onFind != nil && r.canEdit != nil {
-		record, err := r.onFind(ctx, id)
-		if err == nil && !r.canEdit(ctx, record) {
-			return ErrForbidden
-		}
+	if err := r.authorizeRecord(ctx, id, r.canEdit); err != nil {
+		return err
 	}
 	if r.onUpdate == nil {
 		return fmt.Errorf("update not implemented")
+	}
+	data, err := r.validateInput(ctx, data, false)
+	if err != nil {
+		return err
 	}
 	return r.onUpdate(ctx, id, data)
 }
 
 func (r *BaseResource[T]) InvokeDelete(ctx *Context, id string) error {
-	if r.onFind != nil && r.canDelete != nil {
-		record, err := r.onFind(ctx, id)
-		if err == nil && !r.canDelete(ctx, record) {
-			return ErrForbidden
-		}
+	if err := r.authorizeRecord(ctx, id, r.canDelete); err != nil {
+		return err
 	}
 	if r.onDelete == nil {
 		return fmt.Errorf("delete not implemented")
@@ -2222,21 +2262,8 @@ func (r *BaseResource[T]) handleCellUpdate(ctx *Context, basePath, id string) er
 		return ctx.JSON(http.StatusBadRequest, map[string]any{"error": "Column is required"})
 	}
 
-	if r.onFind != nil && r.canEdit != nil {
-		rec, err := r.onFind(ctx, id)
-		if err == nil && !r.canEdit(ctx, rec) {
-			return ctx.JSON(http.StatusForbidden, map[string]any{"error": "403 Forbidden: Access denied"})
-		}
-	}
-
-	if r.onCellUpdate != nil {
-		if err := r.onCellUpdate(ctx, id, col, val); err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		}
-	} else if r.onUpdate != nil {
-		if err := r.onUpdate(ctx, id, map[string]any{col: val}); err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		}
+	if err := r.InvokeCellUpdate(ctx, id, col, val); err != nil {
+		return ctx.JSON(webStatus(err), map[string]any{"error": err.Error()})
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -2255,11 +2282,32 @@ func (r *BaseResource[T]) InvokeReorder(ctx *Context, orderedIDs []string) error
 }
 
 func (r *BaseResource[T]) InvokeCellUpdate(ctx *Context, id, column string, value any) error {
-	if r.onFind != nil && r.canEdit != nil {
-		record, err := r.onFind(ctx, id)
-		if err == nil && !r.canEdit(ctx, record) {
-			return ErrForbidden
+	if err := r.authorizeRecord(ctx, id, r.canEdit); err != nil {
+		return err
+	}
+	// Only editable table columns can be changed inline. A resource without
+	// a table but with its own OnCellUpdate handler decides by itself.
+	editable, options := r.editableColumn(column)
+	if !editable && (r.tableBuilder != nil || r.onCellUpdate == nil) {
+		return ErrColumnNotEditable
+	}
+	if len(options) > 0 {
+		if _, ok := options[formatScalar(value)]; !ok {
+			return &forms.ValidationError{Errors: map[string]string{column: "This is not a valid choice."}}
 		}
+	}
+	// A column that is also a form field follows the field's rules.
+	if comps := r.formComponents(); comps != nil && !r.acceptUnvalidated && forms.FindField(comps, column) != nil {
+		withSelf(ctx)
+		clean, err := forms.Validate(ctx.GoContext(), comps, map[string]any{column: value}, false)
+		if err != nil {
+			return err
+		}
+		v, ok := clean[column]
+		if !ok {
+			return ErrColumnNotEditable // disabled or hidden in the form
+		}
+		value = v
 	}
 	if r.onCellUpdate != nil {
 		return r.onCellUpdate(ctx, id, column, value)
@@ -2276,6 +2324,14 @@ func (r *BaseResource[T]) InvokeDeleteBulk(ctx *Context, ids []string) error {
 	}
 	if r.onDeleteBulk == nil {
 		return fmt.Errorf("bulk delete not implemented")
+	}
+	if r.canDelete != nil || r.canView != nil {
+		// every record must pass, or nothing is deleted
+		for _, id := range ids {
+			if err := r.authorizeRecord(ctx, id, r.canDelete); err != nil {
+				return err
+			}
+		}
 	}
 	return r.onDeleteBulk(ctx, ids)
 }

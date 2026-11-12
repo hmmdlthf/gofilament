@@ -199,6 +199,41 @@ func NewUserResource() *UserResource {
 | `forms.Wizard(...)` | Sequential step-by-step form wizard with progress indicators |
 | `forms.Repeater(name)` | Dynamic nested arrays with reordering (`↑`/`↓`), collapsing, and grid support |
 
+### 🛡️ Server-side validation and input whitelisting
+
+Every create, update, inline edit, relation form and row-action form is checked
+on the server against the form you declared, in both engines and in the API
+(`forms.Validate`). Your handler receives **only the form's fields**:
+
+- keys that are not fields, `Disabled()` fields, fields hidden by `Visible(...)`
+  and fields whose `Dehydrated(...)` returns false are dropped;
+- `Required()` / `RequiredOnCreate()`, `MinLength` / `MaxLength`, `Numeric()`,
+  `Email()`, `URL()`, select / radio / checkbox options (including
+  `OptionsUsing`, resolved per request), dates and times, tag limits and
+  repeater `MinItems` / `MaxItems` are enforced, repeater items recursively;
+- updates are partial: absent keys are left alone, but a required field cannot
+  be emptied.
+
+A failed check answers `422` with `{"error": "...", "errors": {"field": "..."}}`
+(`lines.0.sku` inside repeaters); the web engine re-renders the form with the
+messages. Inline cell edits only reach columns that are editable in the table
+(`ToggleColumn`, `SelectColumn` with its options, `TextInputColumn`, `.Editable()`).
+Resources without a form get the data unchanged; call
+`res.AcceptUnvalidatedInput()` (or the same on a relation manager) only if your
+handlers validate and whitelist input themselves.
+
+Writes also need a record the user may see: update, delete, inline edit and
+bulk delete load the record first, and a lookup error (`404`), `CanView` or
+`CanEdit` / `CanDelete` refusal (`403`) stops them. Bulk restore and force
+delete check `CanRestore` / `CanForceDelete` for every id.
+
+Sign-in is throttled: 5 failed attempts per client and login name per minute
+(and 20 per client across names) answer `429` with `Retry-After`, on
+`POST <panel>/api/login` and the web login form. Tune it with
+`panel.LoginThrottle(n, window)` (`0` disables it). Counters use golaravel's
+rate limit store, in memory by default: use a Redis store when the panel runs
+on several processes.
+
 ### 📁 File & Image Uploads (`forms.FileUpload` & `forms.ImageUpload`)
 
 Support for drag-and-drop file handling with instant client-side image preview and circular avatar mode:

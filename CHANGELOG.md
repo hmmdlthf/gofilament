@@ -10,13 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **Server-side form validation (`pkg/filament`, `pkg/forms`)**: create, update, inline cell edits, relation forms and row-action forms are validated against the declared form, and handlers receive only the form's fields (unknown keys, disabled fields, fields hidden by `Visible` and non-dehydrated fields are dropped). Invalid input answers 422 with `{"error", "errors"}`. Updates are partial: absent keys are left alone. Handlers that relied on extra keys must declare them as fields (for example `forms.Hidden`) or opt out with `AcceptUnvalidatedInput()`.
+- **Inline cell edits** only reach editable table columns (and select columns only accept their options); the fallback to `OnUpdate({column: value})` can no longer write arbitrary fields. A resource without a table but with its own `OnCellUpdate` still decides by itself.
+- **Writes need a loadable, visible record**: update, delete, inline edit and bulk delete answer 404 when the record cannot be loaded and 403 when `CanView` refuses it, instead of running the handler.
+- **Sign-in is throttled** by default (5 failures per client and name per minute, 20 per client): `Panel.LoginThrottle(n, window)`; `0` disables it.
 - **CORS (`pkg/filament`)**: the panel API no longer reflects every `Origin` with `Access-Control-Allow-Credentials: true`. By default only same-origin requests get CORS headers. Allow other origins with `Panel.CORSAllowedOrigins("https://app.example.com")` (reflected with credentials), `CORSAllowedOrigins("*")` (any origin, no credentials) or `CORSAllowOriginFunc(fn)` (for example `http://localhost:*` during development). Native apps and server-to-server clients send no `Origin` and are unaffected. A Flutter web client served from another origin (such as `flutter run -d chrome`) needs one of these.
 - **`flutterclient.GenerateAdminApp`**: existing files are no longer overwritten on re-runs, so edits to `lib/main.dart`, `pubspec.yaml`, `.gitignore`, etc. are kept. Set `AdminAppOptions.Overwrite: true` for the old behaviour.
 
 ### Security
+- Update / delete / cell update used to skip `CanEdit` / `CanDelete` when `OnFind` returned an error, and never checked `CanView`; bulk delete only checked `CanDeleteAny`, and bulk restore / force delete skipped `CanRestore` / `CanForceDelete`. All of them now check every record.
+- Form input was passed to handlers unchecked (mass assignment through any key, including disabled fields and, via inline edit, any column). See Breaking.
+- The web create page printed handler error messages unescaped; they are escaped now.
 - **Web login (`pkg/filament`)**: the login form and row action forms carry a CSRF token (`_token`, double-submit cookie, compatible with golaravel's `middleware.CSRF`). New `Panel.CSRFToken` / `VerifyCSRF` for custom pages.
 
 ### Added
+- `forms.Validate(ctx, components, data, creating)` and `forms.ValidationError`; `BaseResource.AcceptUnvalidatedInput`, `BaseRelationManager.AcceptUnvalidatedInput`; `filament.ErrRecordNotFound`, `filament.ErrColumnNotEditable`; `Panel.LoginThrottle`. `Visible` and `Dehydrated` on fields are now applied on the server.
 - **Typed Dart from a panel (`flutterclient.GenerateFromPanel`)**: boots the panel in-process (httptest, no network, no writes) and writes `lib/generated/{schema,models,client,pages}.g.dart` into a Flutter app: a schema and form snapshot, a model class per resource record (from the Go record type) and per form / action / relation input, a typed `PanelClient`, and the `AdminPage` list of the panel's Flutter pages. Output is deterministic; `CheckFromPanel` and `RenderFromPanel` support CI. New artisan command `commands.FlutterGenerateCommand` (`filament:flutter-generate [--out=dir] [--check]`).
 - **`filament.FlutterPage(id, label)`**: a page drawn only by the Flutter client (`FlutterPager` for your own page types). The schema lists the pages the user may open in `client_pages`.
 - **`filament.Endpoint[Req, Res](name, method, path, fn)`** + `Panel.Endpoints(...)`: typed JSON endpoints under `<panel>/api` behind the panel's authentication (`.Authorize`, `.Describe`); the generator writes a typed Dart method for each.

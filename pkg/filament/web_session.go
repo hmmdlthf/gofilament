@@ -242,6 +242,10 @@ func (p *Panel) handleWebLogin(c *gcontext.Context) error {
 	if p.authValidator == nil {
 		return p.renderLoginScreen(ctx, http.StatusNotImplemented, "Sign-in is not configured for this panel.", identifier)
 	}
+	if blocked, wait := p.loginBlocked(c, identifier); blocked {
+		setRetryAfter(c, wait)
+		return p.renderLoginScreen(ctx, statusTooManyRequests, throttleMessage(wait), identifier)
+	}
 	remember := c.FormValue("remember") != ""
 	d := p.ResolveTokenDuration(remember)
 	ctx.Set("remember", remember)
@@ -249,8 +253,10 @@ func (p *Panel) handleWebLogin(c *gcontext.Context) error {
 
 	user, token, err := p.authValidator(ctx, identifier, password)
 	if err != nil || user == nil {
+		p.loginFailed(c, identifier)
 		return p.renderLoginScreen(ctx, http.StatusUnauthorized, "These credentials do not match our records.", identifier)
 	}
+	p.loginSucceeded(c, identifier)
 	p.startWebSession(c, user, token, d)
 	return c.Redirect(http.StatusSeeOther, p.path)
 }

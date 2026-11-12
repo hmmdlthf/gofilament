@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golaravel/gofilament/pkg/notifications"
+	"github.com/golaravel/gofilament/pkg/forms"
 	"github.com/golaravel/gofilament/pkg/tables"
 	"github.com/golaravel/golaravel/pkg/appupdate"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
@@ -161,6 +162,11 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Panel authentication not configured"})
 		}
 
+		if blocked, wait := p.loginBlocked(c, identifier); blocked {
+			setRetryAfter(c, wait)
+			return c.JSON(statusTooManyRequests, map[string]string{"error": throttleMessage(wait)})
+		}
+
 		ctx := NewContext(c, p)
 		tokenDuration := p.ResolveTokenDuration(creds.Remember)
 		ctx.Set("remember", creds.Remember)
@@ -168,8 +174,10 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 		authUser, tokenStr, err := p.authValidator(ctx, identifier, creds.Password)
 		if err != nil || authUser == nil {
+			p.loginFailed(c, identifier)
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
 		}
+		p.loginSucceeded(c, identifier)
 
 		expiresAt := time.Now().Add(tokenDuration)
 
@@ -1821,5 +1829,10 @@ func (p *Panel) apiErrorStatus(c *gcontext.Context, err error, fallback int) err
 			status, message = s, m
 		}
 	}
-	return c.JSON(status, map[string]string{"error": message})
+	body := map[string]any{"error": message}
+	var verr *forms.ValidationError
+	if errors.As(err, &verr) {
+		body["errors"] = verr.Errors
+	}
+	return c.JSON(status, body)
 }

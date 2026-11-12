@@ -123,6 +123,7 @@ type Panel struct {
 	resources           []ResourceInterface
 	pages               []PageInterface
 	endpoints           []*ClientEndpoint
+	loginLimit          *loginThrottle
 	widgets             []WidgetInterface
 	dashboardRenderFunc func(ctx *Context) error
 	locales             []string
