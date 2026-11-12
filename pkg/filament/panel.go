@@ -118,6 +118,7 @@ type Panel struct {
 	canAccess           func(ctx *Context) bool
 	middlewares         []gcontext.HandlerFunc
 	corsAllowedOrigins  []string
+	webSessions         webSessionStore
 	corsAllowOriginFunc func(origin string) bool
 	resources           []ResourceInterface
 	pages               []PageInterface
@@ -838,7 +839,8 @@ func denied(err error) error {
 }
 
 // resolveUser builds the request context and authenticates a bearer token
-// when one is sent. It never writes a response.
+// when one is sent, or, outside <panel>/api, the web-engine login cookie set
+// by POST <panel>/login. It never writes a response.
 func (p *Panel) resolveUser(c *gcontext.Context) *Context {
 	ctx := NewContext(c, p)
 	authHeader := c.Header("Authorization")
@@ -847,7 +849,21 @@ func (p *Panel) resolveUser(c *gcontext.Context) *Context {
 			c.Set(auth.ContextUserKey, u)
 		}
 	}
+	if ctx.User() == nil && !p.isAPIRequest(c) {
+		if u := p.userFromSessionCookie(ctx); u != nil {
+			c.Set(auth.ContextUserKey, u)
+		}
+	}
 	return ctx
+}
+
+// isAPIRequest reports whether the request targets <panel>/api.
+func (p *Panel) isAPIRequest(c *gcontext.Context) bool {
+	if c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	rest := strings.TrimPrefix(c.Request.URL.Path, strings.TrimRight(p.path, "/"))
+	return rest == "/api" || strings.HasPrefix(rest, "/api/")
 }
 
 // AuthorizeAccess verifies panel authorization for the incoming request.
@@ -1222,16 +1238,21 @@ func (p *Panel) Mount(r *router.Router) {
 	// 3. Auth Routes (Login, Logout, Profile)
 	if p.hasLogin {
 		r.GET(p.path+"/login", func(c *gcontext.Context) error {
-			ctx := NewContext(c, p)
-			return p.renderLoginScreen(ctx)
+			ctx := p.resolveUser(c)
+			if ctx.User() != nil {
+				return c.Redirect(http.StatusSeeOther, p.path)
+			}
+			return p.renderLoginScreen(ctx, http.StatusOK, "", "")
 		})
-		r.POST(p.path+"/login", func(c *gcontext.Context) error {
-			// Redirect back to admin dashboard
-			return c.Redirect(http.StatusSeeOther, p.path)
-		})
-		r.GET(p.path+"/logout", func(c *gcontext.Context) error {
+		// Authenticates with the AuthValidator and starts a browser session
+		// (HttpOnly, SameSite=Lax cookie; see SessionCookieName).
+		r.POST(p.path+"/login", p.handleWebLogin)
+		logout := func(c *gcontext.Context) error {
+			p.endWebSession(c)
 			return c.Redirect(http.StatusSeeOther, p.path+"/login")
-		})
+		}
+		r.GET(p.path+"/logout", logout)
+		r.POST(p.path+"/logout", logout)
 	}
 
 	// 4. Dashboard Route
@@ -1772,8 +1793,12 @@ func (p *Panel) renderNotificationsDrawerHTML(ctx *Context) string {
 	)
 }
 
-func (p *Panel) renderLoginScreen(ctx *Context) error {
-	html := fmt.Sprintf(`<!DOCTYPE html>
+func (p *Panel) renderLoginScreen(ctx *Context, status int, errMsg, identifier string) error {
+	errHTML := ""
+	if errMsg != "" {
+		errHTML = fmt.Sprintf(`<div class="filament-alert filament-alert-danger" role="alert" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; background: #fef2f2; color: #b91c1c; font-size: 0.875rem;">%s</div>`, html.EscapeString(errMsg))
+	}
+	page := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s" dir="%s">
 <head>
   <meta charset="UTF-8">
@@ -1789,10 +1814,12 @@ func (p *Panel) renderLoginScreen(ctx *Context) error {
       <h2 style="font-size: 1.5rem; font-weight: 700; color: var(--primary-600);">%s</h2>
       <p style="font-size: 0.875rem; color: var(--gray-500); margin-top: 0.25rem;">Sign in to your administration panel</p>
     </div>
+    %s
     <form method="POST" action="%s/login">
+      %s
       <div class="form-group">
         <label class="form-label" for="email">Email address</label>
-        <input type="email" id="email" name="email" required placeholder="admin@example.com" class="form-control" />
+        <input type="email" id="email" name="email" required placeholder="admin@example.com" value="%s" class="form-control" />
       </div>
       <div class="form-group">
         <label class="form-label" for="password">Password</label>
@@ -1808,9 +1835,9 @@ func (p *Panel) renderLoginScreen(ctx *Context) error {
   </div>
   %s
 </body>
-</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, p.path, p.RenderBodyEndHTML(ctx))
+</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, errHTML, p.path, p.csrfHiddenInput(ctx.Context, ""), html.EscapeString(identifier), p.RenderBodyEndHTML(ctx))
 
-	return ctx.HTML(http.StatusOK, html)
+	return ctx.HTML(status, page)
 }
 
 func (p *Panel) mountFlutter(r *router.Router) {
