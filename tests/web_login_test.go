@@ -19,10 +19,14 @@ type webClient struct {
 	t       *testing.T
 	app     http.Handler
 	cookies map[string]*http.Cookie
+	// fetchSite is sent as Sec-Fetch-Site ("" sends none). Defaults to
+	// "same-origin": a browser navigating inside the panel.
+	fetchSite string
+	origin    string
 }
 
 func newWebClient(t *testing.T, app http.Handler) *webClient {
-	return &webClient{t: t, app: app, cookies: map[string]*http.Cookie{}}
+	return &webClient{t: t, app: app, cookies: map[string]*http.Cookie{}, fetchSite: "same-origin"}
 }
 
 func (w *webClient) do(method, path string, form url.Values) *httptest.ResponseRecorder {
@@ -36,6 +40,12 @@ func (w *webClient) do(method, path string, form url.Values) *httptest.ResponseR
 	}
 	for _, c := range w.cookies {
 		req.AddCookie(c)
+	}
+	if w.fetchSite != "" {
+		req.Header.Set("Sec-Fetch-Site", w.fetchSite)
+	}
+	if w.origin != "" {
+		req.Header.Set("Origin", w.origin)
 	}
 	rec := httptest.NewRecorder()
 	w.app.ServeHTTP(rec, req)
