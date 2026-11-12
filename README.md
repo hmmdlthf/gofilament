@@ -825,6 +825,35 @@ generator never changes an existing page. A page file that does not define its
 class stops generation with a clear error, and `--check` lists pages that have
 no file yet.
 
+#### Build and ship it in the Go binary
+
+Like `npm run build` for Laravel's `resources/`, one command regenerates the
+typed code and builds the web app; `--embed` turns the build into a Go
+package, so the panel ships as a single binary:
+
+```go
+reg.Register(commands.FlutterBuildCommand(panels.Admin, commands.DefaultFlutterDir, flutterclient.GenerateOptions{}))
+```
+
+```bash
+artisan filament:flutter-build --embed=internal/adminweb          # generate + flutter build web --release
+artisan filament:flutter-build --no-generate -- --wasm            # extra flutter build web arguments after --
+```
+
+```go
+import "yourapp/internal/adminweb"
+
+panel.FlutterFS(adminweb.FS) // instead of panel.Flutter("resources/flutter/build/web")
+```
+
+`--embed=<dir>` writes `<dir>/dist` (the web build) and `<dir>/embed.go`
+(`package <dir name>`, `var FS fs.FS`). Rebuilds replace `dist`; a `dist` the
+command did not write is never touched. `FlutterFS` serves any `fs.FS` the
+same way the directory server does: base href set to the panel path,
+version / build id tags, the loading screen, no caching of the entry files,
+and `index.html` for client-side routes. In Go code without artisan, call
+`flutterclient.BuildWeb(appDir, flutterclient.BuildOptions{EmbedDir: ...})`.
+
 #### Custom field, cell and dashboard components
 
 When a built-in input or cell is not enough, name a Flutter component in Go

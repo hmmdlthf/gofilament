@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"io/fs"
 	"errors"
 	"encoding/json"
 	"fmt"
@@ -61,6 +62,7 @@ type Panel struct {
 	path                string
 	engine              PanelEngine
 	flutterDistDir      string
+	flutterFS           fs.FS
 	accountNavPlacement AccountNavPlacement
 	brandName           string
 	brandLogo           string
@@ -1848,6 +1850,10 @@ func (p *Panel) renderLoginScreen(ctx *Context, status int, errMsg, identifier s
 }
 
 func (p *Panel) mountFlutter(r *router.Router) {
+	if p.flutterFS != nil {
+		p.serveFlutterFS(r)
+		return
+	}
 	distDir := p.GetFlutterDistDir()
 	indexPath := filepath.Join(distDir, "index.html")
 
