@@ -774,10 +774,53 @@ func (p *Panel) CanAccess(fn func(ctx *Context) bool) *Panel {
 	return p
 }
 
-// Middleware appends router middleware to all non-asset routes on this panel.
+// Middleware appends router middleware to all non-asset routes on this panel,
+// including the JSON API under <panel>/api. It must be called before the
+// panel is mounted (Register / Mount): the router snapshots middleware per
+// route at registration time.
+//
+// The middleware runs for requests whose path is the panel path or below it,
+// except static assets (<panel>/assets/..., and the compiled Flutter bundle
+// for the Flutter engine, where only <panel>/api/... is covered) and CORS
+// preflight (OPTIONS) requests. Routes the application itself registers under
+// the panel path after Mount are covered too.
 func (p *Panel) Middleware(mw ...gcontext.HandlerFunc) *Panel {
 	p.middlewares = append(p.middlewares, mw...)
 	return p
+}
+
+// middlewareApplies reports whether panel middleware runs for a request.
+func (p *Panel) middlewareApplies(method, reqPath string) bool {
+	if method == http.MethodOptions {
+		return false
+	}
+	base := strings.TrimRight(p.path, "/")
+	if base != "" && reqPath != base && !strings.HasPrefix(reqPath, base+"/") {
+		return false
+	}
+	rest := strings.TrimPrefix(reqPath, base)
+	if strings.HasPrefix(rest, "/api/") || rest == "/api" {
+		return true
+	}
+	if p.IsFlutter() {
+		// Everything outside the API is the static Flutter bundle.
+		return false
+	}
+	return !strings.HasPrefix(rest, "/assets/")
+}
+
+// installMiddleware attaches the panel middleware to the router so every
+// route registered afterwards runs it for requests inside this panel.
+func (p *Panel) installMiddleware(r *router.Router) {
+	for _, mw := range p.middlewares {
+		mw := mw
+		r.Use(func(c *gcontext.Context) error {
+			if c.Request == nil || c.Request.URL == nil || !p.middlewareApplies(c.Request.Method, c.Request.URL.Path) {
+				return nil
+			}
+			return mw(c)
+		})
+	}
 }
 
 // ErrAccessDenied is returned by AuthorizeAccess after it has written the
@@ -1008,6 +1051,9 @@ func (p *Panel) Mount(r *router.Router) {
 	if err := p.ValidateTranslations(); err != nil {
 		panic(err)
 	}
+
+	// 0. Panel middleware (must precede every route registration below).
+	p.installMiddleware(r)
 
 	// 1. Standardized Panel REST API (powers Flutter, mobile apps, and headless integrations)
 	p.RegisterAPIRoutes(r)
