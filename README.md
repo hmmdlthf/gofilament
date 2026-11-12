@@ -772,20 +772,21 @@ panel instead of writing it by hand:
 
 ```go
 // tools/gen-flutter/main.go — run with `go run ./tools/gen-flutter`
-err := flutterclient.GenerateFromPanel(panels.Admin(), "flutter/admin_app", flutterclient.GenerateOptions{})
+err := flutterclient.GenerateFromPanel(panels.Admin(), "resources/flutter", flutterclient.GenerateOptions{})
 ```
 
 or register the artisan command (it needs a function that builds your panel):
 
 ```go
-reg.Register(commands.FlutterGenerateCommand(panels.Admin, "flutter/admin_app", flutterclient.GenerateOptions{}))
+reg.Register(commands.FlutterGenerateCommand(panels.Admin, commands.DefaultFlutterDir, flutterclient.GenerateOptions{}))
 // artisan filament:flutter-generate [--out=dir] [--check]
 ```
 
 The panel is booted in-process and read through its own API with `httptest`:
 no port is opened and no create / update / delete / action handler runs (list,
-form and option loaders do). Four files are written to `lib/generated/`, each
-marked `DO NOT EDIT`; nothing else in the app is touched:
+form and option loaders do). Five files are written to `lib/generated/`, each
+marked `DO NOT EDIT`; the only other files it creates are stubs for pages that
+have no file yet:
 
 | File | Contents |
 |---|---|
@@ -793,16 +794,41 @@ marked `DO NOT EDIT`; nothing else in the app is touched:
 | `models.g.dart` | a class per resource record, built from the Go record type (`fromJson` / `toJson`, unknown keys kept in `raw`); an `…Input` class per form, relation form and action form; classes for endpoint request / response types |
 | `client.g.dart` | `PanelClient`: `list` / `find` / `create` / `update` / `delete` / `run<Action>` per resource, a client per relation, and a typed method per `filament.Endpoint` |
 | `pages.g.dart` | `panelPages(PanelPageBuilders(...))`: the `AdminPage`s of every `filament.FlutterPage`, with one **required** builder each |
+| `registry.g.dart` | `panelAppPages`: those pages built from your files in `lib/pages` |
+
+#### `resources/flutter`: your Dart lives next to your Go
+
+Like Laravel's `resources/` folder, the panel's Flutter app sits in the Go
+project, and hand-written Dart has a fixed place in it:
+
+```
+resources/flutter/
+  lib/main.dart                 ← written once by make:filament-flutter-app
+  lib/pages/pos_page.dart       ← yours: class PosPage, one file per filament.FlutterPage("pos", ...)
+  lib/generated/*.g.dart        ← generator only (DO NOT EDIT)
+```
+
+```bash
+artisan make:filament-flutter-app                 # resources/flutter, typed main.dart
+artisan make:filament-flutter-page pos --label="Point of sale" --fullscreen
+#   → lib/pages/pos_page.dart and the Go line: panel.Pages(filament.FlutterPage("pos", "Point of sale").Fullscreen())
+artisan filament:flutter-generate                 # writes lib/generated, stubs missing pages
+```
+
+A page id maps to `lib/pages/<snake_id>_page.dart` and the class
+`<PascalId>Page({super.key, required AdminController admin})`. Declaring a
+page in Go and regenerating creates that file once if it is missing; the
+generator never changes an existing page. A page file that does not define its
+class stops generation with a clear error, and `--check` lists pages that have
+no file yet.
 
 ```dart
 void main() => runApp(GoFilamentAdmin(
       initialSchema: panelSchema, // first frame without waiting for /api/schema
-      pages: panelPages(PanelPageBuilders(
-        pos: (context, admin) => PosScreen(client: PanelClient(admin.api)),
-      )),
+      pages: panelAppPages,       // or panelPages(PanelPageBuilders(pos: ...)) to wire them yourself
     ));
 
-// in PosScreen
+// in lib/pages/pos_page.dart (PanelClient get client => PanelClient(admin.api);)
 final orders = await client.salesOrders.list(search: 'SO');
 await client.salesOrders.runRefund('12', const SalesOrderRefundInput(amount: 5));
 final summary = await client.salesSummary(till: 't1');
@@ -834,7 +860,7 @@ generated code.
 so regenerate and fail on a diff, or use `--check`:
 
 ```bash
-go run ./tools/gen-flutter && git diff --exit-code flutter/admin_app/lib/generated
+go run ./tools/gen-flutter && git diff --exit-code resources/flutter/lib/generated
 ```
 
 The generator reads the panel as a `SimpleShieldUser` with the `super-admin`

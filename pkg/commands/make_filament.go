@@ -19,6 +19,8 @@ func RegisterFilamentCommands(reg *artisan.Registry) {
 	reg.Register(MakeFilamentWidgetCommand())
 	reg.Register(MakeFilamentRelationCommand())
 	reg.Register(MakeFilamentFlutterCommand())
+	reg.Register(MakeFilamentFlutterAppCommand())
+	reg.Register(MakeFilamentFlutterPageCommand())
 }
 
 // MakeFilamentPanelCommand creates a new admin panel configuration.

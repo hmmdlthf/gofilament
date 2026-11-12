@@ -60,10 +60,11 @@ func (g *generator) render() (map[string][]byte, error) {
 		return nil, err
 	}
 	files := map[string][]byte{
-		GeneratedDir + "/schema.g.dart": []byte(g.schemaFile()),
-		GeneratedDir + "/models.g.dart": []byte(g.modelsFile()),
-		GeneratedDir + "/client.g.dart": []byte(g.clientFile()),
-		GeneratedDir + "/pages.g.dart":  []byte(g.pagesFile()),
+		GeneratedDir + "/schema.g.dart":   []byte(g.schemaFile()),
+		GeneratedDir + "/models.g.dart":   []byte(g.modelsFile()),
+		GeneratedDir + "/client.g.dart":   []byte(g.clientFile()),
+		GeneratedDir + "/pages.g.dart":    []byte(g.pagesFile()),
+		GeneratedDir + "/registry.g.dart": []byte(g.registryFile()),
 	}
 	return files, nil
 }
@@ -528,14 +529,14 @@ func (g *generator) pagesFile() string {
 	b.WriteString("\nimport 'package:flutter/material.dart';\nimport '" + g.o.PackageImport + "';\n\n")
 	b.WriteString("/// Draws one page.\ntypedef PanelPageBuilder = Widget Function(\n    BuildContext context, AdminController admin);\n\n")
 
-	names := nameSet{}
 	type pg struct {
 		info   filament.FlutterPageInfo
 		member string
 	}
 	var pages []pg
-	for _, p := range g.snap.pages {
-		pages = append(pages, pg{info: p, member: names.unique(camel(p.ID))})
+	members := pageMembers(g.snap.pages)
+	for i, p := range g.snap.pages {
+		pages = append(pages, pg{info: p, member: members[i]})
 	}
 
 	b.WriteString(`/// The builders of the pages the panel declares with filament.FlutterPage.

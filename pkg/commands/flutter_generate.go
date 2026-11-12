@@ -17,7 +17,7 @@ import (
 // The command cannot find your panel by itself, so register it with a
 // function that builds it, the same way your server does:
 //
-//	reg.Register(commands.FlutterGenerateCommand(panels.Admin, "flutter/admin_app", flutterclient.GenerateOptions{}))
+//	reg.Register(commands.FlutterGenerateCommand(panels.Admin, commands.DefaultFlutterDir, flutterclient.GenerateOptions{}))
 //
 // Usage: artisan filament:flutter-generate [--out=<app dir>] [--check]
 //

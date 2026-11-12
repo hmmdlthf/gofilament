@@ -183,8 +183,8 @@ func TestFlutterCodegenGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 4 {
-		t.Fatalf("expected 4 files, got %d", len(files))
+	if len(files) != 5 {
+		t.Fatalf("expected 5 files, got %d", len(files))
 	}
 	for name, content := range files {
 		if string(again[name]) != string(content) {
@@ -222,13 +222,15 @@ func TestFlutterCodegenGolden(t *testing.T) {
 
 func TestFlutterCodegenWritesAndChecks(t *testing.T) {
 	dir := t.TempDir()
-	custom := filepath.Join(dir, "lib", "pages", "pos.dart")
-	_ = os.MkdirAll(filepath.Dir(custom), 0o755)
-	_ = os.WriteFile(custom, []byte("// hand-written\n"), 0o644)
+	// a page written by hand before the first generation
+	pos := filepath.Join(dir, "lib", "pages", "pos_page.dart")
+	_ = os.MkdirAll(filepath.Dir(pos), 0o755)
+	_ = os.WriteFile(pos, []byte("// hand-written\nclass PosPage {}\n"), 0o644)
 
 	p := newCodegenPanel(t)
-	if stale, err := flutterclient.CheckFromPanel(p, dir, flutterclient.GenerateOptions{}); err != nil || len(stale) != 4 {
-		t.Fatalf("before generating, all 4 files are stale: %v %v", stale, err)
+	stale, err := flutterclient.CheckFromPanel(p, dir, flutterclient.GenerateOptions{})
+	if err != nil || len(stale) != 6 || stale[0] != "lib/pages/stock_take_page.dart (missing page)" {
+		t.Fatalf("before generating: 5 generated files and the stock-take page are missing: %v %v", stale, err)
 	}
 	if err := flutterclient.GenerateFromPanel(p, dir, flutterclient.GenerateOptions{}); err != nil {
 		t.Fatal(err)
@@ -236,12 +238,62 @@ func TestFlutterCodegenWritesAndChecks(t *testing.T) {
 	if stale, err := flutterclient.CheckFromPanel(newCodegenPanel(t), dir, flutterclient.GenerateOptions{}); err != nil || len(stale) != 0 {
 		t.Fatalf("after generating nothing is stale: %v %v", stale, err)
 	}
-	if b, _ := os.ReadFile(custom); string(b) != "// hand-written\n" {
-		t.Fatal("the generator touched a hand-written file")
+	if b, _ := os.ReadFile(pos); string(b) != "// hand-written\nclass PosPage {}\n" {
+		t.Fatal("the generator touched a hand-written page")
+	}
+	stub, err := os.ReadFile(filepath.Join(dir, "lib", "pages", "stock_take_page.dart"))
+	if err != nil || !strings.Contains(string(stub), "class StockTakePage extends StatelessWidget") {
+		t.Fatalf("missing pages get a stub: %v\n%s", err, stub)
+	}
+	// a stub, once edited, is the user's
+	_ = os.WriteFile(filepath.Join(dir, "lib", "pages", "stock_take_page.dart"), []byte("class StockTakePage {} // mine\n"), 0o644)
+	if err := flutterclient.GenerateFromPanel(newCodegenPanel(t), dir, flutterclient.GenerateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "lib", "pages", "stock_take_page.dart")); !strings.Contains(string(b), "// mine") {
+		t.Fatal("an existing page file was overwritten")
 	}
 	entries, _ := os.ReadDir(filepath.Join(dir, "lib", "generated"))
-	if len(entries) != 4 {
-		t.Fatalf("expected exactly the 4 generated files, got %d", len(entries))
+	if len(entries) != 5 {
+		t.Fatalf("expected exactly the 5 generated files, got %d", len(entries))
+	}
+
+	// a page file without its class is an error, not a broken build
+	_ = os.WriteFile(pos, []byte("class Till {}\n"), 0o644)
+	if err := flutterclient.GenerateFromPanel(newCodegenPanel(t), dir, flutterclient.GenerateOptions{}); err == nil || !strings.Contains(err.Error(), "must define class PosPage") {
+		t.Fatalf("expected a missing-class error, got %v", err)
+	}
+	if _, err := flutterclient.CheckFromPanel(newCodegenPanel(t), dir, flutterclient.GenerateOptions{}); err == nil {
+		t.Fatal("check must fail on a page file without its class")
+	}
+}
+
+func TestFlutterPageCommands(t *testing.T) {
+	dir := t.TempDir()
+	app := filepath.Join(dir, "resources", "flutter")
+	if err := commands.MakeFilamentFlutterAppCommand().Run([]string{"--dir=" + app, "--name=shop_admin", "--panel-path=/shop"}); err != nil {
+		t.Fatal(err)
+	}
+	main, err := os.ReadFile(filepath.Join(app, "lib", "main.dart"))
+	if err != nil || !strings.Contains(string(main), "pages: panelAppPages") || !strings.Contains(string(main), "'/shop'") {
+		t.Fatalf("typed main.dart: %v\n%s", err, main)
+	}
+	if err := commands.MakeFilamentFlutterPageCommand().Run([]string{"stock-take", "--dir=" + app, "--fullscreen"}); err != nil {
+		t.Fatal(err)
+	}
+	page, err := os.ReadFile(filepath.Join(app, "lib", "pages", "stock_take_page.dart"))
+	if err != nil || !strings.Contains(string(page), "class StockTakePage") || !strings.Contains(string(page), "'Stock take'") || !strings.Contains(string(page), "Scaffold(") {
+		t.Fatalf("page stub: %v\n%s", err, page)
+	}
+	_ = os.WriteFile(filepath.Join(app, "lib", "pages", "stock_take_page.dart"), []byte("class StockTakePage {}\n"), 0o644)
+	if err := commands.MakeFilamentFlutterPageCommand().Run([]string{"stock-take", "--dir=" + app}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(app, "lib", "pages", "stock_take_page.dart")); string(b) != "class StockTakePage {}\n" {
+		t.Fatal("make:filament-flutter-page must not overwrite a page")
+	}
+	if err := commands.MakeFilamentFlutterPageCommand().Run(nil); err == nil {
+		t.Fatal("a page id is required")
 	}
 }
 
@@ -309,13 +361,15 @@ func TestFlutterCodegenSampleApp(t *testing.T) {
 	}
 	pkg, _ := filepath.Abs("../flutter/gofilament_admin")
 	dir := t.TempDir()
-	if err := flutterclient.GenerateAdminApp(dir, flutterclient.AdminAppOptions{Name: "codegen_sample", PackagePath: pkg}); err != nil {
+	if err := flutterclient.GenerateAdminApp(dir, flutterclient.AdminAppOptions{Name: "codegen_sample", PackagePath: pkg, Typed: true}); err != nil {
+		t.Fatal(err)
+	}
+	// the POS page is written by hand; the stock-take page is left to the stub
+	_ = os.MkdirAll(filepath.Join(dir, "lib", "pages"), 0o755)
+	if err := os.WriteFile(filepath.Join(dir, "lib", "pages", "pos_page.dart"), []byte(samplePosPage), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := flutterclient.GenerateFromPanel(newCodegenPanel(t), dir, flutterclient.GenerateOptions{}); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "lib", "main.dart"), []byte(sampleMain), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "analysis_options.yaml"), []byte(sampleAnalysisOptions), 0o644); err != nil {
@@ -336,6 +390,7 @@ func TestFlutterCodegenSampleApp(t *testing.T) {
 
 const sampleTest = `import 'package:codegen_sample/generated/models.g.dart';
 import 'package:codegen_sample/generated/pages.g.dart';
+import 'package:codegen_sample/generated/registry.g.dart';
 import 'package:codegen_sample/generated/schema.g.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -385,6 +440,7 @@ void main() {
     final pages = panelPages(PanelPageBuilders(
         pos: (_, __) => const SizedBox(), stockTake: (_, __) => const SizedBox()));
     expect(pages.map((p) => p.id), ['pos', 'stock-take']);
+    expect(panelAppPages.map((p) => p.label), ['Point of sale', 'Stock take']);
     expect(pages.every((p) => p.serverControlled), isTrue);
   });
 }
@@ -399,29 +455,18 @@ analyzer:
     strict-raw-types: true
 `
 
-const sampleMain = `import 'package:flutter/material.dart';
+const samplePosPage = `import 'package:flutter/material.dart';
 import 'package:gofilament_admin/gofilament_admin.dart';
 
-import 'generated/client.g.dart';
-import 'generated/models.g.dart';
-import 'generated/pages.g.dart';
-import 'generated/schema.g.dart';
-
-void main() {
-  runApp(GoFilamentAdmin(
-    api: AdminApi(fallbackPanelPath: '/admin'),
-    initialSchema: panelSchema,
-    pages: panelPages(PanelPageBuilders(
-      pos: (context, admin) => PosPage(client: PanelClient(admin.api)),
-      stockTake: (context, admin) => const Text('Stock take'),
-    )),
-  ));
-}
+import '../generated/client.g.dart';
+import '../generated/models.g.dart';
 
 class PosPage extends StatelessWidget {
-  const PosPage({super.key, required this.client});
+  const PosPage({super.key, required this.admin});
 
-  final PanelClient client;
+  final AdminController admin;
+
+  PanelClient get client => PanelClient(admin.api);
 
   Future<String> _demo() async {
     final page = await client.salesOrders.list(search: 'SO');

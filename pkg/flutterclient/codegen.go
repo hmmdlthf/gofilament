@@ -52,16 +52,37 @@ func (o GenerateOptions) withDefaults() GenerateOptions {
 //   - pages.g.dart: panelPages(...), the AdminPage list of the Go pages that
 //     declare a Flutter screen (filament.FlutterPage), with one required
 //     builder each.
+//   - registry.g.dart: panelAppPages, those pages built from your files in
+//     lib/pages (PageFile / PageClass). A page without a file gets a stub
+//     there once; existing page files are never changed.
 //
 // The panel is booted in-process and read through its own API with httptest:
 // nothing listens on the network and no handler that writes is called (only
 // list / form / option loaders run). Output is deterministic, so CI can
 // regenerate and fail on `git diff`. Hand-written code belongs in other files;
-// the generator only ever writes the four *.g.dart files.
+// the generator only writes the *.g.dart files and missing page stubs.
 func GenerateFromPanel(p *filament.Panel, appDir string, o GenerateOptions) error {
-	files, err := RenderFromPanel(p, o)
+	o = o.withDefaults()
+	snap, err := capturePanel(p, o.User)
 	if err != nil {
 		return err
+	}
+	files, err := newGenerator(snap, o).render()
+	if err != nil {
+		return err
+	}
+	stubs, err := pageStubs(snap, appDir, o.PackageImport)
+	if err != nil {
+		return err
+	}
+	for _, name := range sortedKeys(stubs) {
+		path := filepath.Join(appDir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, []byte(stubs[name]), 0o644); err != nil {
+			return err
+		}
 	}
 	for _, name := range sortedKeys(files) {
 		path := filepath.Join(appDir, name)
@@ -79,13 +100,27 @@ func GenerateFromPanel(p *filament.Panel, appDir string, o GenerateOptions) erro
 }
 
 // CheckFromPanel reports the generated files under appDir that are missing
-// or differ from what GenerateFromPanel would write (empty when up to date).
+// or differ from what GenerateFromPanel would write, and the page files that
+// do not exist yet (empty when up to date). A page file without its class is
+// an error.
 func CheckFromPanel(p *filament.Panel, appDir string, o GenerateOptions) ([]string, error) {
-	files, err := RenderFromPanel(p, o)
+	o = o.withDefaults()
+	snap, err := capturePanel(p, o.User)
+	if err != nil {
+		return nil, err
+	}
+	files, err := newGenerator(snap, o).render()
+	if err != nil {
+		return nil, err
+	}
+	stubs, err := pageStubs(snap, appDir, o.PackageImport)
 	if err != nil {
 		return nil, err
 	}
 	var stale []string
+	for _, name := range sortedKeys(stubs) {
+		stale = append(stale, name+" (missing page)")
+	}
 	for _, name := range sortedKeys(files) {
 		old, err := os.ReadFile(filepath.Join(appDir, name))
 		if err != nil || !bytes.Equal(old, files[name]) {

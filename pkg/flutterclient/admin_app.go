@@ -23,6 +23,10 @@ type AdminAppOptions struct {
 	// FallbackPanelPath is the panel path native builds call when no base URL
 	// is configured (web builds read it from the page URL).
 	FallbackPanelPath string
+	// Typed writes a lib/main.dart that runs the code GenerateFromPanel
+	// writes (panelSchema, panelAppPages from lib/pages). Run
+	// GenerateFromPanel before building the app.
+	Typed bool
 	// Overwrite rewrites files that already exist. By default only missing
 	// files are written, so re-running the generator keeps edits to
 	// lib/main.dart, pubspec.yaml, .gitignore, web/index.html, etc.
@@ -57,6 +61,36 @@ func GenerateAdminApp(targetDir string, o AdminAppOptions) error {
 		}
 	}
 
+	mainDart := fmt.Sprintf(`import 'package:flutter/material.dart';
+import 'package:gofilament_admin/gofilament_admin.dart';
+
+void main() {
+  runApp(GoFilamentAdmin(
+    api: AdminApi(fallbackPanelPath: '%s'),
+    // Add application pages here, e.g.
+    // pages: [AdminPage(id: 'pos', label: 'Point of Sale', fullscreen: true, builder: (context, admin) => ...)],
+  ));
+}
+`, o.FallbackPanelPath)
+	if o.Typed {
+		mainDart = fmt.Sprintf(`import 'package:flutter/material.dart';
+import 'package:gofilament_admin/gofilament_admin.dart';
+
+import 'generated/registry.g.dart';
+import 'generated/schema.g.dart';
+
+// lib/generated is written by gofilament (filament:flutter-generate); your
+// pages live in lib/pages, one per filament.FlutterPage declared in Go.
+void main() {
+  runApp(GoFilamentAdmin(
+    api: AdminApi(fallbackPanelPath: '%s'),
+    initialSchema: panelSchema,
+    pages: panelAppPages,
+  ));
+}
+`, o.FallbackPanelPath)
+	}
+
 	files := map[string]string{
 		"pubspec.yaml": fmt.Sprintf(`name: %s
 description: %s
@@ -83,17 +117,7 @@ flutter:
 
 		".gitignore": ".dart_tool/\nbuild/\n.flutter-plugins\n.flutter-plugins-dependencies\n",
 
-		"lib/main.dart": fmt.Sprintf(`import 'package:flutter/material.dart';
-import 'package:gofilament_admin/gofilament_admin.dart';
-
-void main() {
-  runApp(GoFilamentAdmin(
-    api: AdminApi(fallbackPanelPath: '%s'),
-    // Add application pages here, e.g.
-    // pages: [AdminPage(id: 'pos', label: 'Point of Sale', fullscreen: true, builder: (context, admin) => ...)],
-  ));
-}
-`, o.FallbackPanelPath),
+		"lib/main.dart": mainDart,
 
 		"web/index.html": fmt.Sprintf(`<!DOCTYPE html>
 <html>
