@@ -181,7 +181,7 @@ func (p *Panel) registerActionRoutes(r *router.Router, res ResourceInterface, re
 	// GET .../{id}/actions/{action}/form
 	r.OPTIONS(path+"/form", preflight)
 	r.GET(path+"/form", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -196,7 +196,7 @@ func (p *Panel) registerActionRoutes(r *router.Router, res ResourceInterface, re
 	// POST .../{id}/actions/{action}
 	r.OPTIONS(path, preflight)
 	r.POST(path, func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err

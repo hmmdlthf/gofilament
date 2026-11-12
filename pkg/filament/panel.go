@@ -117,6 +117,8 @@ type Panel struct {
 	exportMaxRows       func(ctx *Context) int
 	canAccess           func(ctx *Context) bool
 	middlewares         []gcontext.HandlerFunc
+	corsAllowedOrigins  []string
+	corsAllowOriginFunc func(origin string) bool
 	resources           []ResourceInterface
 	pages               []PageInterface
 	widgets             []WidgetInterface
@@ -860,7 +862,7 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 	}
 	if p.requiresAuth && ctx.User() == nil {
 		if strings.Contains(reqPath, "/api/") {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			return ctx, denied(c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized: Authentication required"}))
 		}
 		if p.hasLogin {
@@ -871,7 +873,7 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 
 	if p.canAccess != nil && !p.canAccess(ctx) {
 		if strings.Contains(reqPath, "/api/") {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			return ctx, denied(c.JSON(http.StatusForbidden, map[string]string{"error": "Forbidden: Panel access denied"}))
 		}
 		if p.hasLogin && ctx.User() == nil {

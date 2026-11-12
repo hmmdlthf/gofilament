@@ -32,6 +32,7 @@ func createTestFlutterAdminApp(t *testing.T) *golaravel.Engine {
 		Path("/admin").
 		BrandName("Pulse Fleet").
 		Engine(filament.EngineFlutter).
+		CORSAllowedOrigins("*").
 		AccountNavPlacement(filament.AccountNavHeader).
 		Locales("en", "ar", "es", "de").
 		DefaultLocale("en").
