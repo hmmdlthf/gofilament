@@ -48,6 +48,8 @@ type BaseRelationManager[T any] struct {
 	onAttach func(ctx *Context, parentID, childID string) error
 	onDetach func(ctx *Context, parentID, childID string) error
 	onFind   func(ctx *Context, parentID, childID string) (T, error)
+
+	acceptUnvalidated bool
 }
 
 // NewRelationManager creates a new typed relation manager.
@@ -167,6 +169,10 @@ func (rm *BaseRelationManager[T]) HandleList(ctx *Context, parentID string, sear
 // HandleCreate fulfills RelationManager interface.
 func (rm *BaseRelationManager[T]) HandleCreate(ctx *Context, parentID string, data map[string]any) error {
 	if rm.onCreate != nil {
+		data, err := rm.validateInput(ctx, parentID, data, true)
+		if err != nil {
+			return err
+		}
 		return rm.onCreate(ctx, parentID, data)
 	}
 	return nil
@@ -175,6 +181,10 @@ func (rm *BaseRelationManager[T]) HandleCreate(ctx *Context, parentID string, da
 // HandleUpdate fulfills RelationManager interface.
 func (rm *BaseRelationManager[T]) HandleUpdate(ctx *Context, parentID, childID string, data map[string]any) error {
 	if rm.onUpdate != nil {
+		data, err := rm.validateInput(ctx, parentID, data, false)
+		if err != nil {
+			return err
+		}
 		return rm.onUpdate(ctx, parentID, childID, data)
 	}
 	return nil
@@ -443,4 +453,23 @@ func recordToMap(rec any) map[string]any {
 		}
 	}
 	return make(map[string]any)
+}
+
+// validateInput applies forms.Validate with the relation form (see
+// BaseResource.AcceptUnvalidatedInput for the rules).
+func (rm *BaseRelationManager[T]) validateInput(ctx *Context, parentID string, data map[string]any, creating bool) (map[string]any, error) {
+	comps := rm.formComponents()
+	if len(comps) == 0 || rm.acceptUnvalidated {
+		return data, nil
+	}
+	withSelf(ctx)
+	withRelationParent(ctx, parentID)
+	return forms.Validate(ctx.GoContext(), comps, data, creating)
+}
+
+// AcceptUnvalidatedInput turns off server-side form validation for this
+// relation: handlers receive the request data as sent.
+func (rm *BaseRelationManager[T]) AcceptUnvalidatedInput() *BaseRelationManager[T] {
+	rm.acceptUnvalidated = true
+	return rm
 }

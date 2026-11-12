@@ -94,6 +94,16 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 		if links != nil {
 			meta["links"] = links
 		}
+		if r.IsSoftDeletesEnabled() {
+			trashed := r.checkIsTrashed(rec)
+			meta["trashed"] = trashed
+			if trashed {
+				// a trashed record can only be restored or deleted for good
+				meta["update"], meta["delete"], meta["actions"] = false, false, []string{}
+				meta["restore"] = r.onRestore != nil && (r.canRestore == nil || r.canRestore(ctx, id))
+				meta["force_delete"] = r.onForceDelete != nil && (r.canForceDelete == nil || r.canForceDelete(ctx, id))
+			}
+		}
 		out[id] = meta
 	}
 	return out
@@ -148,6 +158,11 @@ func (r *BaseResource[T]) InvokeAction(ctx *Context, id, name string, data map[s
 	if err != nil {
 		return "", err
 	}
+	if comps := action.FormComponents(); comps != nil {
+		if data, err = forms.Validate(ctx.GoContext(), comps, data, true); err != nil {
+			return "", err
+		}
+	}
 	if err := action.Run(ctx.GoContext(), record, data); err != nil {
 		return "", err
 	}
@@ -181,7 +196,7 @@ func (p *Panel) registerActionRoutes(r *router.Router, res ResourceInterface, re
 	// GET .../{id}/actions/{action}/form
 	r.OPTIONS(path+"/form", preflight)
 	r.GET(path+"/form", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -196,7 +211,7 @@ func (p *Panel) registerActionRoutes(r *router.Router, res ResourceInterface, re
 	// POST .../{id}/actions/{action}
 	r.OPTIONS(path, preflight)
 	r.POST(path, func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err

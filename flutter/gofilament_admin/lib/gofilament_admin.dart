@@ -10,11 +10,14 @@ library;
 
 export 'src/api.dart';
 export 'src/cells.dart';
+export 'src/components.dart';
 export 'src/app.dart';
 export 'src/controller.dart';
 export 'src/dashboard.dart';
 export 'src/export.dart' show TableExport, saveFile;
+export 'src/files.dart';
 export 'src/format.dart';
+export 'src/generated_support.dart';
 export 'src/links.dart';
 export 'src/icons.dart';
 export 'src/login.dart';

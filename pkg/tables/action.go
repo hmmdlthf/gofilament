@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	neturl "net/url"
 
 	"github.com/golaravel/gofilament/pkg/forms"
 )
@@ -174,6 +175,12 @@ func (a *TableAction[T]) Render(record T, recordID string, basePath string) stri
 	} else if a.name == "force-delete" {
 		url = fmt.Sprintf("%s/force-delete?id=%s", basePath, recordID)
 	}
+	runnable := a.runner != nil && a.urlFunc == nil
+	if runnable {
+		// Opens the panel's confirm / form page, which POSTs (with a CSRF
+		// token) to the same URL to run the Handle runner.
+		url = fmt.Sprintf("%s/%s/actions/%s", basePath, neturl.PathEscape(recordID), neturl.PathEscape(a.name))
+	}
 	if a.urlFunc != nil {
 		url = a.urlFunc(record)
 	}
@@ -188,12 +195,12 @@ func (a *TableAction[T]) Render(record T, recordID string, basePath string) stri
 	}
 
 	confirmAttr := ""
-	if a.requiresConfirmation {
+	if a.requiresConfirmation && !runnable {
 		confirmAttr = fmt.Sprintf(`onclick="return confirm('%s');"`, html.EscapeString(a.modalDescription))
 	}
 
 	return fmt.Sprintf(`<a href="%s" class="btn %s btn-sm" %s>%s</a>`,
-		url, btnClass, confirmAttr, html.EscapeString(a.label))
+		html.EscapeString(url), btnClass, confirmAttr, html.EscapeString(a.label))
 }
 
 // ----------------------------------------------------

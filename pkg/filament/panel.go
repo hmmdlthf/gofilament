@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"io/fs"
 	"errors"
 	"encoding/json"
 	"fmt"
@@ -61,6 +62,7 @@ type Panel struct {
 	path                string
 	engine              PanelEngine
 	flutterDistDir      string
+	flutterFS           fs.FS
 	accountNavPlacement AccountNavPlacement
 	brandName           string
 	brandLogo           string
@@ -117,8 +119,16 @@ type Panel struct {
 	exportMaxRows       func(ctx *Context) int
 	canAccess           func(ctx *Context) bool
 	middlewares         []gcontext.HandlerFunc
+	corsAllowedOrigins  []string
+	webSessions         webSessionStore
+	corsAllowOriginFunc func(origin string) bool
 	resources           []ResourceInterface
 	pages               []PageInterface
+	endpoints           []*ClientEndpoint
+	loginLimit          *loginThrottle
+	uploadHandler       UploadHandler
+	sessionStore        WebSessionStore
+	sessionUsers        UserLoader
 	widgets             []WidgetInterface
 	dashboardRenderFunc func(ctx *Context) error
 	locales             []string
@@ -774,10 +784,53 @@ func (p *Panel) CanAccess(fn func(ctx *Context) bool) *Panel {
 	return p
 }
 
-// Middleware appends router middleware to all non-asset routes on this panel.
+// Middleware appends router middleware to all non-asset routes on this panel,
+// including the JSON API under <panel>/api. It must be called before the
+// panel is mounted (Register / Mount): the router snapshots middleware per
+// route at registration time.
+//
+// The middleware runs for requests whose path is the panel path or below it,
+// except static assets (<panel>/assets/..., and the compiled Flutter bundle
+// for the Flutter engine, where only <panel>/api/... is covered) and CORS
+// preflight (OPTIONS) requests. Routes the application itself registers under
+// the panel path after Mount are covered too.
 func (p *Panel) Middleware(mw ...gcontext.HandlerFunc) *Panel {
 	p.middlewares = append(p.middlewares, mw...)
 	return p
+}
+
+// middlewareApplies reports whether panel middleware runs for a request.
+func (p *Panel) middlewareApplies(method, reqPath string) bool {
+	if method == http.MethodOptions {
+		return false
+	}
+	base := strings.TrimRight(p.path, "/")
+	if base != "" && reqPath != base && !strings.HasPrefix(reqPath, base+"/") {
+		return false
+	}
+	rest := strings.TrimPrefix(reqPath, base)
+	if strings.HasPrefix(rest, "/api/") || rest == "/api" {
+		return true
+	}
+	if p.IsFlutter() {
+		// Everything outside the API is the static Flutter bundle.
+		return false
+	}
+	return !strings.HasPrefix(rest, "/assets/")
+}
+
+// installMiddleware attaches the panel middleware to the router so every
+// route registered afterwards runs it for requests inside this panel.
+func (p *Panel) installMiddleware(r *router.Router) {
+	for _, mw := range p.middlewares {
+		mw := mw
+		r.Use(func(c *gcontext.Context) error {
+			if c.Request == nil || c.Request.URL == nil || !p.middlewareApplies(c.Request.Method, c.Request.URL.Path) {
+				return nil
+			}
+			return mw(c)
+		})
+	}
 }
 
 // ErrAccessDenied is returned by AuthorizeAccess after it has written the
@@ -793,16 +846,35 @@ func denied(err error) error {
 }
 
 // resolveUser builds the request context and authenticates a bearer token
-// when one is sent. It never writes a response.
+// when one is sent, or, outside <panel>/api, the web-engine login cookie set
+// by POST <panel>/login. It never writes a response.
 func (p *Panel) resolveUser(c *gcontext.Context) *Context {
 	ctx := NewContext(c, p)
+	if u := clientGeneratorUser(c.Request); u != nil {
+		c.Set(auth.ContextUserKey, u)
+		return ctx
+	}
 	authHeader := c.Header("Authorization")
 	if strings.HasPrefix(authHeader, "Bearer ") && p.tokenValidator != nil {
 		if u, err := p.tokenValidator(ctx, strings.TrimPrefix(authHeader, "Bearer ")); err == nil && u != nil {
 			c.Set(auth.ContextUserKey, u)
 		}
 	}
+	if ctx.User() == nil && !p.isAPIRequest(c) {
+		if u := p.userFromSessionCookie(ctx); u != nil {
+			c.Set(auth.ContextUserKey, u)
+		}
+	}
 	return ctx
+}
+
+// isAPIRequest reports whether the request targets <panel>/api.
+func (p *Panel) isAPIRequest(c *gcontext.Context) bool {
+	if c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	rest := strings.TrimPrefix(c.Request.URL.Path, strings.TrimRight(p.path, "/"))
+	return rest == "/api" || strings.HasPrefix(rest, "/api/")
 }
 
 // AuthorizeAccess verifies panel authorization for the incoming request.
@@ -817,7 +889,7 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 	}
 	if p.requiresAuth && ctx.User() == nil {
 		if strings.Contains(reqPath, "/api/") {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			return ctx, denied(c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized: Authentication required"}))
 		}
 		if p.hasLogin {
@@ -828,7 +900,7 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 
 	if p.canAccess != nil && !p.canAccess(ctx) {
 		if strings.Contains(reqPath, "/api/") {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			return ctx, denied(c.JSON(http.StatusForbidden, map[string]string{"error": "Forbidden: Panel access denied"}))
 		}
 		if p.hasLogin && ctx.User() == nil {
@@ -1009,6 +1081,9 @@ func (p *Panel) Mount(r *router.Router) {
 		panic(err)
 	}
 
+	// 0. Panel middleware (must precede every route registration below).
+	p.installMiddleware(r)
+
 	// 1. Standardized Panel REST API (powers Flutter, mobile apps, and headless integrations)
 	p.RegisterAPIRoutes(r)
 
@@ -1174,16 +1249,21 @@ func (p *Panel) Mount(r *router.Router) {
 	// 3. Auth Routes (Login, Logout, Profile)
 	if p.hasLogin {
 		r.GET(p.path+"/login", func(c *gcontext.Context) error {
-			ctx := NewContext(c, p)
-			return p.renderLoginScreen(ctx)
+			ctx := p.resolveUser(c)
+			if ctx.User() != nil {
+				return c.Redirect(http.StatusSeeOther, p.path)
+			}
+			return p.renderLoginScreen(ctx, http.StatusOK, "", "")
 		})
-		r.POST(p.path+"/login", func(c *gcontext.Context) error {
-			// Redirect back to admin dashboard
-			return c.Redirect(http.StatusSeeOther, p.path)
-		})
-		r.GET(p.path+"/logout", func(c *gcontext.Context) error {
+		// Authenticates with the AuthValidator and starts a browser session
+		// (HttpOnly, SameSite=Lax cookie; see SessionCookieName).
+		r.POST(p.path+"/login", p.handleWebLogin)
+		logout := func(c *gcontext.Context) error {
+			p.endWebSession(c)
 			return c.Redirect(http.StatusSeeOther, p.path+"/login")
-		})
+		}
+		r.GET(p.path+"/logout", logout)
+		r.POST(p.path+"/logout", logout)
 	}
 
 	// 4. Dashboard Route
@@ -1724,8 +1804,12 @@ func (p *Panel) renderNotificationsDrawerHTML(ctx *Context) string {
 	)
 }
 
-func (p *Panel) renderLoginScreen(ctx *Context) error {
-	html := fmt.Sprintf(`<!DOCTYPE html>
+func (p *Panel) renderLoginScreen(ctx *Context, status int, errMsg, identifier string) error {
+	errHTML := ""
+	if errMsg != "" {
+		errHTML = fmt.Sprintf(`<div class="filament-alert filament-alert-danger" role="alert" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; background: #fef2f2; color: #b91c1c; font-size: 0.875rem;">%s</div>`, html.EscapeString(errMsg))
+	}
+	page := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s" dir="%s">
 <head>
   <meta charset="UTF-8">
@@ -1741,10 +1825,12 @@ func (p *Panel) renderLoginScreen(ctx *Context) error {
       <h2 style="font-size: 1.5rem; font-weight: 700; color: var(--primary-600);">%s</h2>
       <p style="font-size: 0.875rem; color: var(--gray-500); margin-top: 0.25rem;">Sign in to your administration panel</p>
     </div>
+    %s
     <form method="POST" action="%s/login">
+      %s
       <div class="form-group">
         <label class="form-label" for="email">Email address</label>
-        <input type="email" id="email" name="email" required placeholder="admin@example.com" class="form-control" />
+        <input type="email" id="email" name="email" required placeholder="admin@example.com" value="%s" class="form-control" />
       </div>
       <div class="form-group">
         <label class="form-label" for="password">Password</label>
@@ -1760,12 +1846,16 @@ func (p *Panel) renderLoginScreen(ctx *Context) error {
   </div>
   %s
 </body>
-</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, p.path, p.RenderBodyEndHTML(ctx))
+</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, errHTML, p.path, p.csrfHiddenInput(ctx.Context, ""), html.EscapeString(identifier), p.RenderBodyEndHTML(ctx))
 
-	return ctx.HTML(http.StatusOK, html)
+	return ctx.HTML(status, page)
 }
 
 func (p *Panel) mountFlutter(r *router.Router) {
+	if p.flutterFS != nil {
+		p.serveFlutterFS(r)
+		return
+	}
 	distDir := p.GetFlutterDistDir()
 	indexPath := filepath.Join(distDir, "index.html")
 

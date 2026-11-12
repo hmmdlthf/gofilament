@@ -1794,6 +1794,10 @@ func main() {
 		Path("/admin").
 		BrandName("Pulse Fleet").
 		Engine(filament.EngineFlutter).
+		// Demo: `flutter run -d chrome` serves the client from another port.
+		// The client authenticates with bearer tokens, so "*" (no
+		// credentials) is enough. List exact origins in production.
+		CORSAllowedOrigins("*").
 		AccountNavPlacement(filament.AccountNavHeader).
 		Locales("en", "ar", "es", "de").
 		DefaultLocale("en").

@@ -23,22 +23,54 @@ func extractValue(record any, name string) any {
 	if val.Kind() != reflect.Struct {
 		return nil
 	}
-	field := val.FieldByName(name)
-	if !field.IsValid() {
-		// Try TitleCase: "created_at" -> "CreatedAt", "order_no" -> "OrderNo", "customer_name" -> "CustomerName"
-		parts := strings.Split(name, "_")
-		for i, p := range parts {
-			if len(p) > 0 {
-				parts[i] = strings.ToUpper(p[:1]) + p[1:]
-			}
-		}
-		titleName := strings.Join(parts, "")
-		field = val.FieldByName(titleName)
-	}
+	field := lookupStructField(val, name)
 	if field.IsValid() && field.CanInterface() {
 		return field.Interface()
 	}
 	return nil
+}
+
+// lookupStructField finds the field a column name refers to: the exact Go
+// field name, its TitleCase form ("created_at" -> "CreatedAt"), the field
+// whose json tag matches ("install_id" -> InstallID `json:"install_id"`), or
+// a case-insensitive match of the TitleCase form, which covers Go initialisms
+// (InstallID, RemoteIP, CustomerID).
+func lookupStructField(val reflect.Value, name string) reflect.Value {
+	if f := val.FieldByName(name); f.IsValid() {
+		return f
+	}
+	parts := strings.Split(name, "_")
+	for i, p := range parts {
+		if len(p) > 0 {
+			parts[i] = strings.ToUpper(p[:1]) + p[1:]
+		}
+	}
+	titleName := strings.Join(parts, "")
+	if f := val.FieldByName(titleName); f.IsValid() {
+		return f
+	}
+	fields := reflect.VisibleFields(val.Type())
+	byIndex := func(sf reflect.StructField) reflect.Value {
+		f, err := val.FieldByIndexErr(sf.Index)
+		if err != nil {
+			return reflect.Value{}
+		}
+		return f
+	}
+	for _, sf := range fields {
+		if !sf.IsExported() || sf.Anonymous {
+			continue
+		}
+		if tag, _, _ := strings.Cut(sf.Tag.Get("json"), ","); tag != "" && tag == name {
+			return byIndex(sf)
+		}
+	}
+	for _, sf := range fields {
+		if sf.IsExported() && !sf.Anonymous && strings.EqualFold(sf.Name, titleName) {
+			return byIndex(sf)
+		}
+	}
+	return reflect.Value{}
 }
 
 // Entry defines the contract for infolist entries and containers.

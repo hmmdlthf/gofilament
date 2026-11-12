@@ -76,6 +76,26 @@ class FakePanel {
       client: MockClient(_handle),
       store: MemorySessionStore());
 
+  /// Extra items form fields, item columns and dashboard widgets (custom
+  /// component tests).
+  List<Map<String, dynamic>> extraFormFields = [];
+  List<Map<String, dynamic>> extraColumns = [];
+  List<Map<String, dynamic>> extraWidgets = [];
+
+  /// Extra JSON routes keyed by "METHOD /path" (path without /app/api).
+  Map<String, Object Function(http.Request req)> extraRoutes = {};
+
+  bool globalSearch = false;
+
+  /// Row meta merged into the list's row_meta by record id.
+  Map<String, Map<String, dynamic>> extraRowMeta = {};
+
+  /// Pages the server lists in `client_pages`.
+  List<String> clientPages = const [];
+
+  /// Answers one request (for tests that wrap the client).
+  Future<http.Response> handle(http.Request req) => _handle(req);
+
   http.Response _json(Object body, [int status = 200]) =>
       http.Response(json.encode(body), status,
           headers: {'content-type': 'application/json; charset=utf-8'});
@@ -84,6 +104,8 @@ class FakePanel {
     requests.add(req);
     final path = req.url.path.replaceFirst('/app/api', '');
     final authed = req.headers['Authorization'] == 'Bearer token-1';
+    final extra = extraRoutes['${req.method} $path'];
+    if (extra != null && authed) return _json(extra(req));
 
     if (path == '/boot') {
       return _json({
@@ -296,6 +318,7 @@ class FakePanel {
           '${r['id']}': {
             'update': r['id'] != 2,
             'delete': r['id'] != 2,
+            ...?extraRowMeta['${r['id']}'],
             'actions': [
               if (r['archived'] != true) 'archive',
               'discount',
@@ -384,6 +407,7 @@ class FakePanel {
           },
         ],
       },
+      ...extraFormFields,
     ];
     if (id == null) {
       if (!canCreate) {
@@ -425,9 +449,15 @@ class FakePanel {
             },
           ],
         },
+        ...extraWidgets,
       ];
 
   Map<String, dynamic> _schema() => {
+        'path': '/app',
+        'global_search': {'enabled': globalSearch},
+        'client_pages': [
+          for (final id in clientPages) {'id': id, 'label': id}
+        ],
         'brand': brand,
         'brand_name': brand['name'],
         'theme': {'colors': colors},
@@ -483,6 +513,7 @@ class FakePanel {
                 'type': 'text',
                 'toggled_hidden_by_default': true
               },
+              ...extraColumns,
             ],
             'filters': [
               {

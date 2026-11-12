@@ -63,6 +63,13 @@ type Node struct {
 	// Remote is true when options must be fetched from the options endpoint
 	// with a search text instead of being listed in Options.
 	Remote bool `json:"remote,omitempty"`
+	// DynamicOptions is true when Options were resolved for this request
+	// (OptionsUsing) rather than declared, so they may change between requests.
+	DynamicOptions bool `json:"dynamic_options,omitempty"`
+
+	// Component / Props: a field drawn by a Flutter field component (Custom).
+	Component string `json:"component,omitempty"`
+	Props     any    `json:"props,omitempty"`
 
 	// files
 	Accept   []string `json:"accept,omitempty"`
@@ -155,6 +162,7 @@ func describe(ctx context.Context, c Component) (Node, bool) {
 			n.Remote, n.Searchable = true, true
 		} else {
 			n.Options = f.ResolveOptions(ctx)
+			n.DynamicOptions = f.optionsFunc != nil
 		}
 		return n, true
 	case *ToggleField:
@@ -182,6 +190,10 @@ func describe(ctx context.Context, c Component) (Node, bool) {
 	case *ColorPickerField:
 		n := baseNode(&f.BaseField, "color")
 		n.Presets = f.presets
+		return n, true
+	case *CustomField:
+		n := baseNode(&f.BaseField, "custom")
+		n.Component, n.Props = f.component, f.props
 		return n, true
 	case *HiddenField:
 		return baseNode(&f.BaseField, "hidden"), true

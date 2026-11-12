@@ -216,6 +216,7 @@ func (p *Panel) decorateSchema(ctx *Context, schema map[string]any) {
 		}
 	}
 	schema["resource_meta"] = meta
+	schema["client_pages"] = p.clientPages(ctx)
 	if p.currencyResolver != nil {
 		schema["currency"] = p.currencyResolver(ctx)
 	}
@@ -237,7 +238,7 @@ func (p *Panel) decorateSchema(ctx *Context, schema map[string]any) {
 func (p *Panel) registerClientRoutes(r *router.Router) {
 	apiPrefix := p.path + "/api"
 	preflight := func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		return c.NoContent(http.StatusNoContent)
 	}
 
@@ -245,7 +246,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 	// right brand before the user is known. Contains no data.
 	r.OPTIONS(apiPrefix+"/boot", preflight)
 	r.GET(apiPrefix+"/boot", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx := NewContext(c, p)
 		brand := p.ResolveBrand(ctx)
 		return c.JSON(http.StatusOK, map[string]any{
@@ -275,6 +276,8 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 		})
 	})
 
+	p.registerEndpoints(r, preflight)
+
 	for _, res := range p.resources {
 		res := res
 		resPath := apiPrefix + "/resources/" + res.Slug()
@@ -283,7 +286,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 		// GET .../form?id=<id>    -> edit form: schema + record + abilities
 		r.OPTIONS(resPath+"/form", preflight)
 		r.GET(resPath+"/form", func(c *gcontext.Context) error {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -350,12 +353,13 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 		})
 
 		p.registerRelationClientRoutes(r, res, resPath, preflight)
+		p.registerUploadRoute(r, res, resPath, preflight)
 		p.registerActionRoutes(r, res, resPath, preflight)
 
 		// GET .../form/options?field=<name>&q=<text>&limit=<n>
 		r.OPTIONS(resPath+"/form/options", preflight)
 		r.GET(resPath+"/form/options", func(c *gcontext.Context) error {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -450,7 +454,7 @@ func (p *Panel) registerRelationClientRoutes(r *router.Router, res ResourceInter
 		// GET .../relations/<rel>/form[?child_id=<id>]
 		r.OPTIONS(relPath+"/form", preflight)
 		r.GET(relPath+"/form", func(c *gcontext.Context) error {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -510,7 +514,7 @@ func (p *Panel) registerRelationClientRoutes(r *router.Router, res ResourceInter
 		// GET .../relations/<rel>/form/options?field=&q=
 		r.OPTIONS(relPath+"/form/options", preflight)
 		r.GET(relPath+"/form/options", func(c *gcontext.Context) error {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err

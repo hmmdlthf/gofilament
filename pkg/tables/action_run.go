@@ -84,6 +84,13 @@ func (a *TableAction[T]) FormComponents() []forms.Component {
 	return a.formBuilder(forms.New()).GetSchema()
 }
 
+// GetModalHeading / GetModalDescription return the confirmation texts.
+func (a *TableAction[T]) GetModalHeading() string     { return a.modalHeading }
+func (a *TableAction[T]) GetModalDescription() string { return a.modalDescription }
+
+// GetColor returns the action's color (primary, danger, warning, secondary...).
+func (a *TableAction[T]) GetColor() string { return a.color }
+
 // GetSuccessMessage returns the message shown after the action ran.
 func (a *TableAction[T]) GetSuccessMessage() string { return a.successMessage }
 

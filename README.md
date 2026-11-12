@@ -199,6 +199,41 @@ func NewUserResource() *UserResource {
 | `forms.Wizard(...)` | Sequential step-by-step form wizard with progress indicators |
 | `forms.Repeater(name)` | Dynamic nested arrays with reordering (`↑`/`↓`), collapsing, and grid support |
 
+### 🛡️ Server-side validation and input whitelisting
+
+Every create, update, inline edit, relation form and row-action form is checked
+on the server against the form you declared, in both engines and in the API
+(`forms.Validate`). Your handler receives **only the form's fields**:
+
+- keys that are not fields, `Disabled()` fields, fields hidden by `Visible(...)`
+  and fields whose `Dehydrated(...)` returns false are dropped;
+- `Required()` / `RequiredOnCreate()`, `MinLength` / `MaxLength`, `Numeric()`,
+  `Email()`, `URL()`, select / radio / checkbox options (including
+  `OptionsUsing`, resolved per request), dates and times, tag limits and
+  repeater `MinItems` / `MaxItems` are enforced, repeater items recursively;
+- updates are partial: absent keys are left alone, but a required field cannot
+  be emptied.
+
+A failed check answers `422` with `{"error": "...", "errors": {"field": "..."}}`
+(`lines.0.sku` inside repeaters); the web engine re-renders the form with the
+messages. Inline cell edits only reach columns that are editable in the table
+(`ToggleColumn`, `SelectColumn` with its options, `TextInputColumn`, `.Editable()`).
+Resources without a form get the data unchanged; call
+`res.AcceptUnvalidatedInput()` (or the same on a relation manager) only if your
+handlers validate and whitelist input themselves.
+
+Writes also need a record the user may see: update, delete, inline edit and
+bulk delete load the record first, and a lookup error (`404`), `CanView` or
+`CanEdit` / `CanDelete` refusal (`403`) stops them. Bulk restore and force
+delete check `CanRestore` / `CanForceDelete` for every id.
+
+Sign-in is throttled: 5 failed attempts per client and login name per minute
+(and 20 per client across names) answer `429` with `Retry-After`, on
+`POST <panel>/api/login` and the web login form. Tune it with
+`panel.LoginThrottle(n, window)` (`0` disables it). Counters use golaravel's
+rate limit store, in memory by default: use a Redis store when the panel runs
+on several processes.
+
 ### 📁 File & Image Uploads (`forms.FileUpload` & `forms.ImageUpload`)
 
 Support for drag-and-drop file handling with instant client-side image preview and circular avatar mode:
@@ -728,6 +763,219 @@ php artisan make:filament-flutter MobileStore --dir=client
 cd client && flutter run         # iOS, Android, Desktop
 cd client && flutter build web   # Compiles to Web SPA served by GoLaravel
 ```
+
+### 🧬 Typed Dart from the panel (`flutterclient.GenerateFromPanel`)
+
+The `gofilament_admin` package renders a panel from its API at runtime. When you
+also want **static, typed Dart** for your own screens, generate it from the Go
+panel instead of writing it by hand:
+
+```go
+// tools/gen-flutter/main.go — run with `go run ./tools/gen-flutter`
+err := flutterclient.GenerateFromPanel(panels.Admin(), "resources/flutter", flutterclient.GenerateOptions{})
+```
+
+or register the artisan command (it needs a function that builds your panel):
+
+```go
+reg.Register(commands.FlutterGenerateCommand(panels.Admin, commands.DefaultFlutterDir, flutterclient.GenerateOptions{}))
+// artisan filament:flutter-generate [--out=dir] [--check]
+```
+
+The panel is booted in-process and read through its own API with `httptest`:
+no port is opened and no create / update / delete / action handler runs (list,
+form and option loaders do). Five files are written to `lib/generated/`, each
+marked `DO NOT EDIT`; the only other files it creates are stubs for pages that
+have no file yet:
+
+| File | Contents |
+|---|---|
+| `schema.g.dart` | `panelSchema` (a snapshot of `/api/schema`) and `panelForms` (resource, relation and action forms) |
+| `models.g.dart` | a class per resource record, built from the Go record type (`fromJson` / `toJson`, unknown keys kept in `raw`); an `…Input` class per form, relation form and action form; classes for endpoint request / response types |
+| `client.g.dart` | `PanelClient`: `list` / `find` / `create` / `update` / `delete` / `run<Action>` per resource, a client per relation, and a typed method per `filament.Endpoint` |
+| `pages.g.dart` | `panelPages(PanelPageBuilders(...))`: the `AdminPage`s of every `filament.FlutterPage`, with one **required** builder each |
+| `registry.g.dart` | `panelAppPages` and `panelComponents`: your pages and components from `lib/pages` and `lib/components` |
+
+#### `resources/flutter`: your Dart lives next to your Go
+
+Like Laravel's `resources/` folder, the panel's Flutter app sits in the Go
+project, and hand-written Dart has a fixed place in it:
+
+```
+resources/flutter/
+  lib/main.dart                 ← written once by make:filament-flutter-app
+  lib/pages/pos_page.dart       ← yours: class PosPage, one file per filament.FlutterPage("pos", ...)
+  lib/components/fields/signature_pad_field.dart    ← class SignaturePadField: forms.Custom(name, "signature_pad")
+  lib/components/cells/paid_badge_cell.dart         ← class PaidBadgeCell: tables.CustomColumn(name, "paid_badge")
+  lib/components/widgets/sales_total_widget.dart    ← class SalesTotalWidget: filament.FlutterWidget(id, "sales_total")
+  lib/generated/*.g.dart        ← generator only (DO NOT EDIT)
+```
+
+```bash
+artisan make:filament-flutter-app                 # resources/flutter, typed main.dart
+artisan make:filament-flutter-page pos --label="Point of sale" --fullscreen
+#   → lib/pages/pos_page.dart and the Go line: panel.Pages(filament.FlutterPage("pos", "Point of sale").Fullscreen())
+artisan filament:flutter-generate                 # writes lib/generated, stubs missing pages
+```
+
+A page id maps to `lib/pages/<snake_id>_page.dart` and the class
+`<PascalId>Page({super.key, required AdminController admin})`. Declaring a
+page in Go and regenerating creates that file once if it is missing; the
+generator never changes an existing page. A page file that does not define its
+class stops generation with a clear error, and `--check` lists pages that have
+no file yet.
+
+#### Build and ship it in the Go binary
+
+Like `npm run build` for Laravel's `resources/`, one command regenerates the
+typed code and builds the web app; `--embed` turns the build into a Go
+package, so the panel ships as a single binary:
+
+```go
+reg.Register(commands.FlutterBuildCommand(panels.Admin, commands.DefaultFlutterDir, flutterclient.GenerateOptions{}))
+```
+
+```bash
+artisan filament:flutter-build --embed=internal/adminweb          # generate + flutter build web --release
+artisan filament:flutter-build --no-generate -- --wasm            # extra flutter build web arguments after --
+```
+
+```go
+import "yourapp/internal/adminweb"
+
+panel.FlutterFS(adminweb.FS) // instead of panel.Flutter("resources/flutter/build/web")
+```
+
+`--embed=<dir>` writes `<dir>/dist` (the web build) and `<dir>/embed.go`
+(`package <dir name>`, `var FS fs.FS`). Rebuilds replace `dist`; a `dist` the
+command did not write is never touched. `FlutterFS` serves any `fs.FS` the
+same way the directory server does: base href set to the panel path,
+version / build id tags, the loading screen, no caching of the entry files,
+and `index.html` for client-side routes. In Go code without artisan, call
+`flutterclient.BuildWeb(appDir, flutterclient.BuildOptions{EmbedDir: ...})`.
+
+#### Custom field, cell and dashboard components
+
+When a built-in input or cell is not enough, name a Flutter component in Go
+and write it once in Dart:
+
+```go
+forms.Custom("signature", "signature_pad").Required().
+    Props(map[string]any{"pen_color": "#112233", "height": 160}).
+    Rule(func(ctx context.Context, v any) string { /* server-side check */ return "" })
+
+tables.CustomColumn[*Order]("paid", "paid_badge").Props(BadgeProps{Tone: "success"})
+
+panel.Widget(filament.FlutterWidget("sales", "sales_total").Heading("Sales today").
+    Data(func(ctx *filament.Context) (any, error) { return salesToday(ctx) }).
+    Visible(func(ctx *filament.Context) bool { return isManager(ctx) }))
+```
+
+The generator creates `lib/components/<kind>s/<name>_<kind>.dart` with class
+`<Name>Field` / `<Name>Cell` / `<Name>Widget` once, a typed
+`<Name><Kind>Props` class in `models.g.dart` (inferred from the props values
+set in Go: a key is non-null only when every use sets it, and keeps its type
+only when every use agrees), and `panelComponents` in `registry.g.dart` for
+`GoFilamentAdmin(components: panelComponents)`.
+
+| Component | Receives | Server keeps |
+|---|---|---|
+| field | `AdminFieldContext`: `value`, `onChanged(v)`, `enabled`, `required`, `errorText`, `props` | Required / RequiredOnCreate / Disabled / Visible and your `Rule` on every save |
+| cell | `AdminCellContext`: `value`, the whole `row`, `props` | what the list endpoint returns for the user |
+| widget | `AdminWidgetContext`: `data` from `Data(...)` for this user, `heading`, `props` | `Visible`, and `Data` runs per request |
+
+A component missing from the app falls back to a read-only value (cells), a
+"not available in this app" note (fields, widgets). The web engine shows
+custom fields and cells as read-only values and does not show Flutter widgets.
+Avoid component names whose class would clash with Flutter's own (for example
+`text` → `TextField`).
+
+```dart
+void main() => runApp(GoFilamentAdmin(
+      initialSchema: panelSchema, // first frame without waiting for /api/schema
+      pages: panelAppPages,       // or panelPages(PanelPageBuilders(pos: ...)) to wire them yourself
+    ));
+
+// in lib/pages/pos_page.dart (PanelClient get client => PanelClient(admin.api);)
+final orders = await client.salesOrders.list(search: 'SO');
+await client.salesOrders.runRefund('12', const SalesOrderRefundInput(amount: 5));
+final summary = await client.salesSummary(till: 't1');
+```
+
+Declare Flutter pages and typed endpoints in Go:
+
+```go
+panel.
+    Pages(filament.FlutterPage("pos", "Point of sale").Icon("heroicon-o-shopping-cart").Fullscreen().
+        Visible(func(ctx *filament.Context) bool { return ctx.User() != nil })).
+    Endpoints(filament.Endpoint("salesSummary", "GET", "/pos/tills/:till/summary",
+        func(ctx *filament.Context, q SummaryQuery) (Summary, error) { ... }).
+        Authorize(func(ctx *filament.Context) bool { ... }))
+```
+
+Endpoints are mounted under `<panel>/api` behind the panel's authentication;
+GET and DELETE read the request struct from the query string, other methods
+from the JSON body. Use `struct{}` for no request or no response.
+
+**The server stays authoritative.** The snapshot has no permissions, dashboard
+values, tenants or data-loaded select options: until the live schema arrives
+nothing can be created, edited or run, and Flutter pages are shown only when
+the live schema lists them in `client_pages`. Every request is still checked
+on the server. Abilities, row visibility and validation never come from
+generated code.
+
+**Keep it in sync in CI.** Output is deterministic (sorted keys, stable order),
+so regenerate and fail on a diff, or use `--check`:
+
+```bash
+go run ./tools/gen-flutter && git diff --exit-code resources/flutter/lib/generated
+```
+
+The generator reads the panel as a `SimpleShieldUser` with the `super-admin`
+role and the `*` permission. If your authorization callbacks type-assert your
+own user type, pass one in `GenerateOptions.User`. Generated files are not
+`dart format`ted; leave `lib/generated` out of format checks.
+`flutterclient.GenerateFlutterAdmin` (the old 12k-line scaffold) is
+deprecated: use `GenerateAdminApp` for the app and `GenerateFromPanel` for its
+typed code.
+
+### 📎 Uploads from API clients
+
+`POST <panel>/api/resources/<slug>/uploads?field=<name>` (multipart `file`)
+stores a file for a `FileUpload` / `ImageUpload` field of the resource form
+and answers `{value, url, name}`; the client then saves `value` in the form.
+The user must be able to see the resource; the field's `MaxSize` (KB) and
+`AcceptedFileTypes` are checked against the bytes, not the client's claim
+(PNG, JPEG, GIF, WebP, PDF, ZIP... are sniffed; other types go by extension).
+Files are stored on the field's golaravel storage `Disk(...)` under
+`Directory(...)` with a random name, or by your `panel.UploadsUsing(fn)`.
+`Disk("")` without `UploadsUsing` refuses uploads (501). The saved value is
+only a reference: check it in your handler before trusting it.
+
+### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
+
+By default web-engine sessions (without a `TokenValidator`), database
+notifications, the activity log and support tickets live in process memory:
+they vanish on restart and are not shared between processes. `sqlstore` keeps
+them in any `database/sql` database (SQLite, MySQL, Postgres):
+
+```go
+s := sqlstore.New(db, sqlstore.Postgres)
+if err := s.Migrate(ctx); err != nil { log.Fatal(err) } // creates gofilament_* tables
+
+notifications.SetDefaultStore(s.Notifications())
+activitylog.SetDefaultStore(s.Activities())
+gsupport.SetDefaultStore(s.Tickets()) // golaravel/pkg/support
+
+panel.WebSessionsUsing(s.WebSessions(), func(ctx *filament.Context, id string) (auth.Authenticatable, error) {
+    return users.Find(ctx.GoContext(), id) // reloaded on every request: disabling a user ends their sessions
+})
+```
+
+Session ids are stored as hashes, never as the cookie value;
+`s.WebSessions().DeleteUserSessions(ctx, userID)` signs a user out everywhere.
+Broadcast notifications (sent to `"all"`) are marked read per user. For login
+throttling across processes, give golaravel's `ratelimit` a Redis store.
 
 ### 🔌 Standardized Panel REST API:
 The Flutter client and external integrations connect to GoFilament's standardized JSON REST API:

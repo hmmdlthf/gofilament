@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/golaravel/gofilament/pkg/notifications"
+	"github.com/golaravel/gofilament/pkg/forms"
 	"github.com/golaravel/gofilament/pkg/tables"
 	"github.com/golaravel/golaravel/pkg/appupdate"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
@@ -20,15 +22,90 @@ import (
 	"github.com/golaravel/golaravel/pkg/translation"
 )
 
-func setCorsHeaders(c *gcontext.Context) {
-	origin := c.Header("Origin")
-	if origin == "" {
-		origin = "*"
+// CORSAllowedOrigins sets which browser origins may call the panel API
+// cross-origin. Entries are exact origins ("https://admin.example.com"), or
+// "*" to allow any origin without credentials (Access-Control-Allow-Origin: *
+// and no Access-Control-Allow-Credentials). Listed origins are reflected with
+// Access-Control-Allow-Credentials: true.
+//
+// With no allow-list (the default) only same-origin requests get CORS
+// headers; cross-origin browsers are refused by the browser. Native apps and
+// server-to-server clients send no Origin header and are unaffected.
+func (p *Panel) CORSAllowedOrigins(origins ...string) *Panel {
+	p.corsAllowedOrigins = append(p.corsAllowedOrigins, origins...)
+	return p
+}
+
+// CORSAllowOriginFunc decides per request whether a cross-origin Origin is
+// allowed (reflected with credentials). It is consulted after
+// CORSAllowedOrigins, e.g. to allow "http://localhost:*" during development.
+func (p *Panel) CORSAllowOriginFunc(fn func(origin string) bool) *Panel {
+	p.corsAllowOriginFunc = fn
+	return p
+}
+
+// sameOrigin reports whether origin names the host the request was sent to.
+func sameOrigin(c *gcontext.Context, origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" || c.Request == nil {
+		return false
 	}
-	c.SetHeader("Access-Control-Allow-Origin", origin)
+	host := c.Request.Host
+	if fwd := c.Header("X-Forwarded-Host"); fwd != "" {
+		host = strings.TrimSpace(strings.Split(fwd, ",")[0])
+	}
+	return strings.EqualFold(u.Host, host)
+}
+
+// corsDecision returns the Access-Control-Allow-Origin value for origin and
+// whether credentials may be sent. An empty value means no CORS headers.
+func (p *Panel) corsDecision(c *gcontext.Context, origin string) (string, bool) {
+	wildcard := false
+	for _, o := range p.corsAllowedOrigins {
+		if o == "*" {
+			wildcard = true
+		}
+	}
+	if origin == "" {
+		if wildcard {
+			return "*", false
+		}
+		return "", false
+	}
+	for _, o := range p.corsAllowedOrigins {
+		if o == "*" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimRight(o, "/"), origin) {
+			return origin, true
+		}
+	}
+	if p.corsAllowOriginFunc != nil && p.corsAllowOriginFunc(origin) {
+		return origin, true
+	}
+	if sameOrigin(c, origin) {
+		return origin, true
+	}
+	if wildcard {
+		return "*", false
+	}
+	return "", false
+}
+
+// setCorsHeaders writes the CORS response headers allowed for the request's
+// Origin (see CORSAllowedOrigins).
+func (p *Panel) setCorsHeaders(c *gcontext.Context) {
+	c.SetHeader("Vary", "Origin")
+	allow, credentials := p.corsDecision(c, c.Header("Origin"))
+	if allow == "" {
+		return
+	}
+	c.SetHeader("Access-Control-Allow-Origin", allow)
 	c.SetHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
 	c.SetHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Tenant-ID, Accept, Origin, X-Requested-With")
-	c.SetHeader("Access-Control-Allow-Credentials", "true")
+	if credentials {
+		c.SetHeader("Access-Control-Allow-Credentials", "true")
+	}
 }
 
 // RegisterAPIRoutes mounts the standardized Panel JSON REST API.
@@ -36,7 +113,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	apiPrefix := p.path + "/api"
 
 	corsPreflight := func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		return c.NoContent(http.StatusNoContent)
 	}
 
@@ -60,7 +137,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// Panel Auth Login Endpoint (Flutter & Headless Clients)
 	r.POST(apiPrefix+"/login", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		var creds struct {
 			Username string `json:"username"`
 			Login    string `json:"login"`
@@ -85,6 +162,11 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Panel authentication not configured"})
 		}
 
+		if blocked, wait := p.loginBlocked(c, identifier); blocked {
+			setRetryAfter(c, wait)
+			return c.JSON(statusTooManyRequests, map[string]string{"error": throttleMessage(wait)})
+		}
+
 		ctx := NewContext(c, p)
 		tokenDuration := p.ResolveTokenDuration(creds.Remember)
 		ctx.Set("remember", creds.Remember)
@@ -92,8 +174,10 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 		authUser, tokenStr, err := p.authValidator(ctx, identifier, creds.Password)
 		if err != nil || authUser == nil {
+			p.loginFailed(c, identifier)
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
 		}
+		p.loginSucceeded(c, identifier)
 
 		expiresAt := time.Now().Add(tokenDuration)
 
@@ -119,13 +203,13 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// Panel Auth Logout Endpoint
 	r.POST(apiPrefix+"/logout", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		return c.JSON(http.StatusOK, map[string]string{"status": "logged_out"})
 	})
 
 	// Panel Current User Endpoint
 	r.GET(apiPrefix+"/me", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -145,7 +229,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// 1. Panel Schema Endpoint
 	r.GET(apiPrefix+"/schema", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -398,7 +482,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// Version / Update Check Endpoint
 	r.GET(apiPrefix+"/version", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		clientVersion := c.Query("version")
 		if clientVersion == "" {
 			clientVersion = c.Header("X-App-Version")
@@ -701,7 +785,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	// 5. Support Concierge & Voice Feature Request API
 	// GET /support/tickets - List support tickets scoped to tenant / super admin
 	r.GET(apiPrefix+"/support/tickets", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -733,7 +817,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// POST /support/message - Send customer message & get instant AI response / auto-escalation
 	r.POST(apiPrefix+"/support/message", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx := p.resolveUser(c) // anonymous visitors may write to support
 		var req struct {
 			TicketID  string `json:"ticket_id"`
@@ -815,7 +899,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// POST /support/voice-feature - Submit multimodal voice feature request in any language
 	r.POST(apiPrefix+"/support/voice-feature", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx := p.resolveUser(c) // anonymous visitors may write to support
 
 		var (
@@ -928,7 +1012,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// GET /support/audio/:id - Stream preserved voice recording
 	r.GET(apiPrefix+"/support/audio/:id", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ticketID := c.Param("id")
 		ticket, err := gosupport.GetDefaultStore().GetTicket(c.Request.Context(), ticketID)
 		if err != nil || ticket == nil || ticket.Voice == nil {
@@ -941,7 +1025,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// POST /support/escalate - Escalate to Live Support Agent or Super Admin Panel
 	r.POST(apiPrefix+"/support/escalate", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		var req struct {
 			TicketID string `json:"ticket_id"`
 			Target   string `json:"target"`
@@ -984,7 +1068,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// POST /support/language - Set language preference (persisted in golaravel_support_lang cookie)
 	r.POST(apiPrefix+"/support/language", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		var req struct {
 			Language string `json:"language"`
 		}
@@ -1014,7 +1098,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 
 	// GET /support/knowledge - Return system features known up to latest release
 	r.GET(apiPrefix+"/support/knowledge", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		return c.JSON(http.StatusOK, map[string]any{
 			"features": gosupport.GetDefaultKnowledgeBase().All(),
 			"count":    len(gosupport.GetDefaultKnowledgeBase().All()),
@@ -1036,6 +1120,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 func (p *Panel) EvaluateWidgetDTOs(ctx *Context) []map[string]any {
 	var widgetData []map[string]any
 	for _, w := range p.widgets {
+		if v, ok := w.(interface{ CanView(ctx *Context) bool }); ok && !v.CanView(ctx) {
+			continue
+		}
 		dto := map[string]any{
 			"id":          w.ID(),
 			"sort":        w.Sort(),
@@ -1080,7 +1167,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 	resPath := fmt.Sprintf("%s/resources/%s", apiPrefix, slug)
 
 	corsPreflight := func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		return c.NoContent(http.StatusNoContent)
 	}
 	r.OPTIONS(resPath, corsPreflight)
@@ -1093,7 +1180,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// GET /admin/api/resources/:slug - List
 	r.GET(resPath, func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -1402,7 +1489,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// GET /admin/api/resources/:slug/:id - Find
 	r.GET(resPath+"/:id", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -1431,7 +1518,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// POST /admin/api/resources/:slug - Create
 	r.POST(resPath, func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -1456,7 +1543,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// PUT /admin/api/resources/:slug/:id - Update
 	updateHandler := func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -1483,7 +1570,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// DELETE /admin/api/resources/:slug/:id - Delete
 	deleteHandler := func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -1548,7 +1635,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 	// GET /admin/api/resources/:slug/:id/relations
 	r.GET(resPath+"/:id/relations", func(c *gcontext.Context) error {
-		setCorsHeaders(c)
+		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
 			return err
@@ -1576,7 +1663,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// GET /admin/api/resources/:slug/:id/relations/:rel - List
 		r.GET(relPath, func(c *gcontext.Context) error {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -1617,7 +1704,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// POST /admin/api/resources/:slug/:id/relations/:rel - Create
 		r.POST(relPath, func(c *gcontext.Context) error {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -1639,7 +1726,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// PUT /admin/api/resources/:slug/:id/relations/:rel/:child_id - Update
 		updateRelHandler := func(c *gcontext.Context) error {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -1664,7 +1751,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// DELETE /admin/api/resources/:slug/:id/relations/:rel/:child_id - Delete
 		deleteRelHandler := func(c *gcontext.Context) error {
-			setCorsHeaders(c)
+			p.setCorsHeaders(c)
 			ctx, err := p.AuthorizeAccess(c)
 			if err != nil {
 				return err
@@ -1745,5 +1832,10 @@ func (p *Panel) apiErrorStatus(c *gcontext.Context, err error, fallback int) err
 			status, message = s, m
 		}
 	}
-	return c.JSON(status, map[string]string{"error": message})
+	body := map[string]any{"error": message}
+	var verr *forms.ValidationError
+	if errors.As(err, &verr) {
+		body["errors"] = verr.Errors
+	}
+	return c.JSON(status, body)
 }

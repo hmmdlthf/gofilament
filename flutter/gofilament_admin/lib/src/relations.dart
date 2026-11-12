@@ -259,6 +259,7 @@ class _RelationTableState extends State<_RelationTable> {
                     for (final col in columns)
                       DataCell(adminCell(context, col, row,
                           onNotice: _notice,
+                          admin: widget.admin,
                           currency:
                               '${widget.admin.schema['currency'] ?? ''}')),
                     if (canEdit || canDelete)

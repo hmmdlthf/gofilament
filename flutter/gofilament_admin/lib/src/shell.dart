@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'controller.dart';
+import 'global_search.dart';
 import 'dashboard.dart';
 import 'icons.dart';
 import 'login.dart';
@@ -47,14 +48,17 @@ class _AdminShellState extends State<AdminShell> {
     if (admin.initialLocation.isEmpty) return;
     final parts =
         admin.initialLocation.split('/').where((p) => p.isNotEmpty).toList();
+    // Drawn from a schema snapshot: pages wait for the live schema, which
+    // decides who may open them (see build).
+    if (!admin.schemaIsLive && parts.isNotEmpty && parts[0] == 'pages') return;
     if (parts.length >= 2 &&
         parts[0] == 'resources' &&
         admin.resource(parts[1]) != null) {
       _current = 'resource:${parts[1]}';
       if (parts.length >= 3) _pendingRecord = parts[2];
     } else if (parts.length >= 2 && parts[0] == 'pages') {
-      final page = admin.pages.where((p) =>
-          p.id == parts[1] && (p.visible == null || p.visible!(admin.user)));
+      final page =
+          admin.pages.where((p) => p.id == parts[1] && admin.canOpenPage(p));
       if (page.isNotEmpty) {
         if (page.first.fullscreen) {
           // full-screen pages (e.g. a till) open over the shell once it is built
@@ -67,6 +71,46 @@ class _AdminShellState extends State<AdminShell> {
       }
     }
     admin.initialLocation = '';
+  }
+
+  bool get _searchEnabled {
+    final g = admin.schema['global_search'];
+    return g is Map && g['enabled'] == true;
+  }
+
+  Future<void> _openSearch() async {
+    final url = await showDialog<String>(
+        context: context, builder: (_) => GlobalSearchDialog(admin: admin));
+    if (url != null && mounted) openUrl(url);
+  }
+
+  /// Opens a panel URL from the server (`<panel>/<slug>[/<id>[/edit]]` or a
+  /// page): global search results, notifications.
+  void openUrl(String url) {
+    var path = Uri.tryParse(url)?.path ?? url;
+    final base = '${admin.schema['path'] ?? ''}';
+    if (base.isNotEmpty && path.startsWith(base)) {
+      path = path.substring(base.length);
+    }
+    final parts = path.split('/').where((p) => p.isNotEmpty).toList();
+    if (parts.isNotEmpty && parts[0] == 'resources') parts.removeAt(0);
+    if (parts.isEmpty) {
+      _go(_dashboard);
+      return;
+    }
+    if (admin.resource(parts[0]) != null) {
+      setState(() {
+        _current = 'resource:${parts[0]}';
+        _pendingRecord = parts.length >= 2 && parts[1] != 'create'
+            ? (parts[1] == 'new' ? 'new' : parts[1])
+            : null;
+      });
+      _publishLocation();
+      return;
+    }
+    final page =
+        admin.pages.where((p) => p.id == parts[0] && admin.canOpenPage(p));
+    if (page.isNotEmpty) _go('page:${page.first.id}');
   }
 
   void _publishLocation() {
@@ -86,7 +130,7 @@ class _AdminShellState extends State<AdminShell> {
   Map<String, List<_NavEntry>> _groups() {
     final entries = <_NavEntry>[];
     for (final page in admin.pages) {
-      if (page.visible != null && !page.visible!(admin.user)) continue;
+      if (!admin.canOpenPage(page)) continue;
       entries
           .add(_NavEntry('page:${page.id}', page.label, page.icon, page.group));
     }
@@ -160,7 +204,8 @@ class _AdminShellState extends State<AdminShell> {
       }
     }
     if (_current.startsWith('page:')) {
-      final page = admin.pages.where((p) => 'page:${p.id}' == _current);
+      final page = admin.pages
+          .where((p) => 'page:${p.id}' == _current && admin.canOpenPage(p));
       if (page.isNotEmpty) return page.first.builder(context, admin);
     }
     return DashboardPage(admin: admin);
@@ -168,6 +213,12 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (admin.initialLocation.isNotEmpty && admin.schemaIsLive) {
+      // a deep link held back while the shell showed the schema snapshot
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(_restoreFromLocation);
+      });
+    }
     final wide = MediaQuery.sizeOf(context).width >= 1000;
     final sidebar = _Sidebar(
       admin: admin,
@@ -193,7 +244,11 @@ class _AdminShellState extends State<AdminShell> {
               ),
             Expanded(
               child: Column(children: [
-                _TopBar(admin: admin, title: _title(), showMenu: !wide),
+                _TopBar(
+                    admin: admin,
+                    title: _title(),
+                    showMenu: !wide,
+                    onSearch: _searchEnabled ? _openSearch : null),
                 Expanded(child: _body()),
               ]),
             ),
@@ -305,11 +360,15 @@ class _Sidebar extends StatelessWidget {
 
 class _TopBar extends StatelessWidget {
   const _TopBar(
-      {required this.admin, required this.title, required this.showMenu});
+      {required this.admin,
+      required this.title,
+      required this.showMenu,
+      this.onSearch});
 
   final AdminController admin;
   final String title;
   final bool showMenu;
+  final VoidCallback? onSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -339,6 +398,13 @@ class _TopBar extends StatelessWidget {
               style: theme.textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.w600)),
         ),
+        if (onSearch != null)
+          IconButton(
+            key: const Key('global-search'),
+            tooltip: 'Search',
+            icon: const Icon(Icons.search),
+            onPressed: onSearch,
+          ),
         if (admin.brand['theme_mode'] != 'dark' &&
             admin.brand['theme_mode'] != 'light')
           IconButton(
