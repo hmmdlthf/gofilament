@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.30.0] - 2026-11-13
+
 ### Breaking
 - **Server-side form validation (`pkg/filament`, `pkg/forms`)**: create, update, inline cell edits, relation forms and row-action forms are validated against the declared form, and handlers receive only the form's fields (unknown keys, disabled fields, fields hidden by `Visible` and non-dehydrated fields are dropped). Invalid input answers 422 with `{"error", "errors"}`. Updates are partial: absent keys are left alone. Handlers that relied on extra keys must declare them as fields (for example `forms.Hidden`) or opt out with `AcceptUnvalidatedInput()`.
 - **Inline cell edits** only reach editable table columns (and select columns only accept their options); the fallback to `OnUpdate({column: value})` can no longer write arbitrary fields. A resource without a table but with its own `OnCellUpdate` still decides by itself.
