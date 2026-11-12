@@ -194,7 +194,11 @@ func (p *Panel) userFromSessionCookie(ctx *Context) auth.Authenticatable {
 	if val == "" {
 		return nil
 	}
-	if u, ok := p.webSessions.get(val); ok {
+	if p.sessionStore != nil {
+		if u, ok := p.storedSessionUser(ctx, val); ok {
+			return u
+		}
+	} else if u, ok := p.webSessions.get(val); ok {
 		return u
 	}
 	if p.tokenValidator != nil {
@@ -206,18 +210,28 @@ func (p *Panel) userFromSessionCookie(ctx *Context) auth.Authenticatable {
 }
 
 // startWebSession signs the user in on this browser.
-func (p *Panel) startWebSession(c *gcontext.Context, user auth.Authenticatable, token string, d time.Duration) {
+func (p *Panel) startWebSession(c *gcontext.Context, user auth.Authenticatable, token string, d time.Duration) error {
 	value := token
 	if p.tokenValidator == nil || token == "" {
 		value = randomToken()
-		p.webSessions.put(value, webSession{user: user, expires: time.Now().Add(d)})
+		if p.sessionStore != nil {
+			if err := p.sessionStore.PutSession(c.Request.Context(), hashSessionID(value), user.GetAuthIdentifier(), time.Now().Add(d)); err != nil {
+				return err
+			}
+		} else {
+			p.webSessions.put(value, webSession{user: user, expires: time.Now().Add(d)})
+		}
 	}
 	p.setPanelCookie(c, p.SessionCookieName(), value, d)
+	return nil
 }
 
 // endWebSession signs the browser out.
 func (p *Panel) endWebSession(c *gcontext.Context) {
 	if val := cookieValue(c, p.SessionCookieName()); val != "" {
+		if p.sessionStore != nil {
+			_ = p.sessionStore.DeleteSession(c.Request.Context(), hashSessionID(val))
+		}
 		p.webSessions.delete(val)
 	}
 	p.setPanelCookie(c, p.SessionCookieName(), "", -1)
@@ -257,6 +271,8 @@ func (p *Panel) handleWebLogin(c *gcontext.Context) error {
 		return p.renderLoginScreen(ctx, http.StatusUnauthorized, "These credentials do not match our records.", identifier)
 	}
 	p.loginSucceeded(c, identifier)
-	p.startWebSession(c, user, token, d)
+	if err := p.startWebSession(c, user, token, d); err != nil {
+		return p.renderLoginScreen(ctx, http.StatusServiceUnavailable, "Sign-in is unavailable right now. Please try again.", identifier)
+	}
 	return c.Redirect(http.StatusSeeOther, p.path)
 }

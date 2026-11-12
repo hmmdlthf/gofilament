@@ -952,6 +952,31 @@ Files are stored on the field's golaravel storage `Disk(...)` under
 `Disk("")` without `UploadsUsing` refuses uploads (501). The saved value is
 only a reference: check it in your handler before trusting it.
 
+### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
+
+By default web-engine sessions (without a `TokenValidator`), database
+notifications, the activity log and support tickets live in process memory:
+they vanish on restart and are not shared between processes. `sqlstore` keeps
+them in any `database/sql` database (SQLite, MySQL, Postgres):
+
+```go
+s := sqlstore.New(db, sqlstore.Postgres)
+if err := s.Migrate(ctx); err != nil { log.Fatal(err) } // creates gofilament_* tables
+
+notifications.SetDefaultStore(s.Notifications())
+activitylog.SetDefaultStore(s.Activities())
+gsupport.SetDefaultStore(s.Tickets()) // golaravel/pkg/support
+
+panel.WebSessionsUsing(s.WebSessions(), func(ctx *filament.Context, id string) (auth.Authenticatable, error) {
+    return users.Find(ctx.GoContext(), id) // reloaded on every request: disabling a user ends their sessions
+})
+```
+
+Session ids are stored as hashes, never as the cookie value;
+`s.WebSessions().DeleteUserSessions(ctx, userID)` signs a user out everywhere.
+Broadcast notifications (sent to `"all"`) are marked read per user. For login
+throttling across processes, give golaravel's `ratelimit` a Redis store.
+
 ### 🔌 Standardized Panel REST API:
 The Flutter client and external integrations connect to GoFilament's standardized JSON REST API:
 - `GET /admin/api/schema`: Panel metadata, registered resources, fields, and navigation groups.

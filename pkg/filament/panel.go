@@ -127,6 +127,8 @@ type Panel struct {
 	endpoints           []*ClientEndpoint
 	loginLimit          *loginThrottle
 	uploadHandler       UploadHandler
+	sessionStore        WebSessionStore
+	sessionUsers        UserLoader
 	widgets             []WidgetInterface
 	dashboardRenderFunc func(ctx *Context) error
 	locales             []string
