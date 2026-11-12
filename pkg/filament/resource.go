@@ -1071,6 +1071,23 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 		return r.handleUpdate(ctx, basePath, c.Param("id"))
 	})
 
+	// Custom row actions with a Handle runner (tables.Action(name).Handle):
+	// GET shows a confirm / form page, POST (CSRF-protected) runs it.
+	router.GET(basePath+"/:id/actions/:action", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return r.handleActionPage(ctx, basePath, c.Param("id"), c.Param("action"), http.StatusOK, "", nil)
+	})
+	router.POST(basePath+"/:id/actions/:action", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return r.handleActionRun(ctx, basePath, c.Param("id"), c.Param("action"))
+	})
+
 	deleteHandler := func(c *gcontext.Context) error {
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
@@ -2041,6 +2058,10 @@ func (r *BaseResource[T]) handleLive(ctx *Context) error {
 }
 
 func (r *BaseResource[T]) renderPage(ctx *Context, pageTitle, innerContent string) error {
+	return r.renderPageStatus(ctx, http.StatusOK, pageTitle, innerContent)
+}
+
+func (r *BaseResource[T]) renderPageStatus(ctx *Context, status int, pageTitle, innerContent string) error {
 	p := ctx.Panel()
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s" dir="%s">
@@ -2075,7 +2096,7 @@ func (r *BaseResource[T]) renderPage(ctx *Context, pageTitle, innerContent strin
 		innerContent,
 		p.RenderBodyEndHTML(ctx),
 	)
-	return ctx.HTML(http.StatusOK, html)
+	return ctx.HTML(status, html)
 }
 
 // API Invoker methods for JSON REST API and Flutter clients
