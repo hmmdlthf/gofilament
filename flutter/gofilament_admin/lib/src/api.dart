@@ -257,6 +257,10 @@ class AdminApi {
     )..rowMeta = meta.map((k, v) => MapEntry(k, _map(v)));
   }
 
+  /// One record, as the resource's Go type serializes it.
+  Future<Map<String, dynamic>> find(String slug, String id) async =>
+      _map(_map(await _get('/resources/$slug/$id'))['data']);
+
   Future<FormPayload> form(String slug, {String? id}) async {
     final data =
         _map(await _get('/resources/$slug/form', {if (id != null) 'id': id}));

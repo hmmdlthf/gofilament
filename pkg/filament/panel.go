@@ -122,6 +122,7 @@ type Panel struct {
 	corsAllowOriginFunc func(origin string) bool
 	resources           []ResourceInterface
 	pages               []PageInterface
+	endpoints           []*ClientEndpoint
 	widgets             []WidgetInterface
 	dashboardRenderFunc func(ctx *Context) error
 	locales             []string
@@ -843,6 +844,10 @@ func denied(err error) error {
 // by POST <panel>/login. It never writes a response.
 func (p *Panel) resolveUser(c *gcontext.Context) *Context {
 	ctx := NewContext(c, p)
+	if u := clientGeneratorUser(c.Request); u != nil {
+		c.Set(auth.ContextUserKey, u)
+		return ctx
+	}
 	authHeader := c.Header("Authorization")
 	if strings.HasPrefix(authHeader, "Bearer ") && p.tokenValidator != nil {
 		if u, err := p.tokenValidator(ctx, strings.TrimPrefix(authHeader, "Bearer ")); err == nil && u != nil {

@@ -9,6 +9,10 @@ import (
 )
 
 // GenerateFlutterAdmin creates a responsive, mobile-first Flutter admin client project.
+//
+// Deprecated: use GenerateAdminApp for the app (it runs the reusable
+// gofilament_admin package) and GenerateFromPanel for typed Dart generated
+// from the panel.
 func GenerateFlutterAdmin(targetDir string, panelName, apiBaseURL string) error {
 	libDir := filepath.Join(targetDir, "lib")
 	webDir := filepath.Join(targetDir, "web")

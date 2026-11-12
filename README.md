@@ -729,6 +729,87 @@ cd client && flutter run         # iOS, Android, Desktop
 cd client && flutter build web   # Compiles to Web SPA served by GoLaravel
 ```
 
+### 🧬 Typed Dart from the panel (`flutterclient.GenerateFromPanel`)
+
+The `gofilament_admin` package renders a panel from its API at runtime. When you
+also want **static, typed Dart** for your own screens, generate it from the Go
+panel instead of writing it by hand:
+
+```go
+// tools/gen-flutter/main.go — run with `go run ./tools/gen-flutter`
+err := flutterclient.GenerateFromPanel(panels.Admin(), "flutter/admin_app", flutterclient.GenerateOptions{})
+```
+
+or register the artisan command (it needs a function that builds your panel):
+
+```go
+reg.Register(commands.FlutterGenerateCommand(panels.Admin, "flutter/admin_app", flutterclient.GenerateOptions{}))
+// artisan filament:flutter-generate [--out=dir] [--check]
+```
+
+The panel is booted in-process and read through its own API with `httptest`:
+no port is opened and no create / update / delete / action handler runs (list,
+form and option loaders do). Four files are written to `lib/generated/`, each
+marked `DO NOT EDIT`; nothing else in the app is touched:
+
+| File | Contents |
+|---|---|
+| `schema.g.dart` | `panelSchema` (a snapshot of `/api/schema`) and `panelForms` (resource, relation and action forms) |
+| `models.g.dart` | a class per resource record, built from the Go record type (`fromJson` / `toJson`, unknown keys kept in `raw`); an `…Input` class per form, relation form and action form; classes for endpoint request / response types |
+| `client.g.dart` | `PanelClient`: `list` / `find` / `create` / `update` / `delete` / `run<Action>` per resource, a client per relation, and a typed method per `filament.Endpoint` |
+| `pages.g.dart` | `panelPages(PanelPageBuilders(...))`: the `AdminPage`s of every `filament.FlutterPage`, with one **required** builder each |
+
+```dart
+void main() => runApp(GoFilamentAdmin(
+      initialSchema: panelSchema, // first frame without waiting for /api/schema
+      pages: panelPages(PanelPageBuilders(
+        pos: (context, admin) => PosScreen(client: PanelClient(admin.api)),
+      )),
+    ));
+
+// in PosScreen
+final orders = await client.salesOrders.list(search: 'SO');
+await client.salesOrders.runRefund('12', const SalesOrderRefundInput(amount: 5));
+final summary = await client.salesSummary(till: 't1');
+```
+
+Declare Flutter pages and typed endpoints in Go:
+
+```go
+panel.
+    Pages(filament.FlutterPage("pos", "Point of sale").Icon("heroicon-o-shopping-cart").Fullscreen().
+        Visible(func(ctx *filament.Context) bool { return ctx.User() != nil })).
+    Endpoints(filament.Endpoint("salesSummary", "GET", "/pos/tills/:till/summary",
+        func(ctx *filament.Context, q SummaryQuery) (Summary, error) { ... }).
+        Authorize(func(ctx *filament.Context) bool { ... }))
+```
+
+Endpoints are mounted under `<panel>/api` behind the panel's authentication;
+GET and DELETE read the request struct from the query string, other methods
+from the JSON body. Use `struct{}` for no request or no response.
+
+**The server stays authoritative.** The snapshot has no permissions, dashboard
+values, tenants or data-loaded select options: until the live schema arrives
+nothing can be created, edited or run, and Flutter pages are shown only when
+the live schema lists them in `client_pages`. Every request is still checked
+on the server. Abilities, row visibility and validation never come from
+generated code.
+
+**Keep it in sync in CI.** Output is deterministic (sorted keys, stable order),
+so regenerate and fail on a diff, or use `--check`:
+
+```bash
+go run ./tools/gen-flutter && git diff --exit-code flutter/admin_app/lib/generated
+```
+
+The generator reads the panel as a `SimpleShieldUser` with the `super-admin`
+role and the `*` permission. If your authorization callbacks type-assert your
+own user type, pass one in `GenerateOptions.User`. Generated files are not
+`dart format`ted; leave `lib/generated` out of format checks.
+`flutterclient.GenerateFlutterAdmin` (the old 12k-line scaffold) is
+deprecated: use `GenerateAdminApp` for the app and `GenerateFromPanel` for its
+typed code.
+
 ### 🔌 Standardized Panel REST API:
 The Flutter client and external integrations connect to GoFilament's standardized JSON REST API:
 - `GET /admin/api/schema`: Panel metadata, registered resources, fields, and navigation groups.

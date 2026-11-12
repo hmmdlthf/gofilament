@@ -76,6 +76,12 @@ class FakePanel {
       client: MockClient(_handle),
       store: MemorySessionStore());
 
+  /// Pages the server lists in `client_pages`.
+  List<String> clientPages = const [];
+
+  /// Answers one request (for tests that wrap the client).
+  Future<http.Response> handle(http.Request req) => _handle(req);
+
   http.Response _json(Object body, [int status = 200]) =>
       http.Response(json.encode(body), status,
           headers: {'content-type': 'application/json; charset=utf-8'});
@@ -428,6 +434,9 @@ class FakePanel {
       ];
 
   Map<String, dynamic> _schema() => {
+        'client_pages': [
+          for (final id in clientPages) {'id': id, 'label': id}
+        ],
         'brand': brand,
         'brand_name': brand['name'],
         'theme': {'colors': colors},

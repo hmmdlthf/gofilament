@@ -16,13 +16,22 @@ import 'theme.dart';
 /// comes from the panel API. Applications extend it with [pages].
 class GoFilamentAdmin extends StatefulWidget {
   const GoFilamentAdmin(
-      {super.key, this.api, this.pages = const [], this.controller});
+      {super.key,
+      this.api,
+      this.pages = const [],
+      this.controller,
+      this.initialSchema});
 
   /// API client; defaults to the panel the page was served from.
   final AdminApi? api;
 
   /// Extra application pages (for example a point of sale screen).
   final List<AdminPage> pages;
+
+  /// A schema snapshot compiled into the app (the generated `panelSchema`),
+  /// so the first frame needs no network. Permissions still come from the
+  /// live schema.
+  final Map<String, dynamic>? initialSchema;
 
   /// Supply your own controller to drive the app from outside (tests, embedding).
   final AdminController? controller;
@@ -33,7 +42,10 @@ class GoFilamentAdmin extends StatefulWidget {
 
 class _GoFilamentAdminState extends State<GoFilamentAdmin> {
   late final AdminController _admin = widget.controller ??
-      AdminController(api: widget.api ?? AdminApi(), pages: widget.pages);
+      AdminController(
+          api: widget.api ?? AdminApi(),
+          pages: widget.pages,
+          initialSchema: widget.initialSchema);
 
   @override
   void initState() {

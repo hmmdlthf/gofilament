@@ -216,6 +216,7 @@ func (p *Panel) decorateSchema(ctx *Context, schema map[string]any) {
 		}
 	}
 	schema["resource_meta"] = meta
+	schema["client_pages"] = p.clientPages(ctx)
 	if p.currencyResolver != nil {
 		schema["currency"] = p.currencyResolver(ctx)
 	}
@@ -274,6 +275,8 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 			"build_id":          p.GetBuildID(),
 		})
 	})
+
+	p.registerEndpoints(r, preflight)
 
 	for _, res := range p.resources {
 		res := res

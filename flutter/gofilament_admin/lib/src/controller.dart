@@ -16,6 +16,7 @@ class AdminPage {
     this.group = '',
     this.fullscreen = false,
     this.visible,
+    this.serverControlled = false,
   });
 
   /// Unique id, also used in navigation state.
@@ -32,17 +33,32 @@ class AdminPage {
   /// Hide the page for some users (receives the signed-in user payload).
   final bool Function(Map<String, dynamic> user)? visible;
 
+  /// Pages declared in Go (filament.FlutterPage, see the generated
+  /// `panelPages`) are shown only when the live schema lists them in
+  /// `client_pages`: the server decides who may open them.
+  final bool serverControlled;
+
   final Widget Function(BuildContext context, AdminController admin) builder;
 }
 
 /// Holds the panel state: brand, theme, session and schema.
 class AdminController extends ChangeNotifier {
-  AdminController({required this.api, this.pages = const []}) {
+  AdminController(
+      {required this.api, this.pages = const [], this.initialSchema}) {
     api.onUnauthorized = _sessionRejected;
   }
 
   final AdminApi api;
   final List<AdminPage> pages;
+
+  /// A schema snapshot compiled into the app (the generated `panelSchema`).
+  /// It draws the brand and the shell at start-up without waiting for the
+  /// network. It holds no permissions: until the live schema arrives nothing
+  /// can be created, edited or run, and the live schema replaces it.
+  final Map<String, dynamic>? initialSchema;
+
+  /// False while the shell is drawn from [initialSchema].
+  bool get schemaIsLive => schema.isNotEmpty && schema['snapshot'] != true;
 
   /// The URL fragment the app was opened with (for example
   /// `/resources/products/12`). Captured at start-up, before sign-in, so a deep
@@ -60,15 +76,15 @@ class AdminController extends ChangeNotifier {
   // ------------------------------------------------------------ derived
 
   Map<String, dynamic> get brand {
-    final b = (schema['brand'] ?? boot['brand']);
+    final b = (schema['brand'] ?? boot['brand'] ?? initialSchema?['brand']);
     return b is Map ? Map<String, dynamic>.from(b) : const {};
   }
 
   String get brandName =>
-      '${brand['name'] ?? schema['brand_name'] ?? boot['brand_name'] ?? 'Admin'}';
+      '${brand['name'] ?? schema['brand_name'] ?? boot['brand_name'] ?? initialSchema?['brand_name'] ?? 'Admin'}';
 
   String? get fontFamily {
-    final t = schema['theme'] ?? boot['theme'];
+    final t = schema['theme'] ?? boot['theme'] ?? initialSchema?['theme'];
     final f = t is Map ? t['font_family'] : null;
     return f is String && f.isNotEmpty ? f : null;
   }
@@ -90,10 +106,29 @@ class AdminController extends ChangeNotifier {
     return m is Map ? Map<String, dynamic>.from(m) : const {};
   }
 
+  /// Whether [page] is shown to the signed-in user.
+  bool canOpenPage(AdminPage page) {
+    if (page.visible != null && !page.visible!(user)) return false;
+    if (!page.serverControlled) return true;
+    final listed = schema['client_pages'];
+    return schema['snapshot'] != true &&
+        listed is List &&
+        listed.any((p) => p is Map && p['id'] == page.id);
+  }
+
   bool can(String slug, String ability) {
     final a = resourceMeta(slug)['abilities'];
     return a is Map && a[ability] == true;
   }
+
+  /// A mutable deep copy (the snapshot is a const literal).
+  static dynamic _copy(dynamic v) => switch (v) {
+        Map m => <String, dynamic>{
+            for (final e in m.entries) '${e.key}': _copy(e.value)
+          },
+        List l => [for (final e in l) _copy(e)],
+        _ => v,
+      };
 
   static List<Map<String, dynamic>> _maps(dynamic v) => v is List
       ? v.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
@@ -111,10 +146,23 @@ class AdminController extends ChangeNotifier {
       if (saved == 'dark') themeMode = ThemeMode.dark;
       if (saved == 'light') themeMode = ThemeMode.light;
 
+      final seed = initialSchema;
+      var restored = false;
+      if (seed != null) {
+        _applyTheme(seed);
+        restored = await api.restore();
+        if (restored) {
+          // Draw the shell now; the live schema below replaces the snapshot.
+          schema = _copy(seed) as Map<String, dynamic>;
+          stage = AdminStage.signedIn;
+          notifyListeners();
+        }
+      }
+
       boot = await api.boot();
       _applyTheme(boot);
 
-      if (await api.restore()) {
+      if (restored || await api.restore()) {
         await _loadSchema();
         return;
       }

@@ -49,6 +49,14 @@ GoFilamentAdmin(
 
 `admin.api.get(...)` / `admin.api.send(...)` call custom endpoints of the panel with the signed-in session.
 
+## Generated, typed code
+
+`flutterclient.GenerateFromPanel` (Go) writes `lib/generated/*.g.dart` into an
+app: `panelSchema` for `GoFilamentAdmin(initialSchema: ...)`, model classes, a
+typed `PanelClient` and `panelPages(...)` for the panel's `filament.FlutterPage`s
+(`AdminPage.serverControlled`: shown only when the live schema lists the page).
+See the main README, "Typed Dart from the panel".
+
 ## Not covered yet
 
 Repeaters, file / image upload, key-value, tabs and wizards as real tabs (shown as consecutive

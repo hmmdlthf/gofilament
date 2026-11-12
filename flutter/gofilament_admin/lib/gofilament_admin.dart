@@ -15,6 +15,7 @@ export 'src/controller.dart';
 export 'src/dashboard.dart';
 export 'src/export.dart' show TableExport, saveFile;
 export 'src/format.dart';
+export 'src/generated_support.dart';
 export 'src/links.dart';
 export 'src/icons.dart';
 export 'src/login.dart';

@@ -47,14 +47,17 @@ class _AdminShellState extends State<AdminShell> {
     if (admin.initialLocation.isEmpty) return;
     final parts =
         admin.initialLocation.split('/').where((p) => p.isNotEmpty).toList();
+    // Drawn from a schema snapshot: pages wait for the live schema, which
+    // decides who may open them (see build).
+    if (!admin.schemaIsLive && parts.isNotEmpty && parts[0] == 'pages') return;
     if (parts.length >= 2 &&
         parts[0] == 'resources' &&
         admin.resource(parts[1]) != null) {
       _current = 'resource:${parts[1]}';
       if (parts.length >= 3) _pendingRecord = parts[2];
     } else if (parts.length >= 2 && parts[0] == 'pages') {
-      final page = admin.pages.where((p) =>
-          p.id == parts[1] && (p.visible == null || p.visible!(admin.user)));
+      final page =
+          admin.pages.where((p) => p.id == parts[1] && admin.canOpenPage(p));
       if (page.isNotEmpty) {
         if (page.first.fullscreen) {
           // full-screen pages (e.g. a till) open over the shell once it is built
@@ -86,7 +89,7 @@ class _AdminShellState extends State<AdminShell> {
   Map<String, List<_NavEntry>> _groups() {
     final entries = <_NavEntry>[];
     for (final page in admin.pages) {
-      if (page.visible != null && !page.visible!(admin.user)) continue;
+      if (!admin.canOpenPage(page)) continue;
       entries
           .add(_NavEntry('page:${page.id}', page.label, page.icon, page.group));
     }
@@ -160,7 +163,8 @@ class _AdminShellState extends State<AdminShell> {
       }
     }
     if (_current.startsWith('page:')) {
-      final page = admin.pages.where((p) => 'page:${p.id}' == _current);
+      final page = admin.pages
+          .where((p) => 'page:${p.id}' == _current && admin.canOpenPage(p));
       if (page.isNotEmpty) return page.first.builder(context, admin);
     }
     return DashboardPage(admin: admin);
@@ -168,6 +172,12 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (admin.initialLocation.isNotEmpty && admin.schemaIsLive) {
+      // a deep link held back while the shell showed the schema snapshot
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(_restoreFromLocation);
+      });
+    }
     final wide = MediaQuery.sizeOf(context).width >= 1000;
     final sidebar = _Sidebar(
       admin: admin,

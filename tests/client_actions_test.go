@@ -22,6 +22,18 @@ type actDoc struct {
 
 func newActionApp(t *testing.T) (*golaravel.Engine, map[string]*actDoc, *string) {
 	t.Helper()
+	p, docs, lastUser := newActionPanel(t)
+	app := golaravel.New()
+	if err := p.Register(app); err != nil {
+		t.Fatal(err)
+	}
+	return app, docs, lastUser
+}
+
+// newActionPanel is the panel of the action tests (also used by the Flutter
+// client generator golden test).
+func newActionPanel(t *testing.T) (*filament.Panel, map[string]*actDoc, *string) {
+	t.Helper()
 	docs := map[string]*actDoc{
 		"1": {ID: 1, Number: "PUR-1", Total: 100},
 		"2": {ID: 2, Number: "PUR-2", Posted: true, Total: 50},
@@ -92,11 +104,7 @@ func newActionApp(t *testing.T) (*golaravel.Engine, map[string]*actDoc, *string)
 		}).
 		CurrencyUsing(func(ctx *filament.Context) string { return "LKR" }).
 		Resource(res)
-	app := golaravel.New()
-	if err := p.Register(app); err != nil {
-		t.Fatal(err)
-	}
-	return app, docs, &lastUser
+	return p, docs, &lastUser
 }
 
 func TestRowMetaAndActionMetadata(t *testing.T) {

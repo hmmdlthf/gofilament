@@ -17,9 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Web login (`pkg/filament`)**: the login form and row action forms carry a CSRF token (`_token`, double-submit cookie, compatible with golaravel's `middleware.CSRF`). New `Panel.CSRFToken` / `VerifyCSRF` for custom pages.
 
 ### Added
+- **Typed Dart from a panel (`flutterclient.GenerateFromPanel`)**: boots the panel in-process (httptest, no network, no writes) and writes `lib/generated/{schema,models,client,pages}.g.dart` into a Flutter app: a schema and form snapshot, a model class per resource record (from the Go record type) and per form / action / relation input, a typed `PanelClient`, and the `AdminPage` list of the panel's Flutter pages. Output is deterministic; `CheckFromPanel` and `RenderFromPanel` support CI. New artisan command `commands.FlutterGenerateCommand` (`filament:flutter-generate [--out=dir] [--check]`).
+- **`filament.FlutterPage(id, label)`**: a page drawn only by the Flutter client (`FlutterPager` for your own page types). The schema lists the pages the user may open in `client_pages`.
+- **`filament.Endpoint[Req, Res](name, method, path, fn)`** + `Panel.Endpoints(...)`: typed JSON endpoints under `<panel>/api` behind the panel's authentication (`.Authorize`, `.Describe`); the generator writes a typed Dart method for each.
+- `filament.WithClientGenerator` (in-process identity for the generator; not reachable over HTTP), `Panel.GetResources`, `Panel.GetPages`, `Panel.GetEndpoints`, `BaseResource.RecordType` / `DescribeActionForms`, `BaseRelationManager.RecordType`.
+- `forms.Node.DynamicOptions` (`dynamic_options`): marks select options resolved per request (`OptionsUsing`).
+- **gofilament_admin**: `GoFilamentAdmin(initialSchema: ...)` / `AdminController.initialSchema` draw the shell from a compiled-in snapshot when a session is stored, then switch to the live schema (`schemaIsLive`); `AdminPage.serverControlled` shows a page only when the live schema lists it; `AdminApi.find`; `GfJson` and `TypedPage` for generated code.
 - **Web engine login**: `POST <panel>/login` now calls the `AuthValidator` and starts a session in an HttpOnly, SameSite=Lax cookie scoped to the panel path (`Panel.SessionCookieName()`); `GET`/`POST <panel>/logout` ends it. With a `TokenValidator` the cookie carries the validator's token and is re-validated on every request; without one, an opaque id points at an in-memory session store (lost on restart, single process). The cookie is only read outside `<panel>/api`, which stays bearer-token only.
 - **Web engine row actions**: a `tables.Action(name).Handle(...)` now links to `<base>/<id>/actions/<name>`, a confirm page (showing the action's form, if any) that POSTs, CSRF-checked, to run it. Visibility, `Authorize` and view permissions are checked as in the API. Actions without a runner keep their old link.
 - `TableAction.GetModalHeading`, `GetModalDescription`, `GetColor`.
+
+### Deprecated
+- `flutterclient.GenerateFlutterAdmin` (the legacy scaffold): use `GenerateAdminApp` plus `GenerateFromPanel`.
 
 ### Fixed
 - **`Panel.Middleware`** was stored but never applied. It now runs on every panel route, including `/api/*`, except static assets, the Flutter web bundle and CORS preflight. Call it before `Register` / `Mount`.
