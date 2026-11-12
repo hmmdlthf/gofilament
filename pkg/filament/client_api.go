@@ -353,6 +353,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 		})
 
 		p.registerRelationClientRoutes(r, res, resPath, preflight)
+		p.registerUploadRoute(r, res, resPath, preflight)
 		p.registerActionRoutes(r, res, resPath, preflight)
 
 		// GET .../form/options?field=<name>&q=<text>&limit=<n>

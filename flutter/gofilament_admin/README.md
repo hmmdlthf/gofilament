@@ -57,11 +57,24 @@ typed `PanelClient` and `panelPages(...)` for the panel's `filament.FlutterPage`
 (`AdminPage.serverControlled`: shown only when the live schema lists the page).
 See the main README, "Typed Dart from the panel".
 
+## Forms, lists and dashboard
+
+- Repeaters (add, remove, reorder items; per-item validation; min / max items),
+  key-value fields, tabs and wizard steps (hidden steps keep their values and
+  still validate).
+- File and image fields upload as soon as a file is chosen
+  (`POST /api/resources/<slug>/uploads?field=<name>`), and the form keeps the
+  value the server returns. Swap the picker with `adminPickFiles`.
+- Soft-deleted rows show Restore and Delete for good when the server allows it.
+- A column picker for toggleable columns, remembered per resource.
+- Chart widgets (line, bar, pie, doughnut) with their period filters.
+- Global search from the top bar, opening the chosen record or page.
+- Exports save through the browser on web and a save dialog elsewhere.
+
 ## Not covered yet
 
-Repeaters, file / image upload, key-value, tabs and wizards as real tabs (shown as consecutive
-sections), chart widgets, global search, soft-delete restore, column picker,
-non-web file saving for exports.
+File fields in relation and action forms, bulk restore / force delete,
+radar and polar-area charts (drawn as doughnuts), notifications.
 
 ## Development
 

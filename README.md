@@ -910,6 +910,19 @@ own user type, pass one in `GenerateOptions.User`. Generated files are not
 deprecated: use `GenerateAdminApp` for the app and `GenerateFromPanel` for its
 typed code.
 
+### 📎 Uploads from API clients
+
+`POST <panel>/api/resources/<slug>/uploads?field=<name>` (multipart `file`)
+stores a file for a `FileUpload` / `ImageUpload` field of the resource form
+and answers `{value, url, name}`; the client then saves `value` in the form.
+The user must be able to see the resource; the field's `MaxSize` (KB) and
+`AcceptedFileTypes` are checked against the bytes, not the client's claim
+(PNG, JPEG, GIF, WebP, PDF, ZIP... are sniffed; other types go by extension).
+Files are stored on the field's golaravel storage `Disk(...)` under
+`Directory(...)` with a random name, or by your `panel.UploadsUsing(fn)`.
+`Disk("")` without `UploadsUsing` refuses uploads (501). The saved value is
+only a reference: check it in your handler before trusting it.
+
 ### 🔌 Standardized Panel REST API:
 The Flutter client and external integrations connect to GoFilament's standardized JSON REST API:
 - `GET /admin/api/schema`: Panel metadata, registered resources, fields, and navigation groups.

@@ -124,6 +124,7 @@ type Panel struct {
 	pages               []PageInterface
 	endpoints           []*ClientEndpoint
 	loginLimit          *loginThrottle
+	uploadHandler       UploadHandler
 	widgets             []WidgetInterface
 	dashboardRenderFunc func(ctx *Context) error
 	locales             []string

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -52,15 +53,54 @@ class _ResourceListPageState extends State<ResourceListPage> {
   Map<String, dynamic> get _resource => admin.resource(widget.slug) ?? const {};
   Map<String, dynamic> get _meta => admin.resourceMeta(widget.slug);
 
-  List<Map<String, dynamic>> get _columns {
+  /// Columns the user chose to show (null: the server's defaults).
+  Set<String>? _shown;
+
+  List<Map<String, dynamic>> get _allColumns {
     final cols = _resource['columns'];
-    final all = cols is List
+    return cols is List
         ? cols
             .whereType<Map>()
             .map((m) => Map<String, dynamic>.from(m))
             .toList()
         : <Map<String, dynamic>>[];
-    return all.where((c) => c['toggled_hidden_by_default'] != true).toList();
+  }
+
+  bool _isShown(Map<String, dynamic> c) {
+    final shown = _shown;
+    if (shown == null || c['toggleable'] != true) {
+      return c['toggled_hidden_by_default'] != true;
+    }
+    return shown.contains('${c['name']}');
+  }
+
+  List<Map<String, dynamic>> get _columns =>
+      _allColumns.where(_isShown).toList();
+
+  String get _columnsPref => 'columns:${widget.slug}';
+
+  Future<void> _loadColumnChoice() async {
+    try {
+      final raw = await api.readPreference(_columnsPref);
+      if (raw == null || !mounted) return;
+      final list = json.decode(raw);
+      if (list is List) setState(() => _shown = list.map((e) => '$e').toSet());
+    } catch (_) {}
+  }
+
+  void _toggleColumn(String name) {
+    final shown = _shown ??
+        _allColumns
+            .where((c) => c['toggled_hidden_by_default'] != true)
+            .map((c) => '${c['name']}')
+            .toSet();
+    final next = {...shown};
+    if (!next.remove(name)) next.add(name);
+    if (_allColumns.where((c) => next.contains('${c['name']}')).isEmpty) {
+      return; // keep at least one column
+    }
+    setState(() => _shown = next);
+    api.writePreference(_columnsPref, json.encode(next.toList()..sort()));
   }
 
   List<Map<String, dynamic>> get _filterDefs {
@@ -177,6 +217,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
   void initState() {
     super.initState();
     _perPage = (_resource['per_page'] as num?)?.toInt() ?? 25;
+    _loadColumnChoice();
     _load();
     final open = widget.openRecord;
     if (open != null && _hasForm) {
@@ -292,6 +333,30 @@ class _ResourceListPageState extends State<ResourceListPage> {
     try {
       await api.delete(widget.slug, recordId(row));
       _toast('Deleted');
+      _load();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
+  }
+
+  Future<void> _restore(Map<String, dynamic> row) async {
+    try {
+      await api.restoreRecord(widget.slug, recordId(row));
+      _toast('Restored');
+      _load();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
+  }
+
+  Future<void> _forceDelete(Map<String, dynamic> row) async {
+    if (!await _confirm(
+        'Delete this record for good?', 'It cannot be restored afterwards.')) {
+      return;
+    }
+    try {
+      await api.forceDelete(widget.slug, recordId(row));
+      _toast('Deleted for good');
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -473,6 +538,22 @@ class _ResourceListPageState extends State<ResourceListPage> {
           tooltip: 'Refresh',
           icon: const Icon(Icons.refresh),
           onPressed: _load),
+      if (_allColumns.any((c) => c['toggleable'] == true))
+        PopupMenuButton<String>(
+          key: const Key('list-columns'),
+          tooltip: 'Columns',
+          icon: const Icon(Icons.view_column_outlined),
+          onSelected: _toggleColumn,
+          itemBuilder: (_) => [
+            for (final c in _allColumns.where((c) => c['toggleable'] == true))
+              CheckedPopupMenuItem<String>(
+                key: Key('column-toggle-${c['name']}'),
+                value: '${c['name']}',
+                checked: _isShown(c),
+                child: Text('${c['label'] ?? humanize('${c['name']}')}'),
+              ),
+          ],
+        ),
       if (_exportEnabled)
         PopupMenuButton<String>(
           key: const Key('list-export'),
@@ -784,6 +865,23 @@ class _ResourceListPageState extends State<ResourceListPage> {
           visualDensity: VisualDensity.compact,
           icon: const Icon(Icons.edit_outlined, size: 19),
           onPressed: () => _openForm(id: id),
+        ),
+      if (_rowMeta[id]?['restore'] == true)
+        IconButton(
+          key: Key('row-restore-$id'),
+          tooltip: 'Restore',
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.restore_from_trash_outlined, size: 19),
+          onPressed: () => _restore(row),
+        ),
+      if (_rowMeta[id]?['force_delete'] == true)
+        IconButton(
+          key: Key('row-force-delete-$id'),
+          tooltip: 'Delete for good',
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.delete_forever_outlined,
+              size: 19, color: theme.colorScheme.error),
+          onPressed: () => _forceDelete(row),
         ),
       if (_actions.contains('delete') &&
           _canDeleteAny &&

@@ -305,6 +305,17 @@ func (v *validator) check(c Component, b *BaseField, val any) string {
 		if !ok || !parsesAsClock(s) {
 			return label + " must be a valid time."
 		}
+	case *FileUploadField:
+		list, ok := toStrings(val)
+		if !ok {
+			return label + " must be a file reference or a list of them."
+		}
+		if !f.multiple && len(list) > 1 {
+			return label + " takes a single file."
+		}
+		if f.maxFiles > 0 && len(list) > f.maxFiles {
+			return fmt.Sprintf("%s may not have more than %d files.", label, f.maxFiles)
+		}
 	case *CustomField:
 		if f.rule != nil {
 			return f.rule(v.ctx, val)

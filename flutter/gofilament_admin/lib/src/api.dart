@@ -293,6 +293,29 @@ class AdminApi {
   Future<void> delete(String slug, String id) =>
       _send('DELETE', '/resources/$slug/$id');
 
+  /// Uploads one file for the file field [field] of a resource form;
+  /// returns `{value, url, name}` (value is what the field keeps).
+  Future<Map<String, dynamic>> upload(
+      String slug, String field, String filename, Uint8List bytes) async {
+    final req = http.MultipartRequest(
+        'POST', _uri('/resources/$slug/uploads', {'field': field}))
+      ..headers.addAll({
+        'Accept': 'application/json',
+        if (isAuthenticated) 'Authorization': 'Bearer $token',
+      })
+      ..files
+          .add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    return _map(_decode(await http.Response.fromStream(await _http.send(req))));
+  }
+
+  /// Restores a soft-deleted record.
+  Future<void> restoreRecord(String slug, String id) =>
+      _send('POST', '/resources/$slug/restore', {'id': id});
+
+  /// Deletes a soft-deleted record for good.
+  Future<void> forceDelete(String slug, String id) =>
+      _send('POST', '/resources/$slug/force-delete', {'id': id});
+
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});
 

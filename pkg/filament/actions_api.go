@@ -94,6 +94,16 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 		if links != nil {
 			meta["links"] = links
 		}
+		if r.IsSoftDeletesEnabled() {
+			trashed := r.checkIsTrashed(rec)
+			meta["trashed"] = trashed
+			if trashed {
+				// a trashed record can only be restored or deleted for good
+				meta["update"], meta["delete"], meta["actions"] = false, false, []string{}
+				meta["restore"] = r.onRestore != nil && (r.canRestore == nil || r.canRestore(ctx, id))
+				meta["force_delete"] = r.onForceDelete != nil && (r.canForceDelete == nil || r.canForceDelete(ctx, id))
+			}
+		}
 		out[id] = meta
 	}
 	return out

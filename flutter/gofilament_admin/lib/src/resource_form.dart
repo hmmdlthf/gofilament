@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'api.dart';
 import 'components.dart';
 import 'controller.dart';
+import 'files.dart';
 import 'form_editors.dart';
 import 'format.dart';
 import 'relations.dart';
@@ -173,6 +174,7 @@ class _ResourceFormState extends State<ResourceForm> {
                   .toList()
               : <Map<String, dynamic>>[];
         }
+
         if (type == 'key_value') {
           value = value is Map
               ? Map<String, dynamic>.from(value)
@@ -218,10 +220,13 @@ class _ResourceFormState extends State<ResourceForm> {
     for (final f in _fields) {
       final name = '${f['name']}';
       final type = '${f['type']}';
-      if (f['disabled'] == true || const {'file', 'image'}.contains(type)) {
+      if (f['disabled'] == true ||
+          ((_isRelation || _isAction) &&
+              const {'file', 'image'}.contains(type))) {
         continue;
       }
-      if (const {'custom', 'repeater', 'key_value'}.contains(type)) {
+      if (const {'custom', 'repeater', 'key_value', 'file', 'image'}
+          .contains(type)) {
         data[name] = _values[name];
       } else if (_textTypes.contains(type)) {
         final text = _text[name]?.text ?? '';
@@ -722,6 +727,18 @@ class _ResourceFormState extends State<ResourceForm> {
             ),
           ),
         );
+    }
+
+    if ((type == 'file' || type == 'image') && !_isRelation && !_isAction) {
+      return FileFieldEditor(
+        node: f,
+        value: _values[name],
+        enabled: enabled,
+        required: required && !(_isEdit && _values[name] != null),
+        upload: (filename, bytes) =>
+            widget.admin.api.upload(widget.slug, name, filename, bytes),
+        onChanged: (v) => _values[name] = v,
+      );
     }
 
     if (type == 'key_value') {

@@ -87,6 +87,9 @@ class FakePanel {
 
   bool globalSearch = false;
 
+  /// Row meta merged into the list's row_meta by record id.
+  Map<String, Map<String, dynamic>> extraRowMeta = {};
+
   /// Pages the server lists in `client_pages`.
   List<String> clientPages = const [];
 
@@ -315,6 +318,7 @@ class FakePanel {
           '${r['id']}': {
             'update': r['id'] != 2,
             'delete': r['id'] != 2,
+            ...?extraRowMeta['${r['id']}'],
             'actions': [
               if (r['archived'] != true) 'archive',
               'discount',
