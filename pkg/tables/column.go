@@ -693,6 +693,9 @@ type ColumnDTO struct {
 	Circular       bool              `json:"circular,omitempty"`
 	Colors         map[string]string `json:"colors,omitempty"`
 	Options        map[string]string `json:"options,omitempty"`
+	// Component / Props: a column drawn by a Flutter cell component (CustomColumn).
+	Component string `json:"component,omitempty"`
+	Props     any    `json:"props,omitempty"`
 }
 
 // ColumnToDTO transforms any ColumnRenderer into a ColumnDTO.

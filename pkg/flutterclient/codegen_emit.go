@@ -10,12 +10,13 @@ import (
 )
 
 type generator struct {
-	snap      *panelSnapshot
-	o         GenerateOptions
-	reg       *typeRegistry
-	resources []*resGen
-	endpoints []*endpointGen
-	client    string // name of the panel client class
+	snap       *panelSnapshot
+	o          GenerateOptions
+	reg        *typeRegistry
+	resources  []*resGen
+	endpoints  []*endpointGen
+	components []*componentUse
+	client     string // name of the panel client class
 }
 
 type resGen struct {
@@ -146,6 +147,10 @@ func (g *generator) plan() error {
 			eg.res = &t
 		}
 		g.endpoints = append(g.endpoints, eg)
+	}
+	g.components = g.snap.collectComponents()
+	for _, u := range g.components {
+		u.propsCls = g.reg.inferPropsClass(u)
 	}
 	return nil
 }

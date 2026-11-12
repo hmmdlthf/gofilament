@@ -94,12 +94,16 @@ func (g *generator) registryFile() string {
 	for _, p := range g.snap.pages {
 		fmt.Fprintf(&b, "import '../pages/%s_page.dart';\n", snake(p.ID))
 	}
+	for i, u := range g.components {
+		fmt.Fprintf(&b, "import '../components/%ss/%s_%s.dart' as c%d;\n", u.kind, snake(u.name), u.kind, i)
+	}
 	b.WriteString("import 'pages.g.dart';\n\n")
 	b.WriteString(`/// The panel's Flutter pages, built from your files in lib/pages:
 /// ` + "`GoFilamentAdmin(pages: panelAppPages)`" + `.
 final List<AdminPage> panelAppPages = panelPages(const PanelPageBuilders(`)
 	if len(g.snap.pages) == 0 {
 		b.WriteString("));\n")
+		g.componentsRegistry(&b)
 		return b.String()
 	}
 	b.WriteString("\n")
@@ -111,6 +115,7 @@ final List<AdminPage> panelAppPages = panelPages(const PanelPageBuilders(`)
 	for i, p := range g.snap.pages {
 		fmt.Fprintf(&b, "\nWidget _%s(BuildContext context, AdminController admin) =>\n    %s(admin: admin);\n", members[i], PageClass(p.ID))
 	}
+	g.componentsRegistry(&b)
 	return b.String()
 }
 

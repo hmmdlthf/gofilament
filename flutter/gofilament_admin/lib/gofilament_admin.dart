@@ -10,6 +10,7 @@ library;
 
 export 'src/api.dart';
 export 'src/cells.dart';
+export 'src/components.dart';
 export 'src/app.dart';
 export 'src/controller.dart';
 export 'src/dashboard.dart';

@@ -76,6 +76,12 @@ class FakePanel {
       client: MockClient(_handle),
       store: MemorySessionStore());
 
+  /// Extra items form fields, item columns and dashboard widgets (custom
+  /// component tests).
+  List<Map<String, dynamic>> extraFormFields = [];
+  List<Map<String, dynamic>> extraColumns = [];
+  List<Map<String, dynamic>> extraWidgets = [];
+
   /// Pages the server lists in `client_pages`.
   List<String> clientPages = const [];
 
@@ -390,6 +396,7 @@ class FakePanel {
           },
         ],
       },
+      ...extraFormFields,
     ];
     if (id == null) {
       if (!canCreate) {
@@ -431,6 +438,7 @@ class FakePanel {
             },
           ],
         },
+        ...extraWidgets,
       ];
 
   Map<String, dynamic> _schema() => {
@@ -492,6 +500,7 @@ class FakePanel {
                 'type': 'text',
                 'toggled_hidden_by_default': true
               },
+              ...extraColumns,
             ],
             'filters': [
               {

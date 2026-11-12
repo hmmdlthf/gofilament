@@ -209,6 +209,7 @@ class SalesOrderInput {
     this.shippedAt,
     this.tags,
     this.meta,
+    this.signature,
     this.lines,
     this.extra = const <String, dynamic>{},
   });
@@ -223,6 +224,7 @@ class SalesOrderInput {
         shippedAt: GfJson.dateTime(json['shipped_at']),
         tags: GfJson.list(json['tags'], (e) => GfJson.string(e) ?? ''),
         meta: GfJson.map(json['meta']),
+        signature: GfJson.string(json['signature']),
         lines: GfJson.list(json['lines'], (e) => GfJson.object(e, SalesOrderInputLinesItem.fromJson) ?? SalesOrderInputLinesItem.fromJson(const <String, dynamic>{})),
       );
 
@@ -244,6 +246,8 @@ class SalesOrderInput {
   final List<String>? tags;
   /// Meta (key_value).
   final Map<String, dynamic>? meta;
+  /// Customer signature (custom).
+  final String? signature;
   /// Lines.
   final List<SalesOrderInputLinesItem>? lines;
 
@@ -260,6 +264,7 @@ class SalesOrderInput {
         if (shippedAt != null) 'shipped_at': shippedAt?.toUtc().toIso8601String(),
         if (tags != null) 'tags': tags,
         if (meta != null) 'meta': meta,
+        if (signature != null) 'signature': signature,
         if (lines != null) 'lines': lines?.map((e) => e.toJson()).toList(),
         ...extra,
       };
@@ -298,18 +303,22 @@ class SalesOrderRefundInput {
   const SalesOrderRefundInput({
     this.amount,
     this.reason,
+    this.approval,
     this.extra = const <String, dynamic>{},
   });
 
   factory SalesOrderRefundInput.fromJson(Map<String, dynamic> json) => SalesOrderRefundInput(
         amount: GfJson.number(json['amount']),
         reason: GfJson.string(json['reason']),
+        approval: GfJson.string(json['approval']),
       );
 
   /// Amount (required; number).
   final num? amount;
   /// Reason (textarea).
   final String? reason;
+  /// Approval (required; custom).
+  final String? approval;
 
   /// Sent as well, after the fields above (overrides them).
   final Map<String, dynamic> extra;
@@ -317,6 +326,7 @@ class SalesOrderRefundInput {
   Map<String, dynamic> toJson() => <String, dynamic>{
         if (amount != null) 'amount': amount,
         if (reason != null) 'reason': reason,
+        if (approval != null) 'approval': approval,
         ...extra,
       };
 }
@@ -437,5 +447,82 @@ class CgCloseTill {
         ...raw,
         'counted': counted,
         'note': note,
+      };
+}
+
+/// The props of the `signature_pad` field component, inferred from the values set in Go.
+class SignaturePadFieldProps {
+  const SignaturePadFieldProps({
+    this.height = 0,
+    this.penColor = '',
+    this.clearable,
+    this.raw = const <String, dynamic>{},
+  });
+
+  factory SignaturePadFieldProps.fromJson(Map<String, dynamic> json) => SignaturePadFieldProps(
+        height: GfJson.integer(json['height']) ?? 0,
+        penColor: GfJson.string(json['pen_color']) ?? '',
+        clearable: GfJson.boolean(json['clearable']),
+        raw: json,
+      );
+
+  final int height;
+  final String penColor;
+  final bool? clearable;
+
+  /// The JSON the record was read from, including fields not modelled here.
+  final Map<String, dynamic> raw;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        ...raw,
+        'height': height,
+        'pen_color': penColor,
+        'clearable': clearable,
+      };
+}
+
+/// The props of the `paid_badge` cell component, inferred from the values set in Go.
+class PaidBadgeCellProps {
+  const PaidBadgeCellProps({
+    this.tone = '',
+    this.raw = const <String, dynamic>{},
+  });
+
+  factory PaidBadgeCellProps.fromJson(Map<String, dynamic> json) => PaidBadgeCellProps(
+        tone: GfJson.string(json['tone']) ?? '',
+        raw: json,
+      );
+
+  final String tone;
+
+  /// The JSON the record was read from, including fields not modelled here.
+  final Map<String, dynamic> raw;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        ...raw,
+        'tone': tone,
+      };
+}
+
+/// The props of the `sales_total` widget component, inferred from the values set in Go.
+class SalesTotalWidgetProps {
+  const SalesTotalWidgetProps({
+    this.currency = '',
+    this.raw = const <String, dynamic>{},
+  });
+
+  factory SalesTotalWidgetProps.fromJson(Map<String, dynamic> json) => SalesTotalWidgetProps(
+        currency: GfJson.string(json['currency']) ?? '',
+        raw: json,
+      );
+
+  final String currency;
+
+  /// The JSON the record was read from, including fields not modelled here.
+  final Map<String, dynamic> raw;
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        ...raw,
+        'currency': currency,
       };
 }

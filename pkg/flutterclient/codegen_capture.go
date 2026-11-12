@@ -24,6 +24,14 @@ type panelSnapshot struct {
 	resources []resourceSnapshot
 	pages     []filament.FlutterPageInfo
 	endpoints []*filament.ClientEndpoint
+	// relationColumns are the column DTOs of every relation (decoded JSON).
+	relationColumns []any
+	widgets         []widgetSnapshot
+}
+
+type widgetSnapshot struct {
+	component string
+	props     any
 }
 
 type resourceSnapshot struct {
@@ -139,7 +147,11 @@ func capturePanel(p *filament.Panel, user auth.Authenticatable) (*panelSnapshot,
 			if rt, ok := rel.(recordTyper); ok {
 				r.recordType = rt.RecordType()
 			}
-			r.hasForm, _ = rel.GetAPISchema()["has_form"].(bool)
+			apiSchema := rel.GetAPISchema()
+			r.hasForm, _ = apiSchema["has_form"].(bool)
+			if cols, ok := apiSchema["columns"]; ok {
+				snap.relationColumns = append(snap.relationColumns, toGeneric(cols))
+			}
 			if d, ok := rel.(interface {
 				DescribeForm(ctx *filament.Context) []forms.Node
 			}); ok && r.hasForm {
@@ -148,6 +160,15 @@ func capturePanel(p *filament.Panel, user auth.Authenticatable) (*panelSnapshot,
 			rs.relations = append(rs.relations, r)
 		}
 		snap.resources = append(snap.resources, rs)
+	}
+
+	for _, w := range p.GetWidgets() {
+		if fw, ok := w.(interface {
+			GetComponent() string
+			GetProps() any
+		}); ok {
+			snap.widgets = append(snap.widgets, widgetSnapshot{component: fw.GetComponent(), props: fw.GetProps()})
+		}
 	}
 
 	for _, pg := range p.GetPages() {

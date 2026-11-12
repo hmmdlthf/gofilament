@@ -93,7 +93,7 @@ class SalesOrdersClient {
   static const String slug = 'sales-orders';
 
   /// Table columns, in display order.
-  static const List<String> columns = <String>['number', 'total'];
+  static const List<String> columns = <String>['number', 'total', 'paid'];
 
   /// One page of records with the per-row abilities the server granted.
   Future<TypedPage<SalesOrder>> list({

@@ -80,12 +80,15 @@ import 'generated/registry.g.dart';
 import 'generated/schema.g.dart';
 
 // lib/generated is written by gofilament (filament:flutter-generate); your
-// pages live in lib/pages, one per filament.FlutterPage declared in Go.
+// pages live in lib/pages (filament.FlutterPage) and your field, cell and
+// dashboard widget components in lib/components (forms.Custom,
+// tables.CustomColumn, filament.FlutterWidget).
 void main() {
   runApp(GoFilamentAdmin(
     api: AdminApi(fallbackPanelPath: '%s'),
     initialSchema: panelSchema,
     pages: panelAppPages,
+    components: panelComponents,
   ));
 }
 `, o.FallbackPanelPath)

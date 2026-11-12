@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'components.dart';
 import 'theme.dart';
 
 /// Where the app is in its start-up sequence.
@@ -44,12 +45,19 @@ class AdminPage {
 /// Holds the panel state: brand, theme, session and schema.
 class AdminController extends ChangeNotifier {
   AdminController(
-      {required this.api, this.pages = const [], this.initialSchema}) {
+      {required this.api,
+      this.pages = const [],
+      this.initialSchema,
+      this.components = const AdminComponents()}) {
     api.onUnauthorized = _sessionRejected;
   }
 
   final AdminApi api;
   final List<AdminPage> pages;
+
+  /// Custom field, cell and dashboard widget components by name (the
+  /// generated `panelComponents`).
+  final AdminComponents components;
 
   /// A schema snapshot compiled into the app (the generated `panelSchema`).
   /// It draws the brand and the shell at start-up without waiting for the

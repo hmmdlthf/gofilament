@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'components.dart';
 import 'controller.dart';
 import 'login.dart';
 import 'shell.dart';
@@ -20,7 +21,8 @@ class GoFilamentAdmin extends StatefulWidget {
       this.api,
       this.pages = const [],
       this.controller,
-      this.initialSchema});
+      this.initialSchema,
+      this.components = const AdminComponents()});
 
   /// API client; defaults to the panel the page was served from.
   final AdminApi? api;
@@ -32,6 +34,10 @@ class GoFilamentAdmin extends StatefulWidget {
   /// so the first frame needs no network. Permissions still come from the
   /// live schema.
   final Map<String, dynamic>? initialSchema;
+
+  /// Custom field, cell and dashboard widget components (the generated
+  /// `panelComponents`).
+  final AdminComponents components;
 
   /// Supply your own controller to drive the app from outside (tests, embedding).
   final AdminController? controller;
@@ -45,7 +51,8 @@ class _GoFilamentAdminState extends State<GoFilamentAdmin> {
       AdminController(
           api: widget.api ?? AdminApi(),
           pages: widget.pages,
-          initialSchema: widget.initialSchema);
+          initialSchema: widget.initialSchema,
+          components: widget.components);
 
   @override
   void initState() {

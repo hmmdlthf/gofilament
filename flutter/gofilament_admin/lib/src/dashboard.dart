@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'components.dart';
 import 'controller.dart';
 import 'icons.dart';
 import 'theme.dart';
@@ -77,6 +78,8 @@ class _DashboardPageState extends State<DashboardPage> {
           for (final w in _widgets!) ...[
             if (w['stats'] is List)
               _StatsRow(stats: (w['stats'] as List).whereType<Map>().toList()),
+            if (w['type'] == 'custom')
+              _CustomWidget(admin: widget.admin, dto: w),
             const SizedBox(height: 16),
           ],
           if (_widgets!.isEmpty)
@@ -174,6 +177,49 @@ class _StatCard extends StatelessWidget {
             ]),
           ],
         ]),
+      ),
+    );
+  }
+}
+
+/// A dashboard widget drawn by an app component (filament.FlutterWidget).
+class _CustomWidget extends StatelessWidget {
+  const _CustomWidget({required this.admin, required this.dto});
+
+  final AdminController admin;
+  final Map<String, dynamic> dto;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final heading = '${dto['heading'] ?? ''}';
+    final builder = admin.components.widgets['${dto['component']}'];
+    final Widget body;
+    if (dto['error'] != null) {
+      body = Text('${dto['error']}',
+          style: TextStyle(color: theme.colorScheme.error));
+    } else if (builder == null) {
+      body = Text('This widget is not available in this app.',
+          style: TextStyle(color: theme.colorScheme.onSurfaceVariant));
+    } else {
+      body = builder(context, AdminWidgetContext(admin: admin, widget: dto));
+    }
+    return Card(
+      key: Key('widget-${dto['id']}'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (heading.isNotEmpty) ...[
+              Text(heading,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 12),
+            ],
+            body,
+          ],
+        ),
       ),
     );
   }

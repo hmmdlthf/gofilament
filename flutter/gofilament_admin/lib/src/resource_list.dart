@@ -804,7 +804,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
     return adminCell(context, column, row,
         onToggle: (name, v) => _toggleCell(row, name, v),
         onNotice: _toast,
-        currency: '${admin.schema['currency'] ?? ''}');
+        currency: '${admin.schema['currency'] ?? ''}',
+        admin: admin);
   }
 
   Widget _pagination(BuildContext context) {

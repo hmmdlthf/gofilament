@@ -794,7 +794,7 @@ have no file yet:
 | `models.g.dart` | a class per resource record, built from the Go record type (`fromJson` / `toJson`, unknown keys kept in `raw`); an `…Input` class per form, relation form and action form; classes for endpoint request / response types |
 | `client.g.dart` | `PanelClient`: `list` / `find` / `create` / `update` / `delete` / `run<Action>` per resource, a client per relation, and a typed method per `filament.Endpoint` |
 | `pages.g.dart` | `panelPages(PanelPageBuilders(...))`: the `AdminPage`s of every `filament.FlutterPage`, with one **required** builder each |
-| `registry.g.dart` | `panelAppPages`: those pages built from your files in `lib/pages` |
+| `registry.g.dart` | `panelAppPages` and `panelComponents`: your pages and components from `lib/pages` and `lib/components` |
 
 #### `resources/flutter`: your Dart lives next to your Go
 
@@ -805,6 +805,9 @@ project, and hand-written Dart has a fixed place in it:
 resources/flutter/
   lib/main.dart                 ← written once by make:filament-flutter-app
   lib/pages/pos_page.dart       ← yours: class PosPage, one file per filament.FlutterPage("pos", ...)
+  lib/components/fields/signature_pad_field.dart    ← class SignaturePadField: forms.Custom(name, "signature_pad")
+  lib/components/cells/paid_badge_cell.dart         ← class PaidBadgeCell: tables.CustomColumn(name, "paid_badge")
+  lib/components/widgets/sales_total_widget.dart    ← class SalesTotalWidget: filament.FlutterWidget(id, "sales_total")
   lib/generated/*.g.dart        ← generator only (DO NOT EDIT)
 ```
 
@@ -821,6 +824,42 @@ page in Go and regenerating creates that file once if it is missing; the
 generator never changes an existing page. A page file that does not define its
 class stops generation with a clear error, and `--check` lists pages that have
 no file yet.
+
+#### Custom field, cell and dashboard components
+
+When a built-in input or cell is not enough, name a Flutter component in Go
+and write it once in Dart:
+
+```go
+forms.Custom("signature", "signature_pad").Required().
+    Props(map[string]any{"pen_color": "#112233", "height": 160}).
+    Rule(func(ctx context.Context, v any) string { /* server-side check */ return "" })
+
+tables.CustomColumn[*Order]("paid", "paid_badge").Props(BadgeProps{Tone: "success"})
+
+panel.Widget(filament.FlutterWidget("sales", "sales_total").Heading("Sales today").
+    Data(func(ctx *filament.Context) (any, error) { return salesToday(ctx) }).
+    Visible(func(ctx *filament.Context) bool { return isManager(ctx) }))
+```
+
+The generator creates `lib/components/<kind>s/<name>_<kind>.dart` with class
+`<Name>Field` / `<Name>Cell` / `<Name>Widget` once, a typed
+`<Name><Kind>Props` class in `models.g.dart` (inferred from the props values
+set in Go: a key is non-null only when every use sets it, and keeps its type
+only when every use agrees), and `panelComponents` in `registry.g.dart` for
+`GoFilamentAdmin(components: panelComponents)`.
+
+| Component | Receives | Server keeps |
+|---|---|---|
+| field | `AdminFieldContext`: `value`, `onChanged(v)`, `enabled`, `required`, `errorText`, `props` | Required / RequiredOnCreate / Disabled / Visible and your `Rule` on every save |
+| cell | `AdminCellContext`: `value`, the whole `row`, `props` | what the list endpoint returns for the user |
+| widget | `AdminWidgetContext`: `data` from `Data(...)` for this user, `heading`, `props` | `Visible`, and `Data` runs per request |
+
+A component missing from the app falls back to a read-only value (cells), a
+"not available in this app" note (fields, widgets). The web engine shows
+custom fields and cells as read-only values and does not show Flutter widgets.
+Avoid component names whose class would clash with Flutter's own (for example
+`text` → `TextField`).
 
 ```dart
 void main() => runApp(GoFilamentAdmin(

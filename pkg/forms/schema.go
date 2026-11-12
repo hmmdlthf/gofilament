@@ -67,6 +67,10 @@ type Node struct {
 	// (OptionsUsing) rather than declared, so they may change between requests.
 	DynamicOptions bool `json:"dynamic_options,omitempty"`
 
+	// Component / Props: a field drawn by a Flutter field component (Custom).
+	Component string `json:"component,omitempty"`
+	Props     any    `json:"props,omitempty"`
+
 	// files
 	Accept   []string `json:"accept,omitempty"`
 	MaxFiles int      `json:"max_files,omitempty"`
@@ -186,6 +190,10 @@ func describe(ctx context.Context, c Component) (Node, bool) {
 	case *ColorPickerField:
 		n := baseNode(&f.BaseField, "color")
 		n.Presets = f.presets
+		return n, true
+	case *CustomField:
+		n := baseNode(&f.BaseField, "custom")
+		n.Component, n.Props = f.component, f.props
 		return n, true
 	case *HiddenField:
 		return baseNode(&f.BaseField, "hidden"), true

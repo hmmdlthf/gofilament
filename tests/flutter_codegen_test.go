@@ -114,6 +114,14 @@ func newCodegenPanel(t *testing.T) *filament.Panel {
 				forms.DateTimePicker("shipped_at"),
 				forms.TagsInput("tags"),
 				forms.KeyValue("meta"),
+				forms.Custom("signature", "signature_pad").Label("Customer signature").
+					Props(map[string]any{"pen_color": "#112233", "height": 160}).
+					Rule(func(ctx context.Context, v any) string {
+						if s, _ := v.(string); !strings.HasPrefix(s, "data:image/png") {
+							return "Sign in the box."
+						}
+						return ""
+					}),
 			),
 			forms.Repeater("lines").Schema(
 				forms.TextInput("sku").Required(),
@@ -125,12 +133,16 @@ func newCodegenPanel(t *testing.T) *filament.Panel {
 		return tb.Columns(
 			tables.TextColumn[*cgOrder]("number"),
 			tables.TextColumn[*cgOrder]("total").Money("LKR"),
+			tables.CustomColumn[*cgOrder]("paid", "paid_badge").Label("Paid").Props(struct {
+				Tone string `json:"tone"`
+			}{Tone: "success"}),
 		).Actions(
 			tables.Action[*cgOrder]("mark_paid").Label("Mark paid").
 				Handle(func(ctx context.Context, o *cgOrder, data map[string]any) error { return nil }),
 			tables.Action[*cgOrder]("refund").Label("Refund").
 				Form(func(f *forms.Form) *forms.Form {
-					return f.Schema(forms.TextInput("amount").Numeric().Required(), forms.Textarea("reason"))
+					return f.Schema(forms.TextInput("amount").Numeric().Required(), forms.Textarea("reason"),
+						forms.Custom("approval", "signature_pad").Required().Props(map[string]any{"pen_color": "#ff0000", "height": 80, "clearable": true}))
 				}).
 				Handle(func(ctx context.Context, o *cgOrder, data map[string]any) error { return nil }),
 		)
@@ -158,6 +170,10 @@ func newCodegenPanel(t *testing.T) *filament.Panel {
 			filament.FlutterPage("stock-take", "Stock take").Group("Sales").
 				Visible(func(ctx *filament.Context) bool { return ctx.Query("no_stock") == "" }),
 		).
+		Widget(filament.FlutterWidget("sales", "sales_total").Heading("Sales today").
+			Props(map[string]any{"currency": "LKR"}).
+			Data(func(ctx *filament.Context) (any, error) { return map[string]any{"total": 1250.5}, nil }).
+			Visible(func(ctx *filament.Context) bool { return ctx.Query("no_sales") == "" })).
 		Endpoints(
 			filament.Endpoint("salesSummary", "GET", "/pos/tills/:till/summary",
 				func(ctx *filament.Context, q cgSummaryQuery) (cgSummary, error) {
@@ -229,8 +245,14 @@ func TestFlutterCodegenWritesAndChecks(t *testing.T) {
 
 	p := newCodegenPanel(t)
 	stale, err := flutterclient.CheckFromPanel(p, dir, flutterclient.GenerateOptions{})
-	if err != nil || len(stale) != 6 || stale[0] != "lib/pages/stock_take_page.dart (missing page)" {
-		t.Fatalf("before generating: 5 generated files and the stock-take page are missing: %v %v", stale, err)
+	want := []string{
+		"lib/components/cells/paid_badge_cell.dart (missing)",
+		"lib/components/fields/signature_pad_field.dart (missing)",
+		"lib/components/widgets/sales_total_widget.dart (missing)",
+		"lib/pages/stock_take_page.dart (missing)",
+	}
+	if err != nil || len(stale) != 9 || fmt.Sprint(stale[:4]) != fmt.Sprint(want) {
+		t.Fatalf("before generating: 5 generated files, 3 components and the stock-take page are missing: %v %v", stale, err)
 	}
 	if err := flutterclient.GenerateFromPanel(p, dir, flutterclient.GenerateOptions{}); err != nil {
 		t.Fatal(err)
@@ -257,6 +279,17 @@ func TestFlutterCodegenWritesAndChecks(t *testing.T) {
 	if len(entries) != 5 {
 		t.Fatalf("expected exactly the 5 generated files, got %d", len(entries))
 	}
+
+	if b, err := os.ReadFile(filepath.Join(dir, "lib", "components", "fields", "signature_pad_field.dart")); err != nil ||
+		!strings.Contains(string(b), "class SignaturePadField extends StatelessWidget") ||
+		!strings.Contains(string(b), "SignaturePadFieldProps get props") {
+		t.Fatalf("field component stub: %v\n%s", err, b)
+	}
+	_ = os.WriteFile(filepath.Join(dir, "lib", "components", "cells", "paid_badge_cell.dart"), []byte("class Other {}\n"), 0o644)
+	if err := flutterclient.GenerateFromPanel(newCodegenPanel(t), dir, flutterclient.GenerateOptions{}); err == nil || !strings.Contains(err.Error(), "must define class PaidBadgeCell") {
+		t.Fatalf("expected a missing-class error for a component, got %v", err)
+	}
+	_ = os.Remove(filepath.Join(dir, "lib", "components", "cells", "paid_badge_cell.dart"))
 
 	// a page file without its class is an error, not a broken build
 	_ = os.WriteFile(pos, []byte("class Till {}\n"), 0o644)
@@ -342,6 +375,23 @@ func TestTypedEndpointsAndFlutterPages(t *testing.T) {
 		t.Fatalf("a hidden Flutter page must not be listed: %v", got)
 	}
 
+	// custom components: DTOs, server rules and per-user widget data
+	_, schema = relDo(t, app, "GET", "/admin/api/schema", "good", nil)
+	if got := fmt.Sprint(schema["widgets"]); !strings.Contains(got, "sales_total") || !strings.Contains(got, "1250.5") {
+		t.Fatalf("custom widget DTO: %v", got)
+	}
+	_, w := relDo(t, app, "GET", "/admin/api/widgets?no_sales=1", "good", nil)
+	if strings.Contains(fmt.Sprint(w["widgets"]), "sales_total") {
+		t.Fatalf("a hidden custom widget must not be sent: %v", w)
+	}
+	_, form := relDo(t, app, "GET", "/admin/api/resources/sales-orders/form", "good", nil)
+	if got := fmt.Sprint(form["schema"]); !strings.Contains(got, "component:signature_pad") || !strings.Contains(got, "pen_color") {
+		t.Fatalf("custom field node: %v", got)
+	}
+	if code, out := relDo(t, app, "POST", "/admin/api/resources/sales-orders", "good", map[string]any{"number": "SO-9", "signature": "scribble"}); code != 422 || out["errors"].(map[string]any)["signature"] != "Sign in the box." {
+		t.Fatalf("custom field Rule: %d %v", code, out)
+	}
+
 	// The generator's in-process identity is not reachable over HTTP.
 	if code, _ := relDo(t, app, "GET", "/admin/api/schema", "", nil); code != 401 {
 		t.Fatalf("schema without a token: %d", code)
@@ -369,6 +419,11 @@ func TestFlutterCodegenSampleApp(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "lib", "pages", "pos_page.dart"), []byte(samplePosPage), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	field := filepath.Join(dir, "lib", "components", "fields", "signature_pad_field.dart")
+	_ = os.MkdirAll(filepath.Dir(field), 0o755)
+	if err := os.WriteFile(field, []byte(sampleSignatureField), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := flutterclient.GenerateFromPanel(newCodegenPanel(t), dir, flutterclient.GenerateOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -387,6 +442,31 @@ func TestFlutterCodegenSampleApp(t *testing.T) {
 		}
 	}
 }
+
+const sampleSignatureField = `import 'package:flutter/material.dart';
+import 'package:gofilament_admin/gofilament_admin.dart';
+
+import '../../generated/models.g.dart';
+
+class SignaturePadField extends StatelessWidget {
+  const SignaturePadField({super.key, required this.field});
+
+  final AdminFieldContext field;
+
+  SignaturePadFieldProps get props => SignaturePadFieldProps.fromJson(field.props);
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: props.height.toDouble(),
+        child: OutlinedButton(
+          onPressed: field.enabled
+              ? () => field.onChanged('data:image/png;base64,AAAA')
+              : null,
+          child: Text(field.value == null ? 'Sign (${props.penColor})' : 'Signed'),
+        ),
+      );
+}
+`
 
 const sampleTest = `import 'package:codegen_sample/generated/models.g.dart';
 import 'package:codegen_sample/generated/pages.g.dart';
@@ -441,6 +521,12 @@ void main() {
         pos: (_, __) => const SizedBox(), stockTake: (_, __) => const SizedBox()));
     expect(pages.map((p) => p.id), ['pos', 'stock-take']);
     expect(panelAppPages.map((p) => p.label), ['Point of sale', 'Stock take']);
+    expect(panelComponents.fields.keys, ['signature_pad']);
+    expect(panelComponents.cells.keys, ['paid_badge']);
+    expect(panelComponents.widgets.keys, ['sales_total']);
+    final props = SignaturePadFieldProps.fromJson(<String, dynamic>{'pen_color': '#000', 'height': 90});
+    expect(props.height, 90);
+    expect(props.clearable, isNull);
     expect(pages.every((p) => p.serverControlled), isTrue);
   });
 }

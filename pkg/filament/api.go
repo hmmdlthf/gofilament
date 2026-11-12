@@ -1120,6 +1120,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 func (p *Panel) EvaluateWidgetDTOs(ctx *Context) []map[string]any {
 	var widgetData []map[string]any
 	for _, w := range p.widgets {
+		if v, ok := w.(interface{ CanView(ctx *Context) bool }); ok && !v.CanView(ctx) {
+			continue
+		}
 		dto := map[string]any{
 			"id":          w.ID(),
 			"sort":        w.Sort(),

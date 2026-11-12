@@ -305,6 +305,10 @@ func (v *validator) check(c Component, b *BaseField, val any) string {
 		if !ok || !parsesAsClock(s) {
 			return label + " must be a valid time."
 		}
+	case *CustomField:
+		if f.rule != nil {
+			return f.rule(v.ctx, val)
+		}
 	case *TagsInputField:
 		tags, ok := toStrings(val)
 		if !ok {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api.dart';
+import 'components.dart';
 import 'controller.dart';
 import 'format.dart';
 import 'relations.dart';
@@ -204,7 +205,9 @@ class _ResourceFormState extends State<ResourceForm> {
           const {'file', 'image', 'key_value'}.contains(type)) {
         continue;
       }
-      if (_textTypes.contains(type)) {
+      if (type == 'custom') {
+        data[name] = _values[name];
+      } else if (_textTypes.contains(type)) {
         final text = _text[name]?.text ?? '';
         if (type == 'password' && text.isEmpty) continue; // unchanged
         if (type == 'number') {
@@ -538,6 +541,40 @@ class _ResourceFormState extends State<ResourceForm> {
             : null;
 
     if (type == 'hidden') return null;
+
+    if (type == 'custom') {
+      final builder = widget.admin.components.fields['${f['component']}'];
+      if (builder == null) {
+        return _unsupported(
+            context, label, 'This field is not available in this app.');
+      }
+      return FormField<dynamic>(
+        key: Key('field-$name'),
+        validator: (_) {
+          final v = _values[name];
+          final empty = v == null ||
+              (v is String && v.trim().isEmpty) ||
+              (v is List && v.isEmpty) ||
+              (v is Map && v.isEmpty);
+          return required && empty ? '$label is required' : null;
+        },
+        builder: (state) => builder(
+          context,
+          AdminFieldContext(
+            admin: widget.admin,
+            node: f,
+            value: _values[name],
+            enabled: enabled,
+            required: required,
+            errorText: state.errorText,
+            onChanged: (v) {
+              setState(() => _values[name] = v);
+              state.didChange(v);
+            },
+          ),
+        ),
+      );
+    }
 
     if (_textTypes.contains(type)) {
       final multiline =

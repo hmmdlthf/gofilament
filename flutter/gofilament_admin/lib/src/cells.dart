@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'components.dart';
+import 'controller.dart';
 import 'format.dart';
 import 'theme.dart';
 
@@ -13,6 +15,7 @@ Widget adminCell(
   void Function(String column, bool value)? onToggle,
   void Function(String message)? onNotice,
   String currency = '',
+  AdminController? admin,
 }) {
   final theme = Theme.of(context);
   final palette = AdminPalette.of(context);
@@ -21,6 +24,15 @@ Widget adminCell(
   final value = valueAt(row, name);
 
   switch ('${column['type']}') {
+    case 'custom':
+      final builder = admin?.components.cells['${column['component']}'];
+      if (builder != null) {
+        return builder(
+            context,
+            AdminCellContext(
+                admin: admin, column: column, row: row, value: value));
+      }
+      return Text(displayValue(value));
     case 'toggle':
       return Switch(
         key: Key('cell-$name-${recordId(row)}'),

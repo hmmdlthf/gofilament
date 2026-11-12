@@ -67,11 +67,12 @@ func GenerateFromPanel(p *filament.Panel, appDir string, o GenerateOptions) erro
 	if err != nil {
 		return err
 	}
-	files, err := newGenerator(snap, o).render()
+	g := newGenerator(snap, o)
+	files, err := g.render()
 	if err != nil {
 		return err
 	}
-	stubs, err := pageStubs(snap, appDir, o.PackageImport)
+	stubs, err := g.stubs(appDir)
 	if err != nil {
 		return err
 	}
@@ -109,17 +110,18 @@ func CheckFromPanel(p *filament.Panel, appDir string, o GenerateOptions) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	files, err := newGenerator(snap, o).render()
+	g := newGenerator(snap, o)
+	files, err := g.render()
 	if err != nil {
 		return nil, err
 	}
-	stubs, err := pageStubs(snap, appDir, o.PackageImport)
+	stubs, err := g.stubs(appDir)
 	if err != nil {
 		return nil, err
 	}
 	var stale []string
 	for _, name := range sortedKeys(stubs) {
-		stale = append(stale, name+" (missing page)")
+		stale = append(stale, name+" (missing)")
 	}
 	for _, name := range sortedKeys(files) {
 		old, err := os.ReadFile(filepath.Join(appDir, name))
@@ -152,4 +154,21 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// stubs lists the page and component files to create in appDir (after
+// render), or the first existing one that cannot be used.
+func (g *generator) stubs(appDir string) (map[string]string, error) {
+	pages, err := pageStubs(g.snap, appDir, g.o.PackageImport)
+	if err != nil {
+		return nil, err
+	}
+	comps, err := componentStubs(g.components, appDir, g.o.PackageImport)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range comps {
+		pages[k] = v
+	}
+	return pages, nil
 }
