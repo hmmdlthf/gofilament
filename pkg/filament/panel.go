@@ -865,6 +865,11 @@ func (p *Panel) resolveUser(c *gcontext.Context) *Context {
 			c.Set(auth.ContextUserKey, u)
 		}
 	}
+	// NewContext resolved the tenant before the user was known; resolve it
+	// again so a TenantLoader that lists the user's memberships sees them.
+	if ctx.User() != nil && p.tenantConfig != nil && p.tenantConfig.Enabled {
+		p.ResolveTenant(ctx)
+	}
 	return ctx
 }
 
@@ -1172,11 +1177,15 @@ func (p *Panel) Mount(r *router.Router) {
 						}
 					}
 				}
+				if targetTenant == nil && p.tenantConfig.TenantLoader != nil {
+					// Not one of the user's tenants: refuse the switch.
+					return c.String(http.StatusForbidden, "403 Forbidden: Unknown tenant")
+				}
 				if targetTenant == nil {
 					targetTenant = &TenantItem{Key: targetKey, Name: targetKey}
 				}
 
-				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", false, true)
+				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", isSecureRequest(c), true)
 
 				ctx.setTenantInstance(targetTenant)
 
