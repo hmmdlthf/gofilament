@@ -1380,9 +1380,15 @@ func (p *Panel) Mount(r *router.Router) {
 		})
 
 		r.GET(p.path+"/notifications/stream", func(c *gcontext.Context) error {
+			// The channel is derived from the authenticated user only; a
+			// client-supplied header must never pick whose stream is read.
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
 			user := "all"
-			if authUser := c.Header("X-User-ID"); authUser != "" {
-				user = authUser
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
 			}
 			channel := "filament:notifications:" + user
 			c.Request.URL.RawQuery = "channel=" + channel
