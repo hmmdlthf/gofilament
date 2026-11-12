@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+- **GET delete / restore / logout from outside the panel** (scripts, bookmarks, old browsers without `Sec-Fetch-Site`) now gets a confirmation page instead of acting. Use POST for programmatic calls.
+
+### Security
+- **Cross-site requests**: every state-changing web (non-API) panel request now goes through `net/http.CrossOriginProtection` (Sec-Fetch-Site / Origin), so a form on another site can no longer create, edit, delete, bulk-act or run actions. Non-browser clients that send neither header are unaffected. `Panel.TrustedOrigins(...)` allows extra origins.
+- **GET deletes and logout**: delete, restore, force-delete, relation-delete and logout links act on GET only when the browser reports `Sec-Fetch-Site: same-origin`. Any other GET shows a confirmation page that POSTs, because SameSite=Lax cookies are sent on cross-site top-level GETs.
+- **Notification stream**: `GET <panel>/notifications/stream` required no access check and took the user from a client-sent `X-User-ID` header, so anyone could read anyone's notifications. It now requires panel access and uses the authenticated user.
+- **Tenancy**: the tenant was resolved before the user, so a `TenantLoader` that filters by membership saw no user, and any tenant key in a cookie or header was accepted. It is now resolved again once the user is known. With a `TenantLoader`, switching to a tenant it does not list answers 403. The tenant cookie is `Secure` on HTTPS.
+- **Open redirects**: locale and tenant switches redirected to any `Referer`. They now only return to a path on the same host.
+
 ## [v1.30.0] - 2026-11-13
 
 ### Breaking
