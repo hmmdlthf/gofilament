@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'chart.dart';
 import 'components.dart';
 import 'controller.dart';
 import 'icons.dart';
@@ -80,6 +81,11 @@ class _DashboardPageState extends State<DashboardPage> {
               _StatsRow(stats: (w['stats'] as List).whereType<Map>().toList()),
             if (w['type'] == 'custom')
               _CustomWidget(admin: widget.admin, dto: w),
+            if (w['type'] == 'chart')
+              AdminChartCard(
+                  key: ValueKey('chart-card-${w['id']}'),
+                  admin: widget.admin,
+                  dto: w),
             const SizedBox(height: 16),
           ],
           if (_widgets!.isEmpty)

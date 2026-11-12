@@ -82,6 +82,11 @@ class FakePanel {
   List<Map<String, dynamic>> extraColumns = [];
   List<Map<String, dynamic>> extraWidgets = [];
 
+  /// Extra JSON routes keyed by "METHOD /path" (path without /app/api).
+  Map<String, Object Function(http.Request req)> extraRoutes = {};
+
+  bool globalSearch = false;
+
   /// Pages the server lists in `client_pages`.
   List<String> clientPages = const [];
 
@@ -96,6 +101,8 @@ class FakePanel {
     requests.add(req);
     final path = req.url.path.replaceFirst('/app/api', '');
     final authed = req.headers['Authorization'] == 'Bearer token-1';
+    final extra = extraRoutes['${req.method} $path'];
+    if (extra != null && authed) return _json(extra(req));
 
     if (path == '/boot') {
       return _json({
@@ -442,6 +449,8 @@ class FakePanel {
       ];
 
   Map<String, dynamic> _schema() => {
+        'path': '/app',
+        'global_search': {'enabled': globalSearch},
         'client_pages': [
           for (final id in clientPages) {'id': id, 'label': id}
         ],

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'api.dart';
 import 'components.dart';
 import 'controller.dart';
+import 'form_editors.dart';
 import 'format.dart';
 import 'relations.dart';
 
@@ -164,6 +165,19 @@ class _ResourceFormState extends State<ResourceForm> {
           value = value is List ? value.map((e) => '$e').toList() : <String>[];
         }
         if (type == 'tags' && value is List) value = value.join(', ');
+        if (type == 'repeater') {
+          value = value is List
+              ? value
+                  .whereType<Map>()
+                  .map((m) => Map<String, dynamic>.from(m))
+                  .toList()
+              : <Map<String, dynamic>>[];
+        }
+        if (type == 'key_value') {
+          value = value is Map
+              ? Map<String, dynamic>.from(value)
+              : <String, dynamic>{};
+        }
         if (type == 'password') value = null; // never prefilled
         if (_textTypes.contains(type)) {
           _text[name] = TextEditingController(text: displayValue(value));
@@ -190,6 +204,9 @@ class _ResourceFormState extends State<ResourceForm> {
       if (n['kind'] == 'field' && n['name'] != null) {
         _fields.add(Map<String, dynamic>.from(n));
       }
+      if (n['kind'] == 'repeater' && n['name'] != null) {
+        _fields.add({...Map<String, dynamic>.from(n), 'type': 'repeater'});
+      }
       if (n['children'] is List && n['kind'] != 'repeater') {
         _collectFields(n['children'] as List);
       }
@@ -201,11 +218,10 @@ class _ResourceFormState extends State<ResourceForm> {
     for (final f in _fields) {
       final name = '${f['name']}';
       final type = '${f['type']}';
-      if (f['disabled'] == true ||
-          const {'file', 'image', 'key_value'}.contains(type)) {
+      if (f['disabled'] == true || const {'file', 'image'}.contains(type)) {
         continue;
       }
-      if (type == 'custom') {
+      if (const {'custom', 'repeater', 'key_value'}.contains(type)) {
         data[name] = _values[name];
       } else if (_textTypes.contains(type)) {
         final text = _text[name]?.text ?? '';
@@ -473,28 +489,39 @@ class _ResourceFormState extends State<ResourceForm> {
             children: _nodes(context, children, children.length.clamp(1, 3)));
       case 'tabs':
       case 'wizard':
-        // v1: tabs and wizard steps are shown as consecutive sections
-        return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final child in children.whereType<Map>())
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: titled(
-                      '${child['label'] ?? ''}',
-                      child['description'] as String?,
-                      _nodes(
-                          context,
-                          child['children'] is List
-                              ? child['children'] as List
-                              : const [],
-                          1)),
-                ),
-            ]);
+        final steps = children.whereType<Map>().toList();
+        return FormSteps(
+          wizard: node['kind'] == 'wizard',
+          labels: [for (final s in steps) '${s['label'] ?? s['name'] ?? ''}'],
+          children: [
+            for (final s in steps)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if ((s['description'] as String?)?.isNotEmpty == true)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Text('${s['description']}',
+                          style: theme.textTheme.bodySmall),
+                    ),
+                  ..._nodes(
+                      context,
+                      s['children'] is List ? s['children'] as List : const [],
+                      1),
+                ],
+              ),
+          ],
+        );
       case 'repeater':
-        return _unsupported(context, '${node['label'] ?? node['name']}',
-            'Repeating rows are not editable here yet.');
+        final name = '${node['name']}';
+        return RepeaterEditor(
+          node: node,
+          items: (_values[name] as List?)?.cast<Map<String, dynamic>>() ??
+              const [],
+          enabled: !_locked && node['disabled'] != true,
+          onChanged: (items) => _values[name] = items,
+        );
     }
     return null;
   }
@@ -695,6 +722,15 @@ class _ResourceFormState extends State<ResourceForm> {
             ),
           ),
         );
+    }
+
+    if (type == 'key_value') {
+      return KeyValueEditor(
+        node: f,
+        value: (_values[name] as Map?)?.cast<String, dynamic>() ?? const {},
+        enabled: enabled,
+        onChanged: (m) => _values[name] = m,
+      );
     }
 
     return _unsupported(
