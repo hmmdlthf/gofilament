@@ -23,12 +23,18 @@ type AdminAppOptions struct {
 	// FallbackPanelPath is the panel path native builds call when no base URL
 	// is configured (web builds read it from the page URL).
 	FallbackPanelPath string
+	// Overwrite rewrites files that already exist. By default only missing
+	// files are written, so re-running the generator keeps edits to
+	// lib/main.dart, pubspec.yaml, .gitignore, web/index.html, etc.
+	Overwrite bool
 }
 
 // GenerateAdminApp writes a thin Flutter application that runs the reusable
 // gofilament_admin package. Everything it shows comes from the panel API, so
 // the generated code is a few lines: it is the place to add application pages
 // (for example a point of sale screen) and nothing else.
+//
+// Existing files are left untouched unless o.Overwrite is set.
 func GenerateAdminApp(targetDir string, o AdminAppOptions) error {
 	if o.Name == "" {
 		o.Name = "admin_app"
@@ -75,7 +81,7 @@ flutter:
 
 		"analysis_options.yaml": "include: package:flutter_lints/flutter.yaml\n",
 
-		".gitignore": ".dart_tool/\nbuild/\n",
+		".gitignore": ".dart_tool/\nbuild/\n.flutter-plugins\n.flutter-plugins-dependencies\n",
 
 		"lib/main.dart": fmt.Sprintf(`import 'package:flutter/material.dart';
 import 'package:gofilament_admin/gofilament_admin.dart';
@@ -92,7 +98,7 @@ void main() {
 		"web/index.html": fmt.Sprintf(`<!DOCTYPE html>
 <html>
 <head>
-  <base href="/">
+  <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
@@ -107,6 +113,13 @@ void main() {
 
 	for name, content := range files {
 		path := filepath.Join(targetDir, name)
+		if !o.Overwrite {
+			if _, err := os.Stat(path); err == nil {
+				continue
+			} else if !os.IsNotExist(err) {
+				return err
+			}
+		}
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
 		}
