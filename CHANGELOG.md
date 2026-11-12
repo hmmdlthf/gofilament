@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Breaking
+- **CORS (`pkg/filament`)**: the panel API no longer reflects every `Origin` with `Access-Control-Allow-Credentials: true`. By default only same-origin requests get CORS headers. Allow other origins with `Panel.CORSAllowedOrigins("https://app.example.com")` (reflected with credentials), `CORSAllowedOrigins("*")` (any origin, no credentials) or `CORSAllowOriginFunc(fn)` (for example `http://localhost:*` during development). Native apps and server-to-server clients send no `Origin` and are unaffected. A Flutter web client served from another origin (such as `flutter run -d chrome`) needs one of these.
+- **`flutterclient.GenerateAdminApp`**: existing files are no longer overwritten on re-runs, so edits to `lib/main.dart`, `pubspec.yaml`, `.gitignore`, etc. are kept. Set `AdminAppOptions.Overwrite: true` for the old behaviour.
+
+### Security
+- **Web login (`pkg/filament`)**: the login form and row action forms carry a CSRF token (`_token`, double-submit cookie, compatible with golaravel's `middleware.CSRF`). New `Panel.CSRFToken` / `VerifyCSRF` for custom pages.
+
+### Added
+- **Web engine login**: `POST <panel>/login` now calls the `AuthValidator` and starts a session in an HttpOnly, SameSite=Lax cookie scoped to the panel path (`Panel.SessionCookieName()`); `GET`/`POST <panel>/logout` ends it. With a `TokenValidator` the cookie carries the validator's token and is re-validated on every request; without one, an opaque id points at an in-memory session store (lost on restart, single process). The cookie is only read outside `<panel>/api`, which stays bearer-token only.
+- **Web engine row actions**: a `tables.Action(name).Handle(...)` now links to `<base>/<id>/actions/<name>`, a confirm page (showing the action's form, if any) that POSTs, CSRF-checked, to run it. Visibility, `Authorize` and view permissions are checked as in the API. Actions without a runner keep their old link.
+- `TableAction.GetModalHeading`, `GetModalDescription`, `GetColor`.
+
+### Fixed
+- **`Panel.Middleware`** was stored but never applied. It now runs on every panel route, including `/api/*`, except static assets, the Flutter web bundle and CORS preflight. Call it before `Register` / `Mount`.
+- **Tables / infolists**: column names resolve through the struct's `json` tag and Go initialisms (`install_id` -> `InstallID`, `remote_ip` -> `RemoteIP`, `customer_id` -> `CustomerID`), so Ent entities show those fields.
+- **`flutterclient.GenerateAdminApp`**: `web/index.html` uses `<base href="$FLUTTER_BASE_HREF">`, so `flutter build web --base-href` works. The generated `.gitignore` also ignores `.flutter-plugins` and `.flutter-plugins-dependencies`.
+
 ## [v1.29.0] - 2026-11-11
 
 ### Added
