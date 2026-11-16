@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.33.0] - 2026-11-17
+
+### Added
+- **Flutter lists (`flutter/gofilament_admin`)**:
+  - **Resizable columns**: drag a header's handle to set a column's width, double-tap it to go back to automatic. Widths are remembered per resource, like the column picker.
+  - **Refined filters**: `RefinedFilter` filters open a checkbox list with the server's live counts and send the checked values (`filter_<column>=a,b`). Before, they showed as single-choice menus.
+  - **Advanced search**: resources with `AdvancedSearch(cols...)` get a rule builder (field, operator, value, match all or any) sent as `advanced_search`, which `tables.GetAdvancedSearch` parses. Export uses the same rules.
+
 ## [v1.32.0] - 2026-11-17
 
 ### Added
