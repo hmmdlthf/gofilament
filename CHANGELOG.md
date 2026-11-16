@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Range filters (`pkg/tables`)**: `DateRangeFilter` and `NumberRangeFilter`, with web inputs and a Flutter range dialog (date picker for dates). The value is `"from,to"`; `Condition` / `Rules` turn it into advanced-search rules for `BuildAdvancedSearchSQLFor`, and `Matches` checks in-memory values. New `tables.FilterValues(query)` collects a request's filter values.
+
+### Fixed
+- **Web checkbox filters**: only the first checked value of a refined filter reached the list handler. Repeated `filter_*` values are now joined with `,`, as the API and Flutter already sent them.
+
 ## [v1.33.1] - 2026-11-17
 
 ### Fixed

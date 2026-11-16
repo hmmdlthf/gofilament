@@ -685,6 +685,9 @@ class _ResourceListPageState extends State<ResourceListPage> {
 
   Widget _filterChip(BuildContext context, Map<String, dynamic> filter) {
     if (filter['type'] == 'refined') return _refinedChip(context, filter);
+    if (filter['type'] == 'date_range' || filter['type'] == 'number_range') {
+      return _rangeChip(context, filter);
+    }
     final theme = Theme.of(context);
     final column = '${filter['column'] ?? filter['name']}';
     final options = FieldOption.listFrom(filter['options']);
@@ -846,6 +849,53 @@ class _ResourceListPageState extends State<ResourceListPage> {
                   : labels.length <= 2
                       ? '$label: ${labels.join(', ')}'
                       : '$label: ${labels.length} selected',
+              style: const TextStyle(fontSize: 13)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _rangeChip(BuildContext context, Map<String, dynamic> filter) {
+    final theme = Theme.of(context);
+    final column = '${filter['column'] ?? filter['name']}';
+    final label = '${filter['label'] ?? humanize(column)}';
+    final dates = filter['type'] == 'date_range';
+    final value = _filters[column] ?? '';
+    final active = value.isNotEmpty;
+    return InkWell(
+      key: Key('filter-$column'),
+      borderRadius: BorderRadius.circular(10),
+      onTap: () async {
+        final next = await showRangeFilterDialog(context,
+            label: label, dates: dates, value: value);
+        if (next == null || !mounted) return;
+        setState(() {
+          if (next.isEmpty) {
+            _filters.remove(column);
+          } else {
+            _filters[column] = next;
+          }
+          _page = 1;
+        });
+        _load();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: active ? theme.colorScheme.primary : theme.dividerColor),
+          color:
+              active ? theme.colorScheme.primary.withValues(alpha: 0.08) : null,
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(dates ? Icons.date_range : Icons.straighten,
+              size: 16,
+              color: active
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(rangeSummary(label, value),
               style: const TextStyle(fontSize: 13)),
         ]),
       ),

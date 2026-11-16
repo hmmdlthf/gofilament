@@ -485,6 +485,7 @@ res := filament.NewResource[*Document]("documents").
 - **👁️ Dynamic Column Toggling (Show/Hide)**: Operators can customize which columns are visible via a "Columns" dropdown menu. Preferences are automatically persisted to browser `localStorage` across page visits.
 - **↕️ Drag-and-Drop Row Reordering**: Reorder records with grip handles (`⋮⋮`). Dragging a row dispatches an asynchronous update to `POST /admin/{resource}/reorder` and `POST /admin/api/resources/{slug}/reorder`, calling `r.OnReorder(func(ctx, orderedIDs) error)`.
 - **🚀 Server-Side Sorting & Filtering**: Multi-column sorting (`↑`, `↓`), search bars, `SelectFilter`, and `TernaryFilter` (soft-deletes).
+- **📅 Range filters**: `tables.DateRangeFilter("created_at")` and `tables.NumberRangeFilter("amount")` give "from / to" inputs (web) and a range dialog (Flutter). Your list handler receives `filters["created_at"] = "2026-01-01,2026-01-31"` (either side may be empty). Turn it into SQL with `f.Condition(value)` + `tables.BuildAdvancedSearchSQLFor` (the end date is inclusive), or check in-memory records with `f.Matches(value, v)`.
 - **📦 Streaming Bulk & Header Actions**: In-line View/Edit/Delete actions, multi-record delete, and streaming data export (`CSV`, `TSV`, `JSON`).
 
 ---
