@@ -790,10 +790,17 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		if err != nil {
 			return err
 		}
+		sc := p.supportCallerFor(c)
+		if ctx.User() == nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Sign in to list support tickets"})
+		}
 		filter := gosupport.TicketFilter{
 			Status:     c.Query("status"),
 			Category:   c.Query("category"),
 			Department: c.Query("department"),
+		}
+		if !sc.staff {
+			filter.UserKey = sc.key
 		}
 		if p.GetSupportScope() == "tenant_admin" || p.hasTenantScoping {
 			if tid := ctx.Tenant(); tid != "" {
@@ -863,12 +870,22 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		if req.Language == "" {
 			req.Language = gosupport.ResolveSupportLanguage(c.Request)
 		}
-		if req.TenantID == "" && ctx != nil {
-			req.TenantID = ctx.Tenant()
+		// Identity comes from the session, never from the request body:
+		// otherwise anyone could post as another user or into another tenant.
+		sc := p.supportCallerFor(c)
+		req.TenantID = ctx.Tenant()
+		req.UserID = sc.key
+		if u := ctx.User(); u != nil {
+			req.UserName = u.GetAuthIdentifier()
 		}
-		if req.UserID == "" && ctx != nil && ctx.User() != nil {
-			req.UserID = ctx.User().GetAuthIdentifier()
-			req.UserName = ctx.User().GetAuthIdentifier()
+		// An existing ticket must be one the caller may see; new tickets
+		// get a server-generated ID (clients cannot pick or guess one).
+		if req.TicketID != "" {
+			if _, _, ok := p.loadSupportTicket(c, req.TicketID); !ok {
+				return nil
+			}
+		} else {
+			req.TicketID = newSupportTicketID()
 		}
 		if req.Category == "" {
 			req.Category = gosupport.CategorySupport
@@ -974,13 +991,18 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		if language == "" {
 			language = gosupport.ResolveSupportLanguage(c.Request)
 		}
-		if tenantID == "" && ctx != nil {
-			tenantID = ctx.Tenant()
+		// Identity from the session; a voice request always opens a new
+		// ticket with a server-generated ID (a client-supplied ID could
+		// overwrite someone else's ticket).
+		sc := p.supportCallerFor(c)
+		tenantID = ctx.Tenant()
+		userID = sc.key
+		if u := ctx.User(); u != nil {
+			userName = u.GetAuthIdentifier()
+		} else {
+			userEmail = ""
 		}
-		if userID == "" && ctx != nil && ctx.User() != nil {
-			userID = ctx.User().GetAuthIdentifier()
-			userName = ctx.User().GetAuthIdentifier()
-		}
+		ticketID = newSupportTicketID()
 
 		ticket, aiReply, err := gosupport.GetDefaultService().SubmitVoiceFeatureRequest(
 			c.Request.Context(),
@@ -1013,14 +1035,23 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	// GET /support/audio/:id - Stream preserved voice recording
 	r.GET(apiPrefix+"/support/audio/:id", func(c *gcontext.Context) error {
 		p.setCorsHeaders(c)
-		ticketID := c.Param("id")
-		ticket, err := gosupport.GetDefaultStore().GetTicket(c.Request.Context(), ticketID)
-		if err != nil || ticket == nil || ticket.Voice == nil {
+		ticket, _, ok := p.loadSupportTicket(c, c.Param("id"))
+		if !ok {
+			return nil
+		}
+		if ticket.Voice == nil {
 			return c.NoContent(http.StatusNotFound)
 		}
-		c.SetHeader("Content-Type", ticket.Voice.MimeType)
+		// The MIME type came from the uploader: only ever serve audio, so a
+		// recording cannot be turned into an HTML page on this origin.
+		mime := strings.ToLower(strings.TrimSpace(ticket.Voice.MimeType))
+		if !strings.HasPrefix(mime, "audio/") || strings.ContainsAny(mime, "\r\n") {
+			mime = "application/octet-stream"
+		}
+		c.SetHeader("X-Content-Type-Options", "nosniff")
+		c.SetHeader("Content-Security-Policy", "sandbox")
 		c.SetHeader("Content-Disposition", fmt.Sprintf(`inline; filename="feature_request_%s.webm"`, ticket.ID))
-		return c.Bytes(http.StatusOK, ticket.Voice.MimeType, ticket.Voice.AudioData)
+		return c.Bytes(http.StatusOK, mime, ticket.Voice.AudioData)
 	})
 
 	// POST /support/escalate - Escalate to Live Support Agent or Super Admin Panel
@@ -1044,8 +1075,12 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 				req.Reason = v
 			}
 		}
-		if req.TicketID == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Ticket ID is required"})
+		_, sc, ok := p.loadSupportTicket(c, req.TicketID)
+		if !ok {
+			return nil
+		}
+		if req.Target == "super_admin" && !sc.staff {
+			return c.JSON(http.StatusForbidden, map[string]string{"error": "Only support staff can escalate to the super admin panel"})
 		}
 
 		if req.Target == "super_admin" {

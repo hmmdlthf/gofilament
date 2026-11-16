@@ -351,6 +351,11 @@ func (r *BaseResource[T]) SearchGlobal(ctx *Context, query string) []GlobalSearc
 	if !r.globallySearchable || r.onList == nil {
 		return nil
 	}
+	// Search shows record titles and details: apply the same access
+	// checks as the list and view pages.
+	if r.canViewAny != nil && !r.canViewAny(ctx) {
+		return nil
+	}
 
 	limit := 10
 	if r.globalSearchLimit > 0 {
@@ -373,6 +378,9 @@ func (r *BaseResource[T]) SearchGlobal(ctx *Context, query string) []GlobalSearc
 	}
 
 	for _, rec := range records {
+		if r.canView != nil && !r.canView(ctx, rec) {
+			continue
+		}
 		if r.globalResultFunc != nil {
 			res := r.globalResultFunc(rec)
 			if res.Group == "" {
@@ -1860,6 +1868,9 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 				} else {
 					row = []string{recID, fmt.Sprintf("%v", rec), "Exported from GoFilament"}
 				}
+				for i := range row {
+					row[i] = csvSafeCell(row[i])
+				}
 				_ = csvWriter.Write(row)
 			}
 		}
@@ -2218,7 +2229,9 @@ func (r *BaseResource[T]) handleReorder(ctx *Context, basePath string) error {
 			}
 		}
 	} else if rawOrderSlice, ok := data["order[]"]; ok {
-		if slice, ok := rawOrderSlice.([]string); ok {
+		if one, ok := rawOrderSlice.(string); ok && one != "" {
+			order = []string{one} // a single form value is not a slice
+		} else if slice, ok := rawOrderSlice.([]string); ok {
 			order = slice
 		} else if sliceAny, ok := rawOrderSlice.([]any); ok {
 			for _, it := range sliceAny {
@@ -2229,6 +2242,9 @@ func (r *BaseResource[T]) handleReorder(ctx *Context, basePath string) error {
 
 	if len(order) == 0 {
 		return ctx.JSON(http.StatusBadRequest, map[string]any{"error": "No order provided"})
+	}
+	if err := r.authorizeReorder(ctx, order); err != nil {
+		return ctx.JSON(http.StatusForbidden, map[string]any{"error": "Forbidden"})
 	}
 
 	if r.onReorder != nil {
@@ -2278,7 +2294,21 @@ func (r *BaseResource[T]) handleCellUpdate(ctx *Context, basePath, id string) er
 	})
 }
 
+// authorizeReorder requires edit rights on every reordered record, since
+// reordering changes them.
+func (r *BaseResource[T]) authorizeReorder(ctx *Context, ids []string) error {
+	for _, id := range ids {
+		if err := r.authorizeRecord(ctx, id, r.canEdit); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *BaseResource[T]) InvokeReorder(ctx *Context, orderedIDs []string) error {
+	if err := r.authorizeReorder(ctx, orderedIDs); err != nil {
+		return err
+	}
 	if r.onReorder != nil {
 		return r.onReorder(ctx, orderedIDs)
 	}
@@ -2338,4 +2368,17 @@ func (r *BaseResource[T]) InvokeDeleteBulk(ctx *Context, ids []string) error {
 		}
 	}
 	return r.onDeleteBulk(ctx, ids)
+}
+
+// csvSafeCell stops spreadsheet formula injection: a cell starting with
+// =, +, -, @, tab or carriage return is run as a formula by Excel and
+// friends, so it is prefixed with a quote and read as text.
+func csvSafeCell(v string) string {
+	if _, err := strconv.ParseFloat(v, 64); err == nil {
+		return v // a plain number (-2, +3.5) is not a formula
+	}
+	if v != "" && strings.ContainsRune("=+-@\t\r", rune(v[0])) {
+		return "'" + v
+	}
+	return v
 }

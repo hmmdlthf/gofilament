@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **Support API:** clients can no longer choose ticket IDs or claim `user_id` / `user_email` / `tenant_id`. Posting to a ticket that doesn't exist answers 404 instead of creating it. By default, support staff are signed-in users who pass `CanAccess`; use `Panel.SupportStaff` to narrow that.
 - **GET delete / restore / logout from outside the panel** (scripts, bookmarks, old browsers without `Sec-Fetch-Site`) now gets a confirmation page instead of acting. Use POST for programmatic calls.
 
 ### Security
@@ -18,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Notification stream**: `GET <panel>/notifications/stream` required no access check and took the user from a client-sent `X-User-ID` header, so anyone could read anyone's notifications. It now requires panel access and uses the authenticated user.
 - **Tenancy**: the tenant was resolved before the user, so a `TenantLoader` that filters by membership saw no user, and any tenant key in a cookie or header was accepted. It is now resolved again once the user is known. With a `TenantLoader`, switching to a tenant it does not list answers 403. The tenant cookie is `Secure` on HTTPS.
 - **Open redirects**: locale and tenant switches redirected to any `Referer`. They now only return to a path on the same host.
+- **Support API: tickets were open to anyone.**
+  - **Reading and writing any ticket:** `POST /support/message` took any `ticket_id`, returned the whole ticket (every message, the customer), and created a ticket under a client-chosen ID when it didn't exist.
+  - **No access check at all:** `GET /support/audio/:id` served voice recordings, and `POST /support/escalate` changed tickets.
+  - **Claimed identities:** `user_id`, `user_email` and `tenant_id` from the request body were trusted.
+  - **The fix:** identity now comes from the session (visitors are `guest`), new tickets get a 128-bit server-generated ID, and every ticket operation needs the ticket's owner or support staff in scope (`Panel.SupportStaff`). "Not yours" answers 404. Escalating to the super admin panel is staff-only, customers list only their own tickets, and recordings are only ever served as audio.
+- **Global search** listed records from every searchable resource without `CanViewAny` / `CanView`; both checks now apply.
+- **Reordering** (web and API) only checked panel access; it now needs edit rights on every reordered record.
+- **CSV export** wrote cells starting with `=`, `+`, `-` or `@` as-is (spreadsheet formula injection); such cells, other than plain numbers, are prefixed with a quote.
+- **Notification links** allow only `http(s)` and relative URLs, so a `javascript:` link can't run script.
 
 ### Changed
 - **GoLaravel v1.15.0**: fixes a 2FA bypass in its auth workflows (challenge tokens worked as access tokens), throttles logins and 2FA, and recovers panics in scheduled tasks, event listeners and queue jobs. GoFilament doesn't use those workflows.
