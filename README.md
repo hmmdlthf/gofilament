@@ -1013,6 +1013,42 @@ deprecated; existing sessions in `gofilament_web_sessions` are not carried
 over, so users sign in once more. Using a `TokenValidator` token as the web
 cookie keeps working but is superseded by `Sessions`.
 
+### 👤 Profile, password and two-factor screens
+
+`panel.Accounts(...)` turns on the web engine's account screens. Each group of
+callbacks enables one feature:
+
+```go
+panel.Accounts(filament.Accounts{
+    // Profile page (user menu → Profile)
+    Profile:       func(ctx *filament.Context, u auth.Authenticatable) (name, email string, err error) { ... },
+    UpdateProfile: func(ctx *filament.Context, u auth.Authenticatable, name, email string) error { ... },
+    // Change password (profile page) and reset password
+    PasswordHash:   func(ctx *filament.Context, u auth.Authenticatable) (string, error) { ... },
+    UpdatePassword: func(ctx *filament.Context, u auth.Authenticatable, newHash string) error { ... },
+    // Forgot password: "Forgot password?" on the sign-in page
+    FindByEmail:   func(ctx *filament.Context, email string) (auth.Authenticatable, error) { ... },
+    SendResetLink: func(ctx *filament.Context, u auth.Authenticatable, email, link string) error { ... }, // e.g. golaravel mail
+    ResetTokens:   resets, // auth.NewSQLResetTokenStore(db, dialect); default in memory
+    // Two-factor sign-in with an authenticator app (needs panel.Sessions)
+    TwoFactorSecret:     func(ctx *filament.Context, u auth.Authenticatable) (string, error) { ... },
+    SaveTwoFactorSecret: func(ctx *filament.Context, u auth.Authenticatable, secret string) error { ... },
+})
+```
+
+- Changing the password needs the current one and signs out the user's other
+  devices; a reset signs out all of them (with `panel.Sessions`).
+- Reset links are single-use, expire after `ResetTTL` (60 minutes), and the
+  page answers the same for unknown addresses. Requests are throttled.
+- With a TOTP secret saved, sign-in asks for a code after the password. Codes
+  are single-use (golaravel's cache; use a shared cache store on several
+  instances) and attempts are throttled. Turning it off needs the password.
+- The topbar now shows the signed-in user's name with the user menu
+  (Profile when available, Sign Out, and `panel.UserMenu` items).
+
+Not included yet: self-registration (`Registration()` is still only a flag),
+recovery codes, and these screens in the Flutter app.
+
 ### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
 
 By default (without `Sessions`, see above) web-engine sessions, database

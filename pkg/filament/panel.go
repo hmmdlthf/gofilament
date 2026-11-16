@@ -136,6 +136,9 @@ type Panel struct {
 	sessionStore        WebSessionStore
 	sessionUsers        UserLoader
 	sessionManager      *session.Manager
+	accounts            *Accounts
+	resetBroker         *auth.PasswordResetBroker
+	totp                *auth.TOTPManager
 	bearerGuard         auth.GuardFunc
 	widgets             []WidgetInterface
 	dashboardRenderFunc func(ctx *Context) error
@@ -193,9 +196,10 @@ func NewPanel(id string) *Panel {
 		flutterLoadingConfig:             flutter.DefaultLoadingConfig(),
 	}
 
-	// Default user menu
-	p.userMenu.Item("Profile", p.path+"/profile").Icon("heroicon-user")
-	p.userMenu.Item("Sign Out", p.path+"/logout").Icon("heroicon-arrow-left-on-rectangle").Color("danger")
+	// Default user menu (paths are relative to the panel path; Profile is
+	// shown only when the profile page is available).
+	p.userMenu.Item("Profile", "/profile").Icon("heroicon-user")
+	p.userMenu.Item("Sign Out", "/logout").Icon("heroicon-arrow-left-on-rectangle").Color("danger")
 
 	return p
 }
@@ -1288,6 +1292,7 @@ func (p *Panel) Mount(r *router.Router) {
 		// Authenticates with the AuthValidator and starts a browser session
 		// (HttpOnly, SameSite=Lax cookie; see SessionCookieName).
 		r.POST(p.path+"/login", p.handleWebLogin)
+		p.mountAccountRoutes(r)
 		logout := func(c *gcontext.Context) error {
 			if !p.checkCrossOrigin(c) {
 				return c.String(http.StatusForbidden, "403 Forbidden: cross-origin request refused")
@@ -1647,9 +1652,7 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 	}
 
 	// User menu
-	sb.WriteString(`<div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 500;">`)
-	sb.WriteString(`<span>Administrator</span>`)
-	sb.WriteString(`</div>`)
+	sb.WriteString(p.renderUserMenuHTML(ctx))
 	sb.WriteString(`</div>`)
 
 	if hook := p.renderHook(PanelsRenderHookTopbarEnd, ctx); hook != "" {
@@ -1853,6 +1856,13 @@ func (p *Panel) renderLoginScreen(ctx *Context, status int, errMsg, identifier s
 	if errMsg != "" {
 		errHTML = fmt.Sprintf(`<div class="filament-alert filament-alert-danger" role="alert" style="margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; background: #fef2f2; color: #b91c1c; font-size: 0.875rem;">%s</div>`, html.EscapeString(errMsg))
 	}
+	if errMsg == "" {
+		errHTML = alertHTML("ok", loginNotice(ctx.Context))
+	}
+	forgot := ""
+	if p.canResetPassword() {
+		forgot = fmt.Sprintf(`<a href="%s/forgot-password" style="font-size: 0.8125rem;">Forgot password?</a>`, p.path)
+	}
 	page := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s" dir="%s">
 <head>
@@ -1884,13 +1894,14 @@ func (p *Panel) renderLoginScreen(ctx *Context, status int, errMsg, identifier s
         <label style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8125rem; cursor: pointer;">
           <input type="checkbox" name="remember" value="1" /> Remember me
         </label>
+        %s
       </div>
       <button type="submit" class="btn btn-primary" style="width: 100%%;">Sign In</button>
     </form>
   </div>
   %s
 </body>
-</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, errHTML, p.path, p.csrfHiddenInput(ctx.Context, ""), html.EscapeString(identifier), p.RenderBodyEndHTML(ctx))
+</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, errHTML, p.path, p.csrfHiddenInput(ctx.Context, ""), html.EscapeString(identifier), forgot, p.RenderBodyEndHTML(ctx))
 
 	return ctx.HTML(status, page)
 }

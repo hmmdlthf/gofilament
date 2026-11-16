@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Account screens (web engine)**: `Panel.Accounts(...)` adds a profile page (name and email), change password, forgot / reset password and two-factor sign-in with an authenticator app (set up and turned off from the profile page). Built on golaravel's hash, reset-token broker, TOTP, cache and sessions; reset and two-factor requests are throttled, codes and reset links are single-use, and a password change signs out the user's other devices.
+
+### Fixed
+- **Topbar user menu**: the web topbar showed a fixed "Administrator" label with no way to sign out, and the user menu (`Panel.UserMenu`) was never rendered. It now shows the user's name with Profile (when available), Sign Out and custom items.
+- `Profile()` and `PasswordReset()` were flags with no screens behind them; with `Accounts` configured they now have pages.
+
 ## [v1.33.1] - 2026-11-17
 
 ### Fixed
