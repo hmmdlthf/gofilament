@@ -3045,7 +3045,8 @@ class _RelationRecordScreenState extends State<RelationRecordScreen> {
 	}
 
 	// 6. lib/main.dart - Mobile-First Responsive Flutter Admin Application
-	mainDartTemplate := `import 'package:flutter/material.dart';
+	mainDartTemplate := `import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api.dart';
@@ -3452,41 +3453,45 @@ class _LoginScreenState extends State<LoginScreen> {
                           : Text(AppLocale.t(widget.currentLocale, 'sign_in'), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(height: 20),
-                    const Divider(),
-                    const SizedBox(height: 12),
-                    Text(
-                      AppLocale.t(widget.currentLocale, 'quick_demo_roles'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                    // Demo shortcuts only in debug builds: release apps must never
+                    // offer to fill in an account.
+                    if (kDebugMode) ...[
+                      const Divider(),
+                      const SizedBox(height: 12),
+                      Text(
+                        AppLocale.t(widget.currentLocale, 'quick_demo_roles'),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                          color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        ActionChip(
-                          avatar: const Icon(Icons.security, size: 16, color: Color(0xFFF59E0B)),
-                          label: const Text('Super Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                          onPressed: () => _fillDemo('admin', 'admin123'),
-                        ),
-                        ActionChip(
-                          avatar: const Icon(Icons.admin_panel_settings_outlined, size: 16, color: Color(0xFF38BDF8)),
-                          label: const Text('Operations Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                          onPressed: () => _fillDemo('admin', 'admin123'),
-                        ),
-                        ActionChip(
-                          avatar: const Icon(Icons.account_balance_outlined, size: 16, color: Color(0xFF10B981)),
-                          label: const Text('Finance Auditor', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                          onPressed: () => _fillDemo('admin', 'admin123'),
-                        ),
-                      ],
-                    ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          ActionChip(
+                            avatar: const Icon(Icons.security, size: 16, color: Color(0xFFF59E0B)),
+                            label: const Text('Super Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            onPressed: () => _fillDemo('admin', 'admin123'),
+                          ),
+                          ActionChip(
+                            avatar: const Icon(Icons.admin_panel_settings_outlined, size: 16, color: Color(0xFF38BDF8)),
+                            label: const Text('Operations Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            onPressed: () => _fillDemo('admin', 'admin123'),
+                          ),
+                          ActionChip(
+                            avatar: const Icon(Icons.account_balance_outlined, size: 16, color: Color(0xFF10B981)),
+                            label: const Text('Finance Auditor', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            onPressed: () => _fillDemo('admin', 'admin123'),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Center(
                       child: Text(

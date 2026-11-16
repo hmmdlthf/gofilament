@@ -62,3 +62,25 @@ func TestGenerateFlutterAdmin(t *testing.T) {
 		t.Errorf("expected main.dart to contain SegmentedButton")
 	}
 }
+
+// The legacy scaffold's demo shortcuts fill in an account; they must only
+// exist in debug builds of the generated app.
+func TestLegacyScaffoldDemoShortcutsAreDebugOnly(t *testing.T) {
+	dir := t.TempDir()
+	if err := GenerateFlutterAdmin(dir, "Demo", "/admin"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "lib", "main.dart"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	guard := strings.Index(src, "if (kDebugMode) ...[")
+	first := strings.Index(src, "_fillDemo('")
+	if guard < 0 || first < 0 || first < guard {
+		t.Fatal("demo login shortcuts are not inside a kDebugMode check")
+	}
+	if !strings.Contains(src, "import 'package:flutter/foundation.dart';") {
+		t.Fatal("generated main.dart must import flutter/foundation.dart for kDebugMode")
+	}
+}
