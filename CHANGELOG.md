@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Advanced search SQL (`pkg/tables`)**: `BuildAdvancedSearchSQL` only produced Postgres `$N` placeholders, so the query failed on SQLite and MySQL. New `BuildAdvancedSearchSQLFor(cond, columns, dialect)` uses `?` placeholders for SQLite and MySQL (and `CAST(... AS CHAR)` on MySQL). `BuildAdvancedSearchSQL` keeps its Postgres output.
+- **LIKE wildcards**: `%` and `_` typed into contains / starts with / ends with rules are now matched literally (`ESCAPE '!'`) instead of matching everything.
+
 ## [v1.33.0] - 2026-11-17
 
 ### Added
