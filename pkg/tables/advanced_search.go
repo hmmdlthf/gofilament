@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/golaravel/golaravel/pkg/database"
 )
 
 // AdvancedSearchCondition defines the root container for user-constructed advanced search filters.
@@ -56,10 +58,29 @@ func GetAdvancedSearch(filters map[string]string) *AdvancedSearchCondition {
 	return cond
 }
 
-// BuildAdvancedSearchSQL generates a parameterized SQL snippet and matching argument slice.
-// dbColumnMapping maps JSON field names to database column expressions (e.g. "bill_number" => "bill_number").
-// startArgIndex specifies the initial $N placeholder index (PostgreSQL style: $1, $2...).
+// BuildAdvancedSearchSQL generates a parameterized SQL snippet and matching
+// argument slice with PostgreSQL placeholders ($N, starting at
+// startArgIndex). For SQLite or MySQL use BuildAdvancedSearchSQLFor.
+// dbColumnMapping maps JSON field names to database column expressions
+// (e.g. "bill_number" => "bill_number"); other fields are ignored.
 func BuildAdvancedSearchSQL(cond *AdvancedSearchCondition, dbColumnMapping map[string]string, startArgIndex int) (string, []any) {
+	return buildAdvancedSearch(cond, dbColumnMapping, database.Postgres, startArgIndex)
+}
+
+// BuildAdvancedSearchSQLFor is BuildAdvancedSearchSQL for any dialect:
+// SQLite and MySQL get "?" placeholders (and MySQL CAST(... AS CHAR)),
+// Postgres gets $1, $2, ... starting at 1. Append it to a WHERE clause
+// whose earlier placeholders are already "?" (or, for Postgres, rebind
+// afterwards with database.Postgres.Rebind when you build with "?").
+func BuildAdvancedSearchSQLFor(cond *AdvancedSearchCondition, dbColumnMapping map[string]string, dialect database.Dialect) (string, []any) {
+	return buildAdvancedSearch(cond, dbColumnMapping, dialect, 1)
+}
+
+// likeEscaper escapes LIKE wildcards in user input (with ESCAPE '!'), so
+// searching for "50%" does not match everything.
+var likeEscaper = strings.NewReplacer("!", "!!", "%", "!%", "_", "!_")
+
+func buildAdvancedSearch(cond *AdvancedSearchCondition, dbColumnMapping map[string]string, dialect database.Dialect, startArgIndex int) (string, []any) {
 	if cond == nil || len(cond.Rules) == 0 {
 		return "", nil
 	}
@@ -69,6 +90,39 @@ func BuildAdvancedSearchSQL(cond *AdvancedSearchCondition, dbColumnMapping map[s
 	argIdx := startArgIndex
 	if argIdx < 1 {
 		argIdx = 1
+	}
+	ph := func(v any) string {
+		args = append(args, v)
+		if dialect == database.Postgres {
+			argIdx++
+			return fmt.Sprintf("$%d", argIdx-1)
+		}
+		return "?"
+	}
+	textType := "TEXT"
+	if dialect == database.MySQL {
+		textType = "CHAR"
+	}
+	text := func(col string) string { return fmt.Sprintf("CAST(%s AS %s)", col, textType) }
+	like := func(col, pattern string, not bool) string {
+		op := "LIKE"
+		if not {
+			op = "NOT LIKE"
+		}
+		return fmt.Sprintf("LOWER(%s) %s LOWER(%s) ESCAPE '!'", text(col), op, ph(pattern))
+	}
+	list := func(rule AdvancedSearchRule, val string) []string {
+		var out []string
+		src := rule.Values
+		if len(src) == 0 && val != "" {
+			src = strings.Split(val, ",")
+		}
+		for _, p := range src {
+			if tp := strings.TrimSpace(p); tp != "" {
+				out = append(out, tp)
+			}
+		}
+		return out
 	}
 
 	conjunction := " AND "
@@ -85,122 +139,50 @@ func BuildAdvancedSearchSQL(cond *AdvancedSearchCondition, dbColumnMapping map[s
 
 		op := strings.ToLower(strings.TrimSpace(rule.Operator))
 		val := strings.TrimSpace(rule.Value)
+		esc := likeEscaper.Replace(val)
 
 		var clause string
 		switch op {
 		case "contains":
-			clause = fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER($%d)", dbCol, argIdx)
-			args = append(args, "%"+val+"%")
-			argIdx++
-
+			clause = like(dbCol, "%"+esc+"%", false)
 		case "not_contains", "does_not_contain":
-			clause = fmt.Sprintf("LOWER(CAST(%s AS TEXT)) NOT LIKE LOWER($%d)", dbCol, argIdx)
-			args = append(args, "%"+val+"%")
-			argIdx++
-
+			clause = like(dbCol, "%"+esc+"%", true)
 		case "starts_with":
-			clause = fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER($%d)", dbCol, argIdx)
-			args = append(args, val+"%")
-			argIdx++
-
+			clause = like(dbCol, esc+"%", false)
 		case "ends_with":
-			clause = fmt.Sprintf("LOWER(CAST(%s AS TEXT)) LIKE LOWER($%d)", dbCol, argIdx)
-			args = append(args, "%"+val)
-			argIdx++
-
+			clause = like(dbCol, "%"+esc, false)
 		case "equals", "eq":
-			clause = fmt.Sprintf("%s = $%d", dbCol, argIdx)
-			args = append(args, val)
-			argIdx++
-
+			clause = fmt.Sprintf("%s = %s", dbCol, ph(val))
 		case "not_equals", "neq":
-			clause = fmt.Sprintf("%s != $%d", dbCol, argIdx)
-			args = append(args, val)
-			argIdx++
-
+			clause = fmt.Sprintf("%s != %s", dbCol, ph(val))
 		case "greater_than", "gt":
-			clause = fmt.Sprintf("%s > $%d", dbCol, argIdx)
-			args = append(args, val)
-			argIdx++
-
+			clause = fmt.Sprintf("%s > %s", dbCol, ph(val))
 		case "greater_or_equal", "gte":
-			clause = fmt.Sprintf("%s >= $%d", dbCol, argIdx)
-			args = append(args, val)
-			argIdx++
-
+			clause = fmt.Sprintf("%s >= %s", dbCol, ph(val))
 		case "less_than", "lt":
-			clause = fmt.Sprintf("%s < $%d", dbCol, argIdx)
-			args = append(args, val)
-			argIdx++
-
+			clause = fmt.Sprintf("%s < %s", dbCol, ph(val))
 		case "less_or_equal", "lte":
-			clause = fmt.Sprintf("%s <= $%d", dbCol, argIdx)
-			args = append(args, val)
-			argIdx++
-
+			clause = fmt.Sprintf("%s <= %s", dbCol, ph(val))
 		case "between":
-			minVal := val
-			maxVal := ""
-			if len(rule.Values) >= 2 {
-				minVal = strings.TrimSpace(rule.Values[0])
-				maxVal = strings.TrimSpace(rule.Values[1])
-			} else if strings.Contains(val, ",") {
-				parts := strings.SplitN(val, ",", 2)
-				minVal = strings.TrimSpace(parts[0])
-				maxVal = strings.TrimSpace(parts[1])
+			if vals := list(rule, val); len(vals) >= 2 {
+				lo := ph(vals[0])
+				clause = fmt.Sprintf("%s BETWEEN %s AND %s", dbCol, lo, ph(vals[1]))
 			}
-			if minVal != "" && maxVal != "" {
-				clause = fmt.Sprintf("%s BETWEEN $%d AND $%d", dbCol, argIdx, argIdx+1)
-				args = append(args, minVal, maxVal)
-				argIdx += 2
-			}
-
 		case "is_empty":
-			clause = fmt.Sprintf("(%s IS NULL OR CAST(%s AS TEXT) = '')", dbCol, dbCol)
-
+			clause = fmt.Sprintf("(%s IS NULL OR %s = '')", dbCol, text(dbCol))
 		case "is_not_empty":
-			clause = fmt.Sprintf("(%s IS NOT NULL AND CAST(%s AS TEXT) != '')", dbCol, dbCol)
-
-		case "in":
-			var inVals []string
-			if len(rule.Values) > 0 {
-				inVals = rule.Values
-			} else if val != "" {
-				for _, p := range strings.Split(val, ",") {
-					if tp := strings.TrimSpace(p); tp != "" {
-						inVals = append(inVals, tp)
-					}
+			clause = fmt.Sprintf("(%s IS NOT NULL AND %s != '')", dbCol, text(dbCol))
+		case "in", "not_in":
+			if vals := list(rule, val); len(vals) > 0 {
+				phs := make([]string, len(vals))
+				for i, v := range vals {
+					phs[i] = ph(v)
 				}
-			}
-			if len(inVals) > 0 {
-				var placeholders []string
-				for _, iv := range inVals {
-					placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
-					args = append(args, iv)
-					argIdx++
+				kw := "IN"
+				if op == "not_in" {
+					kw = "NOT IN"
 				}
-				clause = fmt.Sprintf("%s IN (%s)", dbCol, strings.Join(placeholders, ", "))
-			}
-
-		case "not_in":
-			var inVals []string
-			if len(rule.Values) > 0 {
-				inVals = rule.Values
-			} else if val != "" {
-				for _, p := range strings.Split(val, ",") {
-					if tp := strings.TrimSpace(p); tp != "" {
-						inVals = append(inVals, tp)
-					}
-				}
-			}
-			if len(inVals) > 0 {
-				var placeholders []string
-				for _, iv := range inVals {
-					placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
-					args = append(args, iv)
-					argIdx++
-				}
-				clause = fmt.Sprintf("%s NOT IN (%s)", dbCol, strings.Join(placeholders, ", "))
+				clause = fmt.Sprintf("%s %s (%s)", dbCol, kw, strings.Join(phs, ", "))
 			}
 		}
 

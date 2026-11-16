@@ -26,7 +26,7 @@ func TestBuildAdvancedSearchSQL(t *testing.T) {
 	}
 
 	sql, args := BuildAdvancedSearchSQL(cond, mapping, 1)
-	expectedSQL := "(LOWER(CAST(bill_number AS TEXT)) LIKE LOWER($1) AND total_amount > $2 AND NOT (status = $3))"
+	expectedSQL := "(LOWER(CAST(bill_number AS TEXT)) LIKE LOWER($1) ESCAPE '!' AND total_amount > $2 AND NOT (status = $3))"
 	if sql != expectedSQL {
 		t.Errorf("expected SQL %q, got %q", expectedSQL, sql)
 	}
