@@ -7,10 +7,15 @@ import 'session_store.dart';
 
 /// An error answered by the panel API. [message] is safe to show to the user.
 class ApiException implements Exception {
-  ApiException(this.status, this.message);
+  ApiException(this.status, this.message, [this.body]);
 
   final int status;
   final String message;
+
+  /// The decoded error body, when the server sent JSON.
+  final Map<String, dynamic>? body;
+
+  bool get isConflict => status == 409;
 
   bool get isUnauthorized => status == 401;
   bool get isForbidden => status == 403;
@@ -45,7 +50,12 @@ class FormPayload {
     required this.state,
     required this.abilities,
     required this.optionLabels,
+    this.version,
   });
+
+  /// The record's version (Versioned resources): sent back as `_version`
+  /// on save so the server can refuse to overwrite a newer change.
+  final String? version;
 
   final String mode;
   final List<Map<String, dynamic>> schema;
@@ -152,7 +162,8 @@ class AdminApi {
       user = null;
       onUnauthorized?.call();
     }
-    throw ApiException(res.statusCode, message);
+    throw ApiException(res.statusCode, message,
+        body is Map ? Map<String, dynamic>.from(body) : null);
   }
 
   Future<dynamic> _get(String path, [Map<String, String>? query]) async =>
@@ -276,6 +287,7 @@ class AdminApi {
       abilities: _map(data['abilities']).map((k, v) => MapEntry(k, v == true)),
       optionLabels:
           _map(data['option_labels']).map((k, v) => MapEntry(k, '$v')),
+      version: data['version'] == null ? null : '${data['version']}',
     );
   }
 

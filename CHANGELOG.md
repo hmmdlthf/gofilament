@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Edit-conflict detection**: `Resource.Versioned(fn)` makes edit forms (web and Flutter) send the version they were opened with (`_version`); a save after someone else's change is refused with 409 and offers Reload or Overwrite. The form and record API responses include `version`; `filament.ExpectedVersion(ctx)` gives `OnUpdate` the expected version for a conditional write. Inline cell edits are not checked.
+
 ## [v1.33.1] - 2026-11-17
 
 ### Fixed

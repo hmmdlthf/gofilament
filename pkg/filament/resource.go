@@ -90,6 +90,7 @@ type CellUpdateHandlerFunc func(ctx *Context, id, column string, value any) erro
 
 // BaseResource implements ResourceInterface with generic Ent/model type T.
 type BaseResource[T any] struct {
+	versionOf func(record T) string
 	slug            string
 	modelName       string
 	pluralModelName string
@@ -1432,6 +1433,7 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 	if m, ok := any(record).(map[string]any); ok {
 		form.Fill(m)
 	}
+	formHTML := withVersionField(form.Render(ctx.GoContext()), r.RecordVersion(record))
 
 	deleteButton := ""
 	if r.canDelete == nil || r.canDelete(ctx, record) {
@@ -1458,7 +1460,7 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 </div>
 %s`,
 		r.modelName, id, deleteButton, basePath,
-		form.Render(ctx.GoContext()),
+		formHTML,
 		basePath,
 		r.renderRelations(ctx, basePath, id),
 	)
@@ -1546,6 +1548,12 @@ func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error 
 	}
 
 	if r.onUpdate != nil {
+		if err := r.checkVersion(ctx, id, data); err != nil {
+			var conflict *EditConflictError
+			if errors.As(err, &conflict) {
+				return r.renderConflict(ctx, basePath, id, data, conflict)
+			}
+		}
 		clean, err := r.validateInput(ctx, data, false)
 		if err != nil {
 			form := forms.New()
@@ -2199,6 +2207,9 @@ func (r *BaseResource[T]) InvokeUpdate(ctx *Context, id string, data map[string]
 	}
 	if r.onUpdate == nil {
 		return fmt.Errorf("update not implemented")
+	}
+	if err := r.checkVersion(ctx, id, data); err != nil {
+		return err
 	}
 	data, err := r.validateInput(ctx, data, false)
 	if err != nil {

@@ -18,7 +18,8 @@ Future<void> _open(WidgetTester tester, FakePanel panel) async {
 }
 
 Map<String, String> _lastListQuery(FakePanel panel) => panel.requests
-    .lastWhere((r) => r.method == 'GET' && r.url.path.endsWith('/resources/items'))
+    .lastWhere(
+        (r) => r.method == 'GET' && r.url.path.endsWith('/resources/items'))
     .url
     .queryParameters;
 
@@ -83,7 +84,8 @@ void main() {
     final sent = json.decode(_lastListQuery(panel)['advanced_search']!) as Map;
     expect(sent['conjunction'], 'AND');
     final rules = sent['rules'] as List;
-    expect(rules[0], {'field': 'name', 'operator': 'contains', 'value': 'lamp'});
+    expect(
+        rules[0], {'field': 'name', 'operator': 'contains', 'value': 'lamp'});
     expect(rules[1]['operator'], 'in');
     expect(rules[1]['values'], ['live', 'draft']);
 
@@ -128,7 +130,30 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(handle);
     await tester.pumpAndSettle();
-    expect((json.decode((await api.readPreference('widths:items'))!) as Map)
-        .containsKey('name'), isFalse);
+    expect(
+        (json.decode((await api.readPreference('widths:items'))!) as Map)
+            .containsKey('name'),
+        isFalse);
+  });
+
+  testWidgets('a save that hits a newer change offers reload or overwrite',
+      (tester) async {
+    final panel = FakePanel()..itemVersion = 1;
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('row-edit-1')));
+    await tester.pumpAndSettle();
+    panel.itemVersion = 2; // someone else saved meanwhile
+
+    await tester.tap(find.byKey(const Key('form-save')));
+    await tester.pumpAndSettle();
+    expect(panel.putBodies.last['_version'], '1');
+    expect(find.textContaining('changed by someone else'), findsOneWidget);
+    expect(find.byKey(const Key('conflict-reload')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('conflict-overwrite')));
+    await tester.pumpAndSettle();
+    expect(panel.putBodies.last['_version'], '2');
+    expect(panel.itemVersion, 3);
+    expect(find.byKey(const Key('form-save')), findsNothing); // closed
   });
 }

@@ -91,6 +91,11 @@ class FakePanel {
 
   bool globalSearch = false;
 
+  /// Versioned items: the form sends 'version' and PUT refuses a stale
+  /// '_version' with 409 (edit-conflict tests).
+  int? itemVersion;
+  final List<Map<String, dynamic>> putBodies = [];
+
   /// Row meta merged into the list's row_meta by record id.
   Map<String, Map<String, dynamic>> extraRowMeta = {};
 
@@ -287,8 +292,18 @@ class FakePanel {
         return _json({'success': true});
       }
       if (req.method == 'PUT') {
-        items[index]
-            .addAll(Map<String, dynamic>.from(json.decode(req.body) as Map));
+        final body = Map<String, dynamic>.from(json.decode(req.body) as Map);
+        putBodies.add({...body});
+        final sent = body.remove('_version');
+        if (itemVersion != null && sent != null && sent != '$itemVersion') {
+          return _json({
+            'error':
+                'This record was changed by someone else after you opened it.',
+            'version': '$itemVersion',
+          }, 409);
+        }
+        items[index].addAll(body);
+        if (itemVersion != null) itemVersion = itemVersion! + 1;
         return _json({'success': true});
       }
     }
@@ -432,6 +447,7 @@ class FakePanel {
       'state': match.first,
       'option_labels': {'supplier_id': 'Agasthi Traders'},
       'abilities': {'view': true, 'update': true, 'delete': canDelete},
+      if (itemVersion != null) 'version': '$itemVersion',
     });
   }
 

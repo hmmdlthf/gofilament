@@ -343,13 +343,19 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 			}
 			walk(nodes)
 
-			return c.JSON(http.StatusOK, map[string]any{
+			out := map[string]any{
 				"mode":          "edit",
 				"schema":        nodes,
 				"state":         record,
 				"option_labels": labels,
 				"abilities":     abilities,
-			})
+			}
+			if v, ok := res.(interface{ RecordVersion(record any) string }); ok {
+				if ver := v.RecordVersion(record); ver != "" {
+					out["version"] = ver
+				}
+			}
+			return c.JSON(http.StatusOK, out)
 		})
 
 		p.registerRelationClientRoutes(r, res, resPath, preflight)
