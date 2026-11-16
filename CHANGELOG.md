@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Open redirects**: locale and tenant switches redirected to any `Referer`. They now only return to a path on the same host.
 
 ### Changed
+- **GoLaravel v1.9.0**: adds a Laravel-style validation rule engine (`validation.Make`, `Rules()` on form requests, `ValidateRequest`).
 - **GoLaravel v1.8.0**: adds SQL and Redis stores for sessions, the cache and password reset tokens (`session.NewSQLDriver` / `NewRedisDriver`, `cache.NewSQLStore` / `NewRedisStore`, `auth.CacheResetTokenStore`).
 - **GoLaravel v1.7.0**: fixes mail header injection and adds a telemetry `Authorize` option, Content-Security-Policy options in `SecureHeaders`, and JWT issuer / audience / key rotation.
 - **GoLaravel v1.6.0**: secure defaults for sessions, CORS, request body size (32 MiB), the queue dashboard and JWT. See the GoLaravel changelog for its breaking changes. None of the changed APIs are used by GoFilament.
