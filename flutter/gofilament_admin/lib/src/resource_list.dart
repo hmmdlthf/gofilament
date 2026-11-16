@@ -11,6 +11,7 @@ import 'export.dart';
 import 'format.dart';
 import 'icons.dart';
 import 'links.dart';
+import 'list_tools.dart';
 import 'resource_form.dart';
 import 'theme.dart';
 
@@ -41,6 +42,10 @@ class _ResourceListPageState extends State<ResourceListPage> {
   String _sort = '';
   bool _descending = false;
   final Map<String, String> _filters = {};
+  AdvancedSearch _advanced = AdvancedSearch();
+
+  /// Column widths the user set by dragging (name -> width).
+  final Map<String, double> _widths = {};
   final Set<String> _selected = {};
   Map<String, Map<String, dynamic>> _rowMeta = const {};
   bool _loading = true;
@@ -86,6 +91,53 @@ class _ResourceListPageState extends State<ResourceListPage> {
       final list = json.decode(raw);
       if (list is List) setState(() => _shown = list.map((e) => '$e').toSet());
     } catch (_) {}
+  }
+
+  String get _widthsPref => 'widths:${widget.slug}';
+
+  Future<void> _loadWidths() async {
+    try {
+      final raw = await api.readPreference(_widthsPref);
+      if (raw == null || !mounted) return;
+      final m = json.decode(raw);
+      if (m is Map) {
+        setState(() {
+          for (final e in m.entries) {
+            final w = (e.value as num?)?.toDouble();
+            if (w != null) _widths['${e.key}'] = w;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _saveWidths() => api.writePreference(_widthsPref, json.encode(_widths));
+
+  bool get _advancedEnabled =>
+      _resource['advanced_search_enabled'] == true &&
+      _advancedFields.isNotEmpty;
+
+  Map<String, String> get _advancedFields {
+    final names = _resource['advanced_search_columns'];
+    final labels = {
+      for (final c in _allColumns)
+        '${c['name']}': '${c['label'] ?? humanize('${c['name']}')}'
+    };
+    return {
+      if (names is List)
+        for (final n in names) '$n': labels['$n'] ?? humanize('$n'),
+    };
+  }
+
+  Future<void> _editAdvanced() async {
+    final next = await showAdvancedSearchDialog(context,
+        fields: _advancedFields, current: _advanced);
+    if (next == null || !mounted) return;
+    setState(() {
+      _advanced = next;
+      _page = 1;
+    });
+    _load();
   }
 
   void _toggleColumn(String name) {
@@ -218,6 +270,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
     super.initState();
     _perPage = (_resource['per_page'] as num?)?.toInt() ?? 25;
     _loadColumnChoice();
+    _loadWidths();
     _load();
     final open = widget.openRecord;
     if (open != null && _hasForm) {
@@ -252,7 +305,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
           search: _search.text.trim(),
           sort: _sort,
           descending: _descending,
-          filters: _filters);
+          filters: _filters,
+          advancedSearch: _advanced.encode());
       if (!mounted || request != _requestId) return;
       setState(() {
         _rows = page.rows;
@@ -538,6 +592,18 @@ class _ResourceListPageState extends State<ResourceListPage> {
           tooltip: 'Refresh',
           icon: const Icon(Icons.refresh),
           onPressed: _load),
+      if (_advancedEnabled)
+        IconButton(
+          key: const Key('list-advanced-search'),
+          tooltip: 'Advanced search',
+          isSelected: !_advanced.isEmpty,
+          icon: Badge(
+            isLabelVisible: !_advanced.isEmpty,
+            label: Text('${_advanced.length}'),
+            child: const Icon(Icons.manage_search),
+          ),
+          onPressed: _editAdvanced,
+        ),
       if (_allColumns.any((c) => c['toggleable'] == true))
         PopupMenuButton<String>(
           key: const Key('list-columns'),
@@ -618,6 +684,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
   }
 
   Widget _filterChip(BuildContext context, Map<String, dynamic> filter) {
+    if (filter['type'] == 'refined') return _refinedChip(context, filter);
     final theme = Theme.of(context);
     final column = '${filter['column'] ?? filter['name']}';
     final options = FieldOption.listFrom(filter['options']);
@@ -725,6 +792,66 @@ class _ResourceListPageState extends State<ResourceListPage> {
     return wide ? _table(context) : _cards(context);
   }
 
+  Widget _refinedChip(BuildContext context, Map<String, dynamic> filter) {
+    final theme = Theme.of(context);
+    final column = '${filter['column'] ?? filter['name']}';
+    final label = '${filter['label'] ?? humanize(column)}';
+    final options = refinedOptions(filter['options']);
+    final current =
+        (_filters[column] ?? '').split(',').where((v) => v.isNotEmpty).toSet();
+    final labels = [
+      for (final o in options)
+        if (current.contains('${o['value']}')) '${o['label'] ?? o['value']}'
+    ];
+    final active = current.isNotEmpty;
+    return InkWell(
+      key: Key('filter-$column'),
+      borderRadius: BorderRadius.circular(10),
+      onTap: () async {
+        final chosen = await showRefinedFilterDialog(context,
+            label: label,
+            options: options,
+            selected: current,
+            multiple: filter['multiple'] != false);
+        if (chosen == null || !mounted) return;
+        setState(() {
+          if (chosen.isEmpty) {
+            _filters.remove(column);
+          } else {
+            _filters[column] = (chosen.toList()..sort()).join(',');
+          }
+          _page = 1;
+        });
+        _load();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: active ? theme.colorScheme.primary : theme.dividerColor),
+          color:
+              active ? theme.colorScheme.primary.withValues(alpha: 0.08) : null,
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.checklist,
+              size: 16,
+              color: active
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(
+              !active
+                  ? label
+                  : labels.length <= 2
+                      ? '$label: ${labels.join(', ')}'
+                      : '$label: ${labels.length} selected',
+              style: const TextStyle(fontSize: 13)),
+        ]),
+      ),
+    );
+  }
+
   bool get _selectable => _bulkActions.isNotEmpty;
 
   Widget _table(BuildContext context) {
@@ -748,8 +875,21 @@ class _ResourceListPageState extends State<ResourceListPage> {
               columns: [
                 for (final c in columns)
                   DataColumn(
-                    label: Text('${c['label'] ?? humanize('${c['name']}')}'
-                        .toUpperCase()),
+                    label: ResizableHeader(
+                      name: '${c['name']}',
+                      width: _widths['${c['name']}'],
+                      label: Text(
+                          '${c['label'] ?? humanize('${c['name']}')}'
+                              .toUpperCase(),
+                          overflow: TextOverflow.ellipsis),
+                      onResize: (w) =>
+                          setState(() => _widths['${c['name']}'] = w),
+                      onResizeEnd: _saveWidths,
+                      onReset: () {
+                        setState(() => _widths.remove('${c['name']}'));
+                        _saveWidths();
+                      },
+                    ),
                     numeric: c['type'] == 'money' || c['align'] == 'right',
                     onSort: c['sortable'] == true
                         ? (_, ascending) {
@@ -775,7 +915,9 @@ class _ResourceListPageState extends State<ResourceListPage> {
                             : _selected.remove(recordId(row)))
                         : null,
                     cells: [
-                      for (final c in columns) DataCell(_cell(context, c, row)),
+                      for (final c in columns)
+                        DataCell(sizedCell(
+                            _widths['${c['name']}'], _cell(context, c, row))),
                       if (hasRowActions) DataCell(_rowActions(context, row)),
                     ],
                   ),

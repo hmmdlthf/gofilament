@@ -234,8 +234,10 @@ class AdminApi {
     String sort = '',
     bool descending = false,
     Map<String, String> filters = const {},
+    String advancedSearch = '',
   }) async {
     final data = _map(await _get('/resources/$slug', {
+      if (advancedSearch.isNotEmpty) 'advanced_search': advancedSearch,
       'page': '$page',
       'per_page': '$perPage',
       if (search.isNotEmpty) 'search': search,

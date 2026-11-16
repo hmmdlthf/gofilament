@@ -81,6 +81,10 @@ class FakePanel {
   List<Map<String, dynamic>> extraFormFields = [];
   List<Map<String, dynamic>> extraColumns = [];
   List<Map<String, dynamic>> extraWidgets = [];
+  List<Map<String, dynamic>> extraFilters = [];
+
+  /// Extra keys of the items resource schema (advanced search, ...).
+  Map<String, dynamic> itemsResourceExtras = {};
 
   /// Extra JSON routes keyed by "METHOD /path" (path without /app/api).
   Map<String, Object Function(http.Request req)> extraRoutes = {};
@@ -526,7 +530,9 @@ class FakePanel {
                   {'value': 'draft', 'label': 'Draft'}
                 ],
               },
+              ...extraFilters,
             ],
+            ...itemsResourceExtras,
           },
         ],
         'resource_meta': {

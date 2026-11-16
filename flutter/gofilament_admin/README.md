@@ -80,6 +80,14 @@ See the main README, "Typed Dart from the panel".
   value the server returns. Swap the picker with `adminPickFiles`.
 - Soft-deleted rows show Restore and Delete for good when the server allows it.
 - A column picker for toggleable columns, remembered per resource.
+- Resizable columns: drag the handle at the right of a header; double-tap it
+  for automatic width. Widths are remembered per resource.
+- Refined filters (`tables.RefinedFilter` or a column's `RefinedFilter()`) open
+  a checkbox list with the server's counts and send the values comma-separated
+  (`filter_<column>=a,b`).
+- Advanced search, when the resource sets `AdvancedSearch(cols...)`: a rule
+  builder (field, operator, value; match all or any) sent as the
+  `advanced_search` JSON that `tables.GetAdvancedSearch` reads.
 - Chart widgets (line, bar, pie, doughnut) with their period filters.
 - Global search from the top bar, opening the chosen record or page.
 - Exports save through the browser on web and a save dialog elsewhere.
