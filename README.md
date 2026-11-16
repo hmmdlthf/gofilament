@@ -25,6 +25,34 @@ Inspired by Laravel's renowned Filament ecosystem, **GoFilament** reimagines rap
 go get github.com/golaravel/gofilament
 ```
 
+GoFilament builds on a released GoLaravel version (see `go.mod`). The module path is
+`github.com/golaravel/golaravel`, and its source is the private `github.com/hmmdlthf/golaravel`
+repository, which `go.mod` maps with a `replace`. To fetch it, mark the repository as private
+and give Go your GitHub credentials (for example through `gh`):
+
+```bash
+export GOPRIVATE='github.com/hmmdlthf/*'
+gh auth setup-git
+```
+
+### Working on GoLaravel and GoFilament together
+
+To build against a local GoLaravel checkout instead of the release, use a Go workspace
+(`go.work` is git-ignored) rather than editing `go.mod`:
+
+```bash
+go work init .
+go work edit -replace github.com/golaravel/golaravel=../golaravel
+```
+
+When GoLaravel ships a new version, bump both lines in `go.mod`:
+
+```bash
+go mod edit -require github.com/golaravel/golaravel@vX.Y.Z \
+  -replace github.com/golaravel/golaravel=github.com/hmmdlthf/golaravel@vX.Y.Z
+go mod tidy
+```
+
 ---
 
 ## 🛠️ Quickstart: Building an Admin Panel
