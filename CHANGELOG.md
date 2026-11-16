@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tenancy**: the tenant was resolved before the user, so a `TenantLoader` that filters by membership saw no user, and any tenant key in a cookie or header was accepted. It is now resolved again once the user is known. With a `TenantLoader`, switching to a tenant it does not list answers 403. The tenant cookie is `Secure` on HTTPS.
 - **Open redirects**: locale and tenant switches redirected to any `Referer`. They now only return to a path on the same host.
 
+### Changed
+- **GoLaravel v1.5.0**: `go.mod` now pins the released GoLaravel (`github.com/hmmdlthf/golaravel v1.5.0`) instead of a `../golaravel` checkout, so GoFilament builds anywhere without a sibling folder. v1.5.0 brings trusted-proxy handling for `ClientIP()`. Building needs access to the private repository (`GOPRIVATE`, see the README). For local GoLaravel work, use a `go.work` workspace.
+
 ## [v1.30.0] - 2026-11-13
 
 ### Breaking
