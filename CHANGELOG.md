@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Open redirects**: locale and tenant switches redirected to any `Referer`. They now only return to a path on the same host.
 
 ### Changed
+- **GoLaravel v1.11.0**: JWTs signed with public/private keys (RS256, ES256, EdDSA) with JWKS and key rotation; `middleware.RateLimiter` delegates to `pkg/ratelimit`; `ratelimit.ThrottleMax` routes no longer share one counter.
 - **GoLaravel v1.10.0**: CI with real MySQL / Postgres / Redis integration tests; one shared Redis client; atomic Redis rate limiting (bursts can no longer exceed the limit); delayed jobs on any queue; fixes for SQL cache increments on Postgres, SQL cache locks on MySQL and a container singleton data race.
 - **GoLaravel v1.9.0**: adds a Laravel-style validation rule engine (`validation.Make`, `Rules()` on form requests, `ValidateRequest`).
 - **GoLaravel v1.8.0**: adds SQL and Redis stores for sessions, the cache and password reset tokens (`session.NewSQLDriver` / `NewRedisDriver`, `cache.NewSQLStore` / `NewRedisStore`, `auth.CacheResetTokenStore`).
