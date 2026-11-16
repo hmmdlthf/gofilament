@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Open redirects**: locale and tenant switches redirected to any `Referer`. They now only return to a path on the same host.
 
 ### Changed
+- **GoLaravel v1.15.0**: fixes a 2FA bypass in its auth workflows (challenge tokens worked as access tokens), throttles logins and 2FA, and recovers panics in scheduled tasks, event listeners and queue jobs. GoFilament doesn't use those workflows.
 - **GoLaravel v1.14.0**: security pass, covering broadcast channel authorization and the WebSocket origin check, a random storage signing key, a tenant `Authorize` option, required STARTTLS, and limits on HTTP responses and metrics. GoFilament's notification stream uses a public SSE channel that it authorizes itself, so it is unaffected.
 - **GoLaravel v1.13.0**: form method spoofing (`_method` / `X-HTTP-Method-Override`) now routes POST forms to PUT, PATCH and DELETE handlers; `.env` parsing fixes (export lines, inline comments, escapes).
 - **GoLaravel v1.12.0**: request body read timeout (2 minutes by default, per-route override); cache stampede protection and atomic `Pull`; new validation rules (`Password()`, `exclude_*`, `required_array_keys`, `dimensions`); a working `make:oauth` scaffold.
