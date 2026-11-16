@@ -26,6 +26,7 @@ import (
 	"github.com/golaravel/golaravel/pkg/flutter"
 	"github.com/golaravel/golaravel/pkg/golaravel"
 	"github.com/golaravel/golaravel/pkg/router"
+	"github.com/golaravel/golaravel/pkg/session"
 )
 
 type ContentWidth string
@@ -134,6 +135,8 @@ type Panel struct {
 	uploadHandler       UploadHandler
 	sessionStore        WebSessionStore
 	sessionUsers        UserLoader
+	sessionManager      *session.Manager
+	bearerGuard         auth.GuardFunc
 	widgets             []WidgetInterface
 	dashboardRenderFunc func(ctx *Context) error
 	locales             []string
@@ -827,6 +830,9 @@ func (p *Panel) middlewareApplies(method, reqPath string) bool {
 // installMiddleware attaches the panel middleware to the router so every
 // route registered afterwards runs it for requests inside this panel.
 func (p *Panel) installMiddleware(r *router.Router) {
+	if p.sessionManager != nil {
+		r.Use(p.sessionMiddleware())
+	}
 	for _, mw := range p.middlewares {
 		mw := mw
 		r.Use(func(c *gcontext.Context) error {
@@ -860,7 +866,12 @@ func (p *Panel) resolveUser(c *gcontext.Context) *Context {
 		return ctx
 	}
 	authHeader := c.Header("Authorization")
-	if strings.HasPrefix(authHeader, "Bearer ") && p.tokenValidator != nil {
+	if strings.HasPrefix(authHeader, "Bearer ") && p.bearerGuard != nil {
+		if u, err := p.bearerGuard(c); err == nil && u != nil {
+			c.Set(auth.ContextUserKey, u)
+		}
+	}
+	if ctx.User() == nil && strings.HasPrefix(authHeader, "Bearer ") && p.tokenValidator != nil {
 		if u, err := p.tokenValidator(ctx, strings.TrimPrefix(authHeader, "Bearer ")); err == nil && u != nil {
 			c.Set(auth.ContextUserKey, u)
 		}

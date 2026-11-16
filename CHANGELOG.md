@@ -10,10 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Panel login on golaravel sessions**: `Panel.Sessions(mgr, users)` runs the Templ engine's sign-in, sign-out and CSRF on golaravel's session manager (any driver: SQL, Redis, file, memory, cookie), using `auth.Login` / `auth.Logout`. Sessions survive restarts with a persistent driver, are linked to the user (`mgr.DestroyUserSessions`), and `auth.User(c)` works in app handlers. Requires golaravel v1.17.0.
+- **`Panel.BearerGuard(guard)`**: authenticate API / Flutter bearer tokens with a golaravel guard such as `auth.BearerGuardFunc(jwt, provider)`.
 - **Opt-in demo account button (`flutter/gofilament_admin`)**: `GoFilamentAdmin(demoLogin: DemoLogin(email:, password:, label:, debugOnly:))` shows a "fill in the demo account" button on the sign-in screen. Without the option there's no button, the package contains no credentials, and by default (`debugOnly: true`) the button only appears in debug builds.
 
 ### Security
 - **Legacy scaffold demo shortcuts (`flutterclient.GenerateFlutterAdmin`)**: the generated sign-in screen showed three "quick demo" chips that fill in `admin` / `admin123`, including in release builds. They are now inside a `kDebugMode` check, so release builds of generated apps never offer an account.
+
+### Deprecated
+- `Panel.WebSessionsUsing` and the in-memory web session fallback: use `Panel.Sessions`. Using the `TokenValidator` token as the web login cookie is superseded by `Panel.Sessions` too (it stays supported for bearer tokens).
 
 ## [v1.31.0] - 2026-11-16
 
