@@ -980,9 +980,42 @@ Files are stored on the field's golaravel storage `Disk(...)` under
 `Disk("")` without `UploadsUsing` refuses uploads (501). The saved value is
 only a reference: check it in your handler before trusting it.
 
+### 🔐 Panel login on golaravel sessions
+
+Give the panel a credential check and a user loader; golaravel's session
+manager does the rest (cookie, driver, lifetime, CSRF, logout):
+
+```go
+drv, _ := session.NewSQLDriver(db, database.Postgres) // or NewRedisDriver, NewFileDriver...
+_ = drv.Migrate(ctx)
+mgr := session.NewManager(session.Config{Driver: drv, SecretKey: os.Getenv("APP_KEY"), Lifetime: 8 * time.Hour})
+
+panel.Login().
+    AuthValidator(checkPassword). // func(ctx, login, password) (auth.Authenticatable, token, error); token is ignored for the web engine
+    Sessions(mgr, func(ctx *filament.Context, id string) (auth.Authenticatable, error) {
+        return users.Find(ctx.GoContext(), id) // reloaded on every request
+    })
+```
+
+Sign-in calls `auth.Login` (new session id, new CSRF token, the session row
+gets `user_id`), sign-out calls `auth.Logout`, and `auth.User(c)` works in
+your own handlers. `Sessions(nil, users)` uses `session.DefaultManager()`
+(keyed by `APP_KEY`). To end a user's sessions everywhere, call
+`mgr.DestroyUserSessions(userID)`. The session lifetime is the manager's
+`Lifetime`; `SessionDuration` / `RememberMeDuration` apply to API tokens.
+
+For the API and Flutter, `panel.BearerGuard(auth.BearerGuardFunc(jwt, provider))`
+checks bearer tokens with golaravel's guard (`TokenValidator` still works).
+
+**Migrating:** replace `WebSessionsUsing(s.WebSessions(), loader)` with
+`Sessions(mgr, loader)`. `WebSessionsUsing` and the in-memory fallback are
+deprecated; existing sessions in `gofilament_web_sessions` are not carried
+over, so users sign in once more. Using a `TokenValidator` token as the web
+cookie keeps working but is superseded by `Sessions`.
+
 ### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
 
-By default web-engine sessions (without a `TokenValidator`), database
+By default (without `Sessions`, see above) web-engine sessions, database
 notifications, the activity log and support tickets live in process memory:
 they vanish on restart and are not shared between processes. `sqlstore` keeps
 them in any `database/sql` database (SQLite, MySQL, Postgres):

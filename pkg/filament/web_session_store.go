@@ -24,6 +24,10 @@ type WebSessionStore interface {
 // that no longer exist or may no longer sign in.
 type UserLoader func(ctx *Context, id string) (auth.Authenticatable, error)
 
+// Deprecated: use Panel.Sessions, which runs the web login on golaravel's
+// session manager (any driver, CSRF, logout of other devices). Kept for
+// existing apps; it is ignored when Sessions is configured.
+//
 // WebSessionsUsing stores web-engine sessions (used when the panel has no
 // TokenValidator) in store instead of process memory; users loads the user
 // on each request, so disabling a user ends their sessions.

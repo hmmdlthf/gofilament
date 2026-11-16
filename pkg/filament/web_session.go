@@ -196,6 +196,9 @@ func (p *Panel) csrfHiddenInput(c *gcontext.Context, formID string) string {
 
 // userFromSessionCookie resolves the web-engine login cookie.
 func (p *Panel) userFromSessionCookie(ctx *Context) auth.Authenticatable {
+	if p.sessionManager != nil {
+		return p.sessionUser(ctx)
+	}
 	val := cookieValue(ctx.Context, p.SessionCookieName())
 	if val == "" {
 		return nil
@@ -217,6 +220,9 @@ func (p *Panel) userFromSessionCookie(ctx *Context) auth.Authenticatable {
 
 // startWebSession signs the user in on this browser.
 func (p *Panel) startWebSession(c *gcontext.Context, user auth.Authenticatable, token string, d time.Duration) error {
+	if p.sessionManager != nil {
+		return p.sessionLogin(c, user)
+	}
 	value := token
 	if p.tokenValidator == nil || token == "" {
 		value = randomToken()
@@ -226,7 +232,7 @@ func (p *Panel) startWebSession(c *gcontext.Context, user auth.Authenticatable, 
 			}
 		} else {
 			warnMemorySessions.Do(func() {
-				slog.Warn("filament: web sessions are kept in memory (lost on restart, not shared between instances). Use Panel.WebSessionsUsing with a persistent store such as pkg/sqlstore, or a TokenValidator.")
+				slog.Warn("filament: web sessions are kept in memory (lost on restart, not shared between instances). Use Panel.Sessions with a golaravel session manager (SQL or Redis driver).")
 			})
 			p.webSessions.put(value, webSession{user: user, expires: time.Now().Add(d)})
 		}
@@ -237,6 +243,10 @@ func (p *Panel) startWebSession(c *gcontext.Context, user auth.Authenticatable, 
 
 // endWebSession signs the browser out.
 func (p *Panel) endWebSession(c *gcontext.Context) {
+	if p.sessionManager != nil {
+		_ = auth.Logout(c)
+		return
+	}
 	if val := cookieValue(c, p.SessionCookieName()); val != "" {
 		if p.sessionStore != nil {
 			_ = p.sessionStore.DeleteSession(c.Request.Context(), hashSessionID(val))
