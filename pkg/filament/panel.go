@@ -1215,7 +1215,10 @@ func (p *Panel) Mount(r *router.Router) {
 			return c.Redirect(http.StatusSeeOther, redirectURL)
 		}
 
-		r.GET(p.path+"/tenant/switch", tenantSwitchHandler)
+		// A GET switch from another site (a link or image) could change the
+		// tenant a signed-in user is working in without them noticing; only
+		// clicks inside the panel switch directly, others are asked first.
+		r.GET(p.path+"/tenant/switch", p.guardUnsafeGET("Switch tenant", "Switch to this tenant?", tenantSwitchHandler))
 		r.POST(p.path+"/tenant/switch", tenantSwitchHandler)
 	}
 

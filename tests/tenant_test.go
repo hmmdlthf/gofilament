@@ -213,7 +213,8 @@ func TestTenantSwitchRoute(t *testing.T) {
 	}
 
 	client := app.Test(t)
-	resp := client.Get("/admin/tenant/switch?tenant=workspace_99")
+	// A switch link clicked inside the panel (browsers send Sec-Fetch-Site).
+	resp := client.WithHeader("Sec-Fetch-Site", "same-origin").Get("/admin/tenant/switch?tenant=workspace_99")
 	resp.AssertStatus(http.StatusSeeOther)
 
 	// Check callback executed
