@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [v1.32.0] - 2026-11-17
 
 ### Added
 - **Panel login on golaravel sessions**: `Panel.Sessions(mgr, users)` runs the Templ engine's sign-in, sign-out and CSRF on golaravel's session manager (any driver: SQL, Redis, file, memory, cookie), using `auth.Login` / `auth.Logout`. Sessions survive restarts with a persistent driver, are linked to the user (`mgr.DestroyUserSessions`), and `auth.User(c)` works in app handlers. Requires golaravel v1.17.0.
