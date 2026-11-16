@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
+## [v1.31.0] - 2026-11-16
 
 ### Breaking
 - **Tenant switch:** a GET to `<panel>/tenant/switch` from outside the panel (scripts, bookmarks) shows a confirmation page; programmatic callers should POST.
