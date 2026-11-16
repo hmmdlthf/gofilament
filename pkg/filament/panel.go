@@ -120,6 +120,7 @@ type Panel struct {
 	exportMaxRows       func(ctx *Context) int
 	canAccess           func(ctx *Context) bool
 	middlewares         []gcontext.HandlerFunc
+	supportStaff        func(ctx *Context) bool
 	corsAllowedOrigins  []string
 	webSessions         webSessionStore
 	crossOrigin         *http.CrossOriginProtection
