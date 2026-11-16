@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'api.dart';
@@ -65,10 +66,42 @@ class BrandMark extends StatelessWidget {
 }
 
 /// Sign-in screen, branded from the public boot payload.
+/// Demo account shown as a one-click "fill in" button on the sign-in screen.
+///
+/// It is opt-in: pass it to [GoFilamentAdmin.demoLogin] only from a demo or
+/// showcase app. The shared package never contains credentials, and by
+/// default the button only appears in debug builds, so a demo account can
+/// never ship to production by accident.
+class DemoLogin {
+  const DemoLogin({
+    required this.email,
+    required this.password,
+    this.label = 'Use demo account',
+    this.debugOnly = true,
+  });
+
+  final String email;
+  final String password;
+
+  /// Button text.
+  final String label;
+
+  /// When true (the default), the button is only shown in debug builds.
+  /// Set it to false only for a public demo deployment whose account is
+  /// meant to be shared.
+  final bool debugOnly;
+
+  /// Whether the button should be shown in this build.
+  bool get isAvailable => !debugOnly || kDebugMode;
+}
+
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.admin});
+  const LoginScreen({super.key, required this.admin, this.demoLogin});
 
   final AdminController admin;
+
+  /// Optional demo account button (see [DemoLogin]).
+  final DemoLogin? demoLogin;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -226,6 +259,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2))
                       : const Text('Sign in'),
                 ),
+                if (widget.demoLogin?.isAvailable ?? false) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const Key('demo-login-btn'),
+                    icon: const Icon(Icons.bolt, size: 18),
+                    label: Text(widget.demoLogin!.label),
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() {
+                              _username.text = widget.demoLogin!.email;
+                              _password.text = widget.demoLogin!.password;
+                              _error = null;
+                            }),
+                  ),
+                ],
               ],
             ),
           ),

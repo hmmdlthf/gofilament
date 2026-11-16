@@ -31,6 +31,19 @@ Column names may be dotted paths (`edges.category.name`) to show fields of eager
 
 Deep links: `#/resources/<slug>`, `#/resources/<slug>/<id>`, `#/resources/<slug>/new`, `#/pages/<id>`.
 
+## Demo account button
+
+A demo or showcase app can offer a one-click "fill in the demo account" button on the sign-in
+screen. It is off unless you pass it, the package itself contains no credentials, and by default
+the button only appears in debug builds:
+
+```dart
+GoFilamentAdmin(
+  demoLogin: const DemoLogin(email: 'demo@example.com', password: 'demo-password'),
+  // debugOnly: false only for a public demo whose account is meant to be shared.
+)
+```
+
 ## Adding application pages
 
 ```dart

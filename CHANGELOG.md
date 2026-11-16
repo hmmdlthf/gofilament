@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Opt-in demo account button (`flutter/gofilament_admin`)**: `GoFilamentAdmin(demoLogin: DemoLogin(email:, password:, label:, debugOnly:))` shows a "fill in the demo account" button on the sign-in screen. Without the option there's no button, the package contains no credentials, and by default (`debugOnly: true`) the button only appears in debug builds.
+
+### Security
+- **Legacy scaffold demo shortcuts (`flutterclient.GenerateFlutterAdmin`)**: the generated sign-in screen showed three "quick demo" chips that fill in `admin` / `admin123`, including in release builds. They are now inside a `kDebugMode` check, so release builds of generated apps never offer an account.
+
 ## [v1.31.0] - 2026-11-16
 
 ### Breaking

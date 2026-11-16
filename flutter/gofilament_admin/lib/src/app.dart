@@ -22,7 +22,8 @@ class GoFilamentAdmin extends StatefulWidget {
       this.pages = const [],
       this.controller,
       this.initialSchema,
-      this.components = const AdminComponents()});
+      this.components = const AdminComponents(),
+      this.demoLogin});
 
   /// API client; defaults to the panel the page was served from.
   final AdminApi? api;
@@ -38,6 +39,10 @@ class GoFilamentAdmin extends StatefulWidget {
   /// Custom field, cell and dashboard widget components (the generated
   /// `panelComponents`).
   final AdminComponents components;
+
+  /// Optional demo account button on the sign-in screen (debug builds only
+  /// unless [DemoLogin.debugOnly] is false). Keep it out of production apps.
+  final DemoLogin? demoLogin;
 
   /// Supply your own controller to drive the app from outside (tests, embedding).
   final AdminController? controller;
@@ -77,7 +82,8 @@ class _GoFilamentAdminState extends State<GoFilamentAdmin> {
           AdminStage.failed => _Failure(
               message: _admin.error ?? 'Something went wrong',
               onRetry: _admin.start),
-          AdminStage.signedOut => LoginScreen(admin: _admin),
+          AdminStage.signedOut =>
+            LoginScreen(admin: _admin, demoLogin: widget.demoLogin),
           AdminStage.signedIn => AdminShell(admin: _admin),
         },
       ),
