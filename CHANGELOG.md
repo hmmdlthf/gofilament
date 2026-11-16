@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Notification links** allow only `http(s)` and relative URLs, so a `javascript:` link can't run script.
 
 ### Changed
+- **GoLaravel v1.16.0**: 128-bit support ticket IDs (`support.GenerateTicketID`).
 - **GoLaravel v1.15.0**: fixes a 2FA bypass in its auth workflows (challenge tokens worked as access tokens), throttles logins and 2FA, and recovers panics in scheduled tasks, event listeners and queue jobs. GoFilament doesn't use those workflows.
 - **GoLaravel v1.14.0**: security pass, covering broadcast channel authorization and the WebSocket origin check, a random storage signing key, a tenant `Authorize` option, required STARTTLS, and limits on HTTP responses and metrics. GoFilament's notification stream uses a public SSE channel that it authorizes itself, so it is unaffected.
 - **GoLaravel v1.13.0**: form method spoofing (`_method` / `X-HTTP-Method-Override`) now routes POST forms to PUT, PATCH and DELETE handlers; `.env` parsing fixes (export lines, inline comments, escapes).
