@@ -40,7 +40,7 @@ func TestAdvancedSearchRunsOnSQLite(t *testing.T) {
 	}{
 		{`{"rules":[{"field":"number","operator":"contains","value":"inv"}]}`, "1,2,4"},
 		{`{"rules":[{"field":"number","operator":"starts_with","value":"INV_"}]}`, "4"}, // "_" is literal
-		{`{"rules":[{"field":"note","operator":"contains","value":"50%"}]}`, "1"},      // "%" is literal
+		{`{"rules":[{"field":"note","operator":"contains","value":"50%"}]}`, "1"},       // "%" is literal
 		{`{"rules":[{"field":"number","operator":"ends_with","value":"7"}]}`, "3"},
 		{`{"rules":[{"field":"number","operator":"not_contains","value":"inv"}]}`, "3"},
 		{`{"rules":[{"field":"status","operator":"equals","value":"open"}]}`, "2,3"},

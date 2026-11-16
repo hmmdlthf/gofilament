@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gofilament_admin/gofilament_admin.dart';
+import 'package:gofilament_admin/src/list_tools.dart';
 
 import 'admin_test.dart' show signIn, openItems;
 import 'fake_panel.dart';
@@ -18,7 +19,8 @@ Future<void> _open(WidgetTester tester, FakePanel panel) async {
 }
 
 Map<String, String> _lastListQuery(FakePanel panel) => panel.requests
-    .lastWhere((r) => r.method == 'GET' && r.url.path.endsWith('/resources/items'))
+    .lastWhere(
+        (r) => r.method == 'GET' && r.url.path.endsWith('/resources/items'))
     .url
     .queryParameters;
 
@@ -83,7 +85,8 @@ void main() {
     final sent = json.decode(_lastListQuery(panel)['advanced_search']!) as Map;
     expect(sent['conjunction'], 'AND');
     final rules = sent['rules'] as List;
-    expect(rules[0], {'field': 'name', 'operator': 'contains', 'value': 'lamp'});
+    expect(
+        rules[0], {'field': 'name', 'operator': 'contains', 'value': 'lamp'});
     expect(rules[1]['operator'], 'in');
     expect(rules[1]['values'], ['live', 'draft']);
 
@@ -128,7 +131,62 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(handle);
     await tester.pumpAndSettle();
-    expect((json.decode((await api.readPreference('widths:items'))!) as Map)
-        .containsKey('name'), isFalse);
+    expect(
+        (json.decode((await api.readPreference('widths:items'))!) as Map)
+            .containsKey('name'),
+        isFalse);
+  });
+
+  testWidgets('grouping adds group headers, subtotals and totals',
+      (tester) async {
+    final panel = FakePanel()
+      ..extraColumns = [
+        {
+          'name': 'id',
+          'label': 'Ref',
+          'type': 'text',
+          'summaries': ['sum', 'count']
+        },
+      ]
+      ..itemsResourceExtras = {
+        'groups': ['status']
+      }
+      ..listSummaries = {
+        'id': {'sum': 99, 'count': 40}
+      };
+    await _open(tester, panel);
+
+    // Summary rows without grouping.
+    expect(find.text('This page'), findsOneWidget);
+    expect(find.text('All results'), findsOneWidget);
+    expect(find.text('Sum 99', findRichText: true), findsOneWidget);
+    expect(find.text('Sum 3', findRichText: true),
+        findsOneWidget); // page 1: ids 1 + 2
+
+    await tester.tap(find.byKey(const Key('list-group')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('group-status')));
+    await tester.pumpAndSettle();
+    expect(_lastListQuery(panel)['sort'], 'status');
+    // Page 1 sorted by status: Chains (draft), Rings (live).
+    expect(find.textContaining('draft (1)'), findsOneWidget);
+    expect(find.textContaining('live (1)'), findsOneWidget);
+    expect(find.text('Subtotal'), findsNWidgets(2));
+
+    await tester.tap(find.byKey(const Key('list-group')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('group-none')));
+    await tester.pumpAndSettle();
+    expect(find.text('Subtotal'), findsNothing);
+  });
+
+  test('computeSummaries matches the server', () {
+    final s = computeSummaries([10, '20.5', null, '', 'x', 4.5],
+        ['sum', 'avg', 'count', 'min', 'max']);
+    expect(s['sum'], 35);
+    expect(s['count'], 4);
+    expect(formatSummary(s['avg']!), '11.67');
+    expect(s['min'], 4.5);
+    expect(s['max'], 20.5);
   });
 }

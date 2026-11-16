@@ -485,6 +485,7 @@ res := filament.NewResource[*Document]("documents").
 - **👁️ Dynamic Column Toggling (Show/Hide)**: Operators can customize which columns are visible via a "Columns" dropdown menu. Preferences are automatically persisted to browser `localStorage` across page visits.
 - **↕️ Drag-and-Drop Row Reordering**: Reorder records with grip handles (`⋮⋮`). Dragging a row dispatches an asynchronous update to `POST /admin/{resource}/reorder` and `POST /admin/api/resources/{slug}/reorder`, calling `r.OnReorder(func(ctx, orderedIDs) error)`.
 - **🚀 Server-Side Sorting & Filtering**: Multi-column sorting (`↑`, `↓`), search bars, `SelectFilter`, and `TernaryFilter` (soft-deletes).
+- **🧮 Summaries & grouping**: `tables.TextColumn[T]("amount").Summarize(tables.Sum, tables.Avg)` shows aggregates under the column for the page and per group (`tables.Sum`, `Avg`, `Count`, `Min`, `Max`). `res.SummariesUsing(func(ctx, search, filters) (tables.Summaries, error))` adds an "All results" row computed by your database (and `summaries` in the API). `t.Groups("status")` / `t.DefaultGroup("status")` let users group rows with a header and subtotal per group; while grouped, the list is sorted by the group column. Web and Flutter.
 - **📦 Streaming Bulk & Header Actions**: In-line View/Edit/Delete actions, multi-record delete, and streaming data export (`CSV`, `TSV`, `JSON`).
 
 ---

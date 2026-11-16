@@ -53,6 +53,10 @@ type Table[T any] struct {
 	selectableColumns         []string
 	advancedSearchableColumns []string
 	advancedSearchEnabled     bool
+	groups                    []string
+	defaultGroup              string
+	activeGroup               string
+	totals                    Summaries
 }
 
 // New creates an empty Table instance.
@@ -596,6 +600,8 @@ func (t *Table[T]) Render(basePath string) string {
 		sb.WriteString(`</div>`)
 	}
 
+	sb.WriteString(t.groupSelectHTML())
+
 	// Right toolbar controls: Column Toggler & Header Actions
 	sb.WriteString(`<div style="display: flex; gap: 0.5rem; align-items: center;">`)
 
@@ -716,7 +722,46 @@ func (t *Table[T]) Render(basePath string) string {
 		}
 		sb.WriteString(fmt.Sprintf(`<tr class="empty-row"><td colspan="%d" style="text-align: center; padding: 3rem 1rem; color: var(--gray-400);">No records found.</td></tr>`, colspan))
 	} else {
+		lead := 0
+		if t.reorderable {
+			lead++
+		}
+		if len(t.bulkActions) > 0 {
+			lead++
+		}
+		trail := 0
+		if len(t.actions) > 0 || t.softDeletes {
+			trail = 1
+		}
+		width := lead + len(t.columns) + trail
+		hasSummaries := len(t.SummarizedColumns()) > 0
+		var groupRecs []T
+		curGroup, inGroup := "", false
+		closeGroup := func() {
+			if inGroup && hasSummaries {
+				sb.WriteString(t.summaryRowHTML("Subtotal", t.summarize(groupRecs), lead, trail, "group-summary-row"))
+			}
+		}
 		for _, rec := range t.records {
+			if t.activeGroup != "" {
+				if k := groupKey(t.extractFieldValue(rec, t.activeGroup)); !inGroup || k != curGroup {
+					closeGroup()
+					n := 0
+					for _, r := range t.records {
+						if groupKey(t.extractFieldValue(r, t.activeGroup)) == k {
+							n++
+						}
+					}
+					label := k
+					if label == "" {
+						label = "(none)"
+					}
+					sb.WriteString(fmt.Sprintf(`<tr class="group-row"><td colspan="%d" style="background: var(--gray-100); font-weight: 600; font-size: 0.8125rem;">%s: %s <span style="color: var(--gray-500); font-weight: 400;">(%d)</span></td></tr>`,
+						width, html.EscapeString(t.columnLabel(t.activeGroup)), html.EscapeString(label), n))
+					curGroup, inGroup, groupRecs = k, true, nil
+				}
+				groupRecs = append(groupRecs, rec)
+			}
 			recID := t.extractRecordID(rec)
 			isRecTrashed := t.softDeletes && t.isTrashed != nil && t.isTrashed(rec)
 			trAttrs := ""
@@ -785,6 +830,15 @@ func (t *Table[T]) Render(basePath string) string {
 			}
 			sb.WriteString(`</tr>`)
 		}
+		closeGroup()
+		if hasSummaries {
+			sb.WriteString(`</tbody><tfoot>`)
+			sb.WriteString(t.summaryRowHTML("This page", t.summarize(t.records), lead, trail, "summary-row"))
+			if t.totals != nil {
+				sb.WriteString(t.summaryRowHTML("All results", t.totals, lead, trail, "summary-row summary-row-total"))
+			}
+			sb.WriteString(`</tfoot><tbody>`)
+		}
 	}
 
 	sb.WriteString(`</tbody></table></div>`)
@@ -802,10 +856,10 @@ func (t *Table[T]) Render(basePath string) string {
 	if totalPages > 1 {
 		sb.WriteString(`<div style="display: flex; gap: 0.375rem;">`)
 		if t.page > 1 {
-			sb.WriteString(fmt.Sprintf(`<a href="%s?page=%d" class="btn btn-secondary btn-sm">Previous</a>`, basePath, t.page-1))
+			sb.WriteString(fmt.Sprintf(`<a href="%s" class="btn btn-secondary btn-sm">Previous</a>`, html.EscapeString(t.pageURL(basePath, t.page-1))))
 		}
 		if t.page < totalPages {
-			sb.WriteString(fmt.Sprintf(`<a href="%s?page=%d" class="btn btn-secondary btn-sm">Next</a>`, basePath, t.page+1))
+			sb.WriteString(fmt.Sprintf(`<a href="%s" class="btn btn-secondary btn-sm">Next</a>`, html.EscapeString(t.pageURL(basePath, t.page+1))))
 		}
 		sb.WriteString(`</div>`)
 	}

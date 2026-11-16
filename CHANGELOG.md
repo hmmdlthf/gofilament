@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Table summaries and grouping**: `Summarize(...)` on columns (sum, average, count, min, max) for the page and each group, `Resource.SummariesUsing` for totals over all matching records (also sent as `summaries` by the API), and `Table.Groups` / `DefaultGroup` for grouped rows with headers and subtotals. Web tables and the Flutter list.
+
+### Fixed
+- **Web pagination links** dropped the search, sort, page size and filters; they now keep the list state.
+
 ## [v1.33.1] - 2026-11-17
 
 ### Fixed
