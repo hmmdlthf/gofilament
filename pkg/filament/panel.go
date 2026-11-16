@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golaravel/gofilament/pkg/assets"
@@ -121,6 +122,8 @@ type Panel struct {
 	middlewares         []gcontext.HandlerFunc
 	corsAllowedOrigins  []string
 	webSessions         webSessionStore
+	crossOrigin         *http.CrossOriginProtection
+	crossOriginOnce     sync.Once
 	corsAllowOriginFunc func(origin string) bool
 	resources           []ResourceInterface
 	pages               []PageInterface
@@ -865,6 +868,11 @@ func (p *Panel) resolveUser(c *gcontext.Context) *Context {
 			c.Set(auth.ContextUserKey, u)
 		}
 	}
+	// NewContext resolved the tenant before the user was known; resolve it
+	// again so a TenantLoader that lists the user's memberships sees them.
+	if ctx.User() != nil && p.tenantConfig != nil && p.tenantConfig.Enabled {
+		p.ResolveTenant(ctx)
+	}
 	return ctx
 }
 
@@ -882,6 +890,12 @@ func (p *Panel) isAPIRequest(c *gcontext.Context) bool {
 // (or the write error): callers must return immediately on any error.
 func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 	ctx := p.resolveUser(c)
+
+	// Web (cookie-session) routes refuse cross-site form posts. The API is
+	// bearer-token only and governed by CORS instead.
+	if !p.isAPIRequest(c) && !p.checkCrossOrigin(c) {
+		return ctx, denied(c.String(http.StatusForbidden, "403 Forbidden: cross-origin request refused"))
+	}
 
 	reqPath := ""
 	if c.Request != nil && c.Request.URL != nil {
@@ -1172,11 +1186,15 @@ func (p *Panel) Mount(r *router.Router) {
 						}
 					}
 				}
+				if targetTenant == nil && p.tenantConfig.TenantLoader != nil {
+					// Not one of the user's tenants: refuse the switch.
+					return c.String(http.StatusForbidden, "403 Forbidden: Unknown tenant")
+				}
 				if targetTenant == nil {
 					targetTenant = &TenantItem{Key: targetKey, Name: targetKey}
 				}
 
-				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", false, true)
+				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", isSecureRequest(c), true)
 
 				ctx.setTenantInstance(targetTenant)
 
@@ -1188,8 +1206,8 @@ func (p *Panel) Mount(r *router.Router) {
 			redirectURL := p.path
 			if p.tenantConfig.PathScoping && targetKey != "" {
 				redirectURL = fmt.Sprintf("%s/%s", p.path, targetKey)
-			} else if ref := c.Header("Referer"); ref != "" {
-				redirectURL = ref
+			} else {
+				redirectURL = p.safeBackURL(c, redirectURL)
 			}
 
 			return c.Redirect(http.StatusSeeOther, redirectURL)
@@ -1236,11 +1254,7 @@ func (p *Panel) Mount(r *router.Router) {
 			c.SetLocale(targetLang)
 		}
 
-		redirectURL := p.path
-		if ref := c.Header("Referer"); ref != "" {
-			redirectURL = ref
-		}
-		return c.Redirect(http.StatusSeeOther, redirectURL)
+		return c.Redirect(http.StatusSeeOther, p.safeBackURL(c, p.path))
 	}
 
 	r.GET(p.path+"/locale/switch", localeSwitchHandler)
@@ -1259,6 +1273,14 @@ func (p *Panel) Mount(r *router.Router) {
 		// (HttpOnly, SameSite=Lax cookie; see SessionCookieName).
 		r.POST(p.path+"/login", p.handleWebLogin)
 		logout := func(c *gcontext.Context) error {
+			if !p.checkCrossOrigin(c) {
+				return c.String(http.StatusForbidden, "403 Forbidden: cross-origin request refused")
+			}
+			if c.Request.Method == http.MethodGet && !isSameOriginNavigation(c) {
+				// Not started from the panel: ask first, so a foreign page
+				// cannot sign the user out.
+				return p.renderConfirmPage(NewContext(c, p), "Sign out", "Do you want to sign out?", p.path+"/logout")
+			}
 			p.endWebSession(c)
 			return c.Redirect(http.StatusSeeOther, p.path+"/login")
 		}
@@ -1380,9 +1402,15 @@ func (p *Panel) Mount(r *router.Router) {
 		})
 
 		r.GET(p.path+"/notifications/stream", func(c *gcontext.Context) error {
+			// The channel is derived from the authenticated user only; a
+			// client-supplied header must never pick whose stream is read.
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
 			user := "all"
-			if authUser := c.Header("X-User-ID"); authUser != "" {
-				user = authUser
+			if ctx.User() != nil {
+				user = ctx.User().GetAuthIdentifier()
 			}
 			channel := "filament:notifications:" + user
 			c.Request.URL.RawQuery = "channel=" + channel

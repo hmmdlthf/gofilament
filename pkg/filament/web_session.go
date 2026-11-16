@@ -4,7 +4,10 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
+	"html"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -240,7 +243,7 @@ func (p *Panel) endWebSession(c *gcontext.Context) {
 // handleWebLogin processes POST <panel>/login of the web engine.
 func (p *Panel) handleWebLogin(c *gcontext.Context) error {
 	ctx := NewContext(c, p)
-	if !p.VerifyCSRF(c) {
+	if !p.checkCrossOrigin(c) || !p.VerifyCSRF(c) {
 		return p.renderLoginScreen(ctx, http.StatusForbidden, "Your session expired. Please try again.", "")
 	}
 	identifier := strings.TrimSpace(c.FormValue("email"))
@@ -275,4 +278,105 @@ func (p *Panel) handleWebLogin(c *gcontext.Context) error {
 		return p.renderLoginScreen(ctx, http.StatusServiceUnavailable, "Sign-in is unavailable right now. Please try again.", identifier)
 	}
 	return c.Redirect(http.StatusSeeOther, p.path)
+}
+
+// crossOriginProtection returns the panel's Fetch-Metadata / Origin based
+// cross-site request guard (net/http.CrossOriginProtection).
+func (p *Panel) crossOriginProtection() *http.CrossOriginProtection {
+	p.crossOriginOnce.Do(func() {
+		if p.crossOrigin == nil {
+			p.crossOrigin = http.NewCrossOriginProtection()
+		}
+	})
+	return p.crossOrigin
+}
+
+// TrustedOrigins lets the listed origins (for example "https://admin.example.com"
+// when it differs from the panel host) submit the panel's web forms. All
+// other cross-origin browser POST / PUT / PATCH / DELETE requests to web
+// (non-API) panel routes are refused with 403. It panics on a malformed origin.
+func (p *Panel) TrustedOrigins(origins ...string) *Panel {
+	cop := p.crossOriginProtection()
+	for _, o := range origins {
+		if err := cop.AddTrustedOrigin(o); err != nil {
+			panic(fmt.Sprintf("filament: TrustedOrigins(%q): %v", o, err))
+		}
+	}
+	return p
+}
+
+// checkCrossOrigin refuses cross-site state-changing browser requests.
+// Requests without Sec-Fetch-Site and Origin headers (non-browser clients)
+// pass, as do safe methods.
+func (p *Panel) checkCrossOrigin(c *gcontext.Context) bool {
+	return c.Request == nil || p.crossOriginProtection().Check(c.Request) == nil
+}
+
+// isSameOriginNavigation reports whether the browser says the request was
+// started from a page of this origin (Sec-Fetch-Site: same-origin).
+func isSameOriginNavigation(c *gcontext.Context) bool {
+	return c.Header("Sec-Fetch-Site") == "same-origin"
+}
+
+// guardUnsafeGET wraps a handler that changes state but is also reachable by
+// GET (delete / restore links). A GET started from the panel itself runs it;
+// any other GET (a link on another site, a typed or bookmarked URL, an old
+// browser) gets a confirmation page that POSTs to the same URL instead.
+func (p *Panel) guardUnsafeGET(title, message string, h gcontext.HandlerFunc) gcontext.HandlerFunc {
+	return func(c *gcontext.Context) error {
+		if c.Request.Method != http.MethodGet || isSameOriginNavigation(c) {
+			return h(c)
+		}
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return p.renderConfirmPage(ctx, title, message, c.Request.URL.RequestURI())
+	}
+}
+
+// renderConfirmPage renders a minimal page with a POST button to actionURL.
+func (p *Panel) renderConfirmPage(ctx *Context, title, message, actionURL string) error {
+	back := p.safeBackURL(ctx.Context, p.path)
+	page := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="%s" dir="%s">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>%s - %s</title>
+  <link rel="stylesheet" href="%s/assets/filament.css">
+</head>
+<body style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background-color: var(--gray-50);">
+  <div class="filament-card" style="width: 100%%; max-width: 26rem; padding: 2rem;">
+    <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem;">%s</h2>
+    <p style="font-size: 0.875rem; color: var(--gray-500); margin-bottom: 1.5rem;">%s</p>
+    <form method="POST" action="%s" style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      %s
+      <a href="%s" class="btn btn-secondary">Cancel</a>
+      <button type="submit" class="btn btn-danger">Confirm</button>
+    </form>
+  </div>
+</body>
+</html>`, ctx.Locale(), ctx.Direction(), html.EscapeString(title), html.EscapeString(p.brandName), p.path,
+		html.EscapeString(title), html.EscapeString(message), html.EscapeString(actionURL),
+		p.csrfHiddenInput(ctx.Context, ""), html.EscapeString(back))
+	return ctx.HTML(http.StatusOK, page)
+}
+
+// safeBackURL returns the Referer as a local path when it points at this
+// host, else fallback. It never returns an absolute or protocol-relative URL.
+func (p *Panel) safeBackURL(c *gcontext.Context, fallback string) string {
+	ref := c.Header("Referer")
+	if ref == "" || c.Request == nil {
+		return fallback
+	}
+	u, err := url.Parse(ref)
+	if err != nil || (u.Host != "" && !strings.EqualFold(u.Host, c.Request.Host)) {
+		return fallback
+	}
+	local := u.RequestURI()
+	if !strings.HasPrefix(local, "/") || strings.HasPrefix(local, "//") || strings.HasPrefix(local, "/\\") {
+		return fallback
+	}
+	return local
 }

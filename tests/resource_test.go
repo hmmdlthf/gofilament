@@ -189,7 +189,8 @@ func TestResourceFullCRUDLifecycle(t *testing.T) {
 		AssertSee("Charlie Senior Dev")
 
 	// 7. Delete record
-	delResp := client.Get("/admin/users/3/delete")
+	// A delete link clicked inside the panel (browsers send Sec-Fetch-Site).
+	delResp := client.WithHeader("Sec-Fetch-Site", "same-origin").Get("/admin/users/3/delete")
 	delResp.AssertStatus(http.StatusSeeOther)
 
 	// Verify record 3 was removed

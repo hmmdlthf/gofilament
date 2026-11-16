@@ -1035,6 +1035,7 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 		}
 		return r.HandleRestore(ctx, basePath)
 	}
+	restoreHandler = p.guardUnsafeGET("Restore record", "Restore this record?", restoreHandler)
 	router.GET(basePath+"/restore", restoreHandler)
 	router.POST(basePath+"/restore", restoreHandler)
 
@@ -1046,6 +1047,7 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 		}
 		return r.HandleForceDelete(ctx, basePath)
 	}
+	forceDeleteHandler = p.guardUnsafeGET("Delete permanently", "Permanently delete this record? This cannot be undone.", forceDeleteHandler)
 	router.GET(basePath+"/force-delete", forceDeleteHandler)
 	router.POST(basePath+"/force-delete", forceDeleteHandler)
 
@@ -1098,6 +1100,7 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 		}
 		return r.handleDelete(ctx, basePath, c.Param("id"))
 	}
+	deleteHandler = p.guardUnsafeGET("Delete record", "Delete this record?", deleteHandler)
 	router.GET(basePath+"/:id/delete", deleteHandler)
 	router.POST(basePath+"/:id/delete", deleteHandler)
 
@@ -1165,6 +1168,7 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 			}
 			return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s/%s/edit", basePath, parentID))
 		}
+		deleteRelHandler = p.guardUnsafeGET("Delete related record", "Delete this related record?", deleteRelHandler)
 		router.GET(relURL+"/:child_id/delete", deleteRelHandler)
 		router.POST(relURL+"/:child_id/delete", deleteRelHandler)
 	}

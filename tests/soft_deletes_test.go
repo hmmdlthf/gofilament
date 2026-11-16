@@ -160,7 +160,7 @@ func TestSoftDeletes_LifecycleEndpointsAndBulk(t *testing.T) {
 	}
 
 	// 3. Single record restore via GET /admin/documents/restore?id=2
-	client.Get("/admin/documents/restore?id=2").AssertStatus(http.StatusSeeOther)
+	client.WithHeader("Sec-Fetch-Site", "same-origin").Get("/admin/documents/restore?id=2").AssertStatus(http.StatusSeeOther)
 	if database["2"].DeletedAt != nil {
 		t.Fatalf("expected Doc 2 to be restored (DeletedAt == nil)")
 	}
