@@ -3,6 +3,7 @@ package tests
 import (
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/golaravel/gofilament/pkg/filament"
@@ -68,5 +69,19 @@ func TestTenantSwitchRefusesUnknownTenant(t *testing.T) {
 	}
 	if rec := w.do("GET", "/admin/tenant/switch?tenant=globex", nil); rec.Code != http.StatusSeeOther || w.cookies["filament_tenant"].Value != "globex" {
 		t.Fatalf("switch to own tenant: %d", rec.Code)
+	}
+}
+
+func TestTenantSwitchFromAnotherSiteNeedsConfirmation(t *testing.T) {
+	app, _ := newMembershipPanel(t)
+	w := newWebClient(t, app)
+	signIn(t, w)
+	w.fetchSite = "cross-site"
+	rec := w.do("GET", "/admin/tenant/switch?tenant=globex", nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `method="POST"`) {
+		t.Fatalf("cross-site switch must show a confirmation page: %d", rec.Code)
+	}
+	if _, set := w.cookies["filament_tenant"]; set {
+		t.Fatal("a cross-site GET switched the tenant")
 	}
 }

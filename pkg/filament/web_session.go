@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -31,6 +32,8 @@ type webSession struct {
 	user    auth.Authenticatable
 	expires time.Time
 }
+
+var warnMemorySessions sync.Once
 
 // webSessionStore keeps web-engine sessions in memory. It is used when the
 // panel has no TokenValidator; sessions are lost on restart and are not
@@ -222,6 +225,9 @@ func (p *Panel) startWebSession(c *gcontext.Context, user auth.Authenticatable, 
 				return err
 			}
 		} else {
+			warnMemorySessions.Do(func() {
+				slog.Warn("filament: web sessions are kept in memory (lost on restart, not shared between instances). Use Panel.WebSessionsUsing with a persistent store such as pkg/sqlstore, or a TokenValidator.")
+			})
 			p.webSessions.put(value, webSession{user: user, expires: time.Now().Add(d)})
 		}
 	}

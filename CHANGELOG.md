@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking
+- **Tenant switch:** a GET to `<panel>/tenant/switch` from outside the panel (scripts, bookmarks) shows a confirmation page; programmatic callers should POST.
 - **Support API:** clients can no longer choose ticket IDs or claim `user_id` / `user_email` / `tenant_id`. Posting to a ticket that doesn't exist answers 404 instead of creating it. By default, support staff are signed-in users who pass `CanAccess`; use `Panel.SupportStaff` to narrow that.
 - **GET delete / restore / logout from outside the panel** (scripts, bookmarks, old browsers without `Sec-Fetch-Site`) now gets a confirmation page instead of acting. Use POST for programmatic calls.
 
@@ -28,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Reordering** (web and API) only checked panel access; it now needs edit rights on every reordered record.
 - **CSV export** wrote cells starting with `=`, `+`, `-` or `@` as-is (spreadsheet formula injection); such cells, other than plain numbers, are prefixed with a quote.
 - **Notification links** allow only `http(s)` and relative URLs, so a `javascript:` link can't run script.
+- **Tenant switch from another site**: `GET <panel>/tenant/switch` now switches only when the browser reports `Sec-Fetch-Site: same-origin` (a click inside the panel). Any other GET shows a confirmation page that POSTs, so a link or image on another site can't silently change the tenant a signed-in user is working in.
+- **In-memory web sessions** log a one-time warning on the first web login without a persistent store (`Panel.WebSessionsUsing`, `pkg/sqlstore`) or a `TokenValidator`, since such sessions are lost on restart and not shared between instances.
 
 ### Changed
 - **GoLaravel v1.16.0**: 128-bit support ticket IDs (`support.GenerateTicketID`).
