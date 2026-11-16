@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # golaravel is a private module (see go.mod's replace and the README).
+  GOPRIVATE: github.com/hmmdlthf/*
+
+jobs:
+  go:
+    name: Go tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Access to the private golaravel module
+        env:
+          GOLARAVEL_READ_TOKEN: ${{ secrets.GOLARAVEL_READ_TOKEN }}
+        run: |
+          if [ -z "$GOLARAVEL_READ_TOKEN" ]; then
+            echo "::error::Add a repository secret GOLARAVEL_READ_TOKEN: a fine-grained GitHub token with read-only Contents access to hmmdlthf/golaravel."
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${GOLARAVEL_READ_TOKEN}@github.com/hmmdlthf/".insteadOf "https://github.com/hmmdlthf/"
+      - name: Download modules
+        run: go mod download
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test -race -count=1 ./...
+
+  flutter:
+    name: Flutter package tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter/gofilament_admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.7
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test
