@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"net/url"
 	"io/fs"
 	"errors"
 	"encoding/json"
@@ -1760,7 +1761,7 @@ func (p *Panel) renderNotificationsDrawerHTML(ctx *Context) string {
 				unreadClass = "unread"
 			}
 			actionBtn := ""
-			if it.ActionURL != "" {
+			if it.ActionURL != "" && safeLinkURL(it.ActionURL) {
 				lbl := it.ActionLabel
 				if lbl == "" {
 					lbl = "View"
@@ -1943,4 +1944,18 @@ func (p *Panel) mountFlutter(r *router.Router) {
 	r.GET(p.path+"/", func(c *gcontext.Context) error {
 		return c.Redirect(http.StatusMovedPermanently, p.path)
 	})
+}
+
+// safeLinkURL allows http(s) and relative links only, so a notification
+// link cannot run script (javascript:, data:, vbscript:).
+func safeLinkURL(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "", "http", "https":
+		return true
+	}
+	return false
 }
