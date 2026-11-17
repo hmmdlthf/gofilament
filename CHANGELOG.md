@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Two-factor recovery codes**: with `Accounts.RecoveryCodes` / `SaveRecoveryCodes`, turning two-factor on makes 8 single-use codes (shown once, stored as SHA-256 hashes) that work at the sign-in challenge in place of an authenticator code. The profile shows how many are left and can make a new set; turning two-factor off removes them.
+
 ## [v1.34.0] - 2026-11-17
 
 ### Added
