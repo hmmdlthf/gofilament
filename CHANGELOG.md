@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.39.0] - 2026-11-17
+
 ### Changed
 - **Roles are given per panel and tenant (role bindings)**: `RoleStore` now keeps `RoleBinding{UserID, Role, Panel, Tenant}` (`*` = all) instead of a flat user → roles list. Permissions come from the bindings covering the current panel and tenant; users need a binding to enter a panel (`RolesConfig.RequirePanelAccess`, default on); `roles.manage` everywhere defines roles and grants anything, the new `roles.assign` lets tenant admins grant within their tenant only roles whose permissions they hold. `RolesConfig.Panels` / `Tenants` list where roles can be given; the screens, API (`POST/DELETE /roles/bindings`) and Flutter show and edit bindings. **Upgrade:** `sqlstore.Migrate` turns existing assignments into `*`/`*` bindings; custom `RoleStore` implementations must replace `UserRoles`/`SetUserRoles`/`RoleUsers` with `ListBindings`/`AddBinding`/`RemoveBinding`.
 
