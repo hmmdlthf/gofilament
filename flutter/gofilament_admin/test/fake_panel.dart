@@ -93,6 +93,9 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+
+  /// Boot offers English and Arabic; Accept-Language "ar" answers RTL.
+  bool bilingual = false;
   bool notificationsOn = false;
 
   /// Fields sent as resource_meta.bulk_edit.
@@ -151,6 +154,12 @@ class FakePanel {
         'brand': brand,
         'brand_name': brand['name'],
         'theme': {'colors': colors},
+        if (bilingual) ...{
+          'supported_locales': ['en', 'ar'],
+          'locale_labels': {'en': 'English', 'ar': 'العربية'},
+          'locale': req.headers['Accept-Language'] == 'ar' ? 'ar' : 'en',
+          'direction': req.headers['Accept-Language'] == 'ar' ? 'rtl' : 'ltr',
+        },
         'auth': {
           'login': true,
           if (accountFeatures.isNotEmpty) 'accounts': accountFeatures,

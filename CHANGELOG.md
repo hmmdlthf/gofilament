@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flutter language and RTL**: the app lays itself out right to left when the panel's language is RTL, sends the chosen language as `Accept-Language`, and offers a language menu (account menu) when the panel has several `Locales`; the choice is remembered on the device.
+- **Accept-Language**: panels with `Locales` pick the first supported language from the `Accept-Language` header when no `?lang` or cookie chooses one (API clients).
+
 ## [v1.36.0] - 2026-11-17
 
 ### Added

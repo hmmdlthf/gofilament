@@ -427,6 +427,7 @@ class _TopBar extends StatelessWidget {
           position: PopupMenuPosition.under,
           onSelected: (v) {
             if (v == 'logout') admin.logout();
+            if (v.startsWith('locale:')) admin.setLanguage(v.substring(7));
             if (v == 'account') {
               Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (_) => AccountScreen(admin: admin)));
@@ -458,6 +459,14 @@ class _TopBar extends StatelessWidget {
                   Text('Your account')
                 ]),
               ),
+            for (final l in admin.languages.entries)
+              CheckedPopupMenuItem<String>(
+                key: Key('language-${l.key}'),
+                value: 'locale:${l.key}',
+                checked: l.key == admin.locale,
+                child: Text(l.value),
+              ),
+            if (admin.languages.isNotEmpty) const PopupMenuDivider(),
             const PopupMenuItem<String>(
               value: 'logout',
               child: Row(children: [
