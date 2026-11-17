@@ -81,6 +81,12 @@ class _ResourceListPageState extends State<ResourceListPage> {
   /// Columns the user chose to show (null: the server's defaults).
   Set<String>? _shown;
 
+  /// Saved views (Panel.SavedViews) and the one applied, if any.
+  List<Map<String, dynamic>> _views = const [];
+  bool _canShareViews = false;
+  String? _viewId;
+  bool get _viewsEnabled => admin.schema['saved_views'] == true;
+
   List<Map<String, dynamic>> get _allColumns {
     final cols = _resource['columns'];
     return cols is List
@@ -158,6 +164,149 @@ class _ResourceListPageState extends State<ResourceListPage> {
       _page = 1;
     });
     _load();
+  }
+
+  // ------------------------------------------------------------- saved views
+
+  Future<void> _loadViews() async {
+    if (!_viewsEnabled) return;
+    try {
+      final data = await api.views(widget.slug);
+      if (!mounted) return;
+      final list = data['views'];
+      setState(() {
+        _views = list is List
+            ? [
+                for (final v in list)
+                  if (v is Map) Map<String, dynamic>.from(v)
+              ]
+            : const [];
+        _canShareViews = data['can_share'] == true;
+      });
+    } catch (_) {}
+  }
+
+  Map<String, dynamic> get _viewState => {
+        if (_search.text.trim().isNotEmpty) 'search': _search.text.trim(),
+        if (_sort.isNotEmpty) 'sort': _sort,
+        if (_sort.isNotEmpty) 'direction': _descending ? 'desc' : 'asc',
+        if (_filters.isNotEmpty) 'filters': {..._filters},
+        if (!_advanced.isEmpty) 'advanced_search': _advanced.encode(),
+        if (_shown != null) 'columns': _shown!.toList()..sort(),
+        if (_group.isNotEmpty) 'group': _group,
+        'per_page': _perPage,
+      };
+
+  void _applyView(Map<String, dynamic>? view) {
+    final st = view?['state'] is Map
+        ? Map<String, dynamic>.from(view!['state'] as Map)
+        : <String, dynamic>{};
+    setState(() {
+      _viewId = view == null ? null : '${view['id']}';
+      _search.text = '${st['search'] ?? ''}';
+      _sort = '${st['sort'] ?? ''}';
+      _descending = st['direction'] == 'desc';
+      _filters
+        ..clear()
+        ..addAll(st['filters'] is Map
+            ? (st['filters'] as Map).map((k, v) => MapEntry('$k', '$v'))
+            : const {});
+      _advanced = AdvancedSearch.decode('${st['advanced_search'] ?? ''}');
+      final cols = st['columns'];
+      if (cols is List && cols.isNotEmpty) {
+        _shown = {for (final c in cols) '$c'};
+      }
+      final g = '${st['group'] ?? ''}';
+      _group = _groups.contains(g) ? g : '';
+      final pp = (st['per_page'] as num?)?.toInt();
+      if (pp != null && pp > 0) _perPage = pp;
+      _page = 1;
+    });
+    _load();
+  }
+
+  Future<void> _saveView() async {
+    final result = await showDialog<(String, bool)>(
+      context: context,
+      builder: (_) => _SaveViewDialog(canShare: _canShareViews),
+    );
+    if (result == null) return;
+    try {
+      final v = await api.saveView(widget.slug, result.$1, _viewState,
+          shared: result.$2);
+      await _loadViews();
+      if (mounted) setState(() => _viewId = '${v['id']}');
+      _toast('View saved.');
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
+  }
+
+  Future<void> _deleteView(Map<String, dynamic> view) async {
+    try {
+      await api.deleteView(widget.slug, '${view['id']}');
+      if (_viewId == '${view['id']}') setState(() => _viewId = null);
+      await _loadViews();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
+  }
+
+  Widget _viewsMenu() {
+    Map<String, dynamic>? current;
+    for (final v in _views) {
+      if ('${v['id']}' == _viewId) current = v;
+    }
+    return PopupMenuButton<String>(
+      key: const Key('list-views'),
+      tooltip: 'Saved views',
+      onSelected: (v) {
+        if (v == ':all') {
+          _applyView(null);
+        } else if (v == ':save') {
+          _saveView();
+        } else if (v == ':delete' && current != null) {
+          _deleteView(current);
+        } else {
+          _applyView(_views.firstWhere((x) => '${x['id']}' == v));
+        }
+      },
+      itemBuilder: (_) => [
+        CheckedPopupMenuItem(
+            key: const Key('view-all'),
+            value: ':all',
+            checked: _viewId == null,
+            child: const Text('All records')),
+        for (final v in _views)
+          CheckedPopupMenuItem(
+            key: Key('view-${v['id']}'),
+            value: '${v['id']}',
+            checked: '${v['id']}' == _viewId,
+            child:
+                Text('${v['name']}${v['shared'] == true ? ' (shared)' : ''}'),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+            key: Key('view-save'),
+            value: ':save',
+            child: Text('Save current view…')),
+        if (current != null && current['can_delete'] == true)
+          PopupMenuItem(
+              key: const Key('view-delete'),
+              value: ':delete',
+              child: Text('Delete "${current['name']}"')),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.bookmarks_outlined),
+          if (current != null) ...[
+            const SizedBox(width: 4),
+            Text('${current['name']}', key: const Key('view-current')),
+          ],
+        ]),
+      ),
+    );
   }
 
   void _toggleColumn(String name) {
@@ -293,6 +442,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
     if (!_groups.contains(_group)) _group = '';
     _loadColumnChoice();
     _loadWidths();
+    _loadViews();
     _load();
     final open = widget.openRecord;
     if (open != null && _hasForm) {
@@ -672,6 +822,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
               ),
           ],
         ),
+      if (_viewsEnabled) _viewsMenu(),
       if (_exportEnabled)
         PopupMenuButton<String>(
           key: const Key('list-export'),
@@ -1314,4 +1465,60 @@ class _TableRow {
   final String kind;
   final Map<String, Map<String, double>>? sums;
   int pos = 0;
+}
+
+class _SaveViewDialog extends StatefulWidget {
+  const _SaveViewDialog({required this.canShare});
+  final bool canShare;
+
+  @override
+  State<_SaveViewDialog> createState() => _SaveViewDialogState();
+}
+
+class _SaveViewDialogState extends State<_SaveViewDialog> {
+  final _name = TextEditingController();
+  bool _shared = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _ok() {
+    final n = _name.text.trim();
+    if (n.isNotEmpty) Navigator.pop(context, (n, _shared));
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Save view'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            key: const Key('view-name'),
+            controller: _name,
+            autofocus: true,
+            maxLength: 80,
+            decoration: const InputDecoration(labelText: 'Name'),
+            onSubmitted: (_) => _ok(),
+          ),
+          if (widget.canShare)
+            SwitchListTile(
+              key: const Key('view-shared'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Share with everyone'),
+              value: _shared,
+              onChanged: (v) => setState(() => _shared = v),
+            ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              key: const Key('view-save-ok'),
+              onPressed: _ok,
+              child: const Text('Save')),
+        ],
+      );
 }

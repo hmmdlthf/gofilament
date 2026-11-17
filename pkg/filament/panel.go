@@ -127,6 +127,9 @@ type Panel struct {
 	webSessions         webSessionStore
 	crossOrigin         *http.CrossOriginProtection
 	crossOriginOnce     sync.Once
+	viewStore           SavedViewStore
+	canShareViews       func(ctx *Context) bool
+	canManageViews      func(ctx *Context) bool
 	corsAllowOriginFunc func(origin string) bool
 	resources           []ResourceInterface
 	pages               []PageInterface

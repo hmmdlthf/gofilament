@@ -1110,6 +1110,24 @@ table.HeaderActions(
 )
 ```
 
+### 🔖 Saved views
+Users can name the current state of a list (search, sort, filters, advanced
+search, visible columns, grouping, page size), come back to it from a *Views*
+menu, and share it with everyone who can see the resource (web and Flutter).
+
+```go
+panel.SavedViews(nil)              // in memory
+panel.SavedViews(sqlStore.Views()) // in the database (pkg/sqlstore)
+panel.SavedViewsShareable(
+    func(ctx *filament.Context) bool { return true },              // who may share
+    func(ctx *filament.Context) bool { return isAdmin(ctx.User()) }, // who may delete others' shared views
+)
+```
+
+API: `GET/POST /admin/api/resources/:slug/views`, `DELETE .../views/:id`.
+On the web, visible columns are chosen in the browser and are not part of a
+saved view.
+
 ### 📥 Interactive Column-Mapping Import:
 - Upload CSV or TSV files via web modal (`/admin/{resource}/import`) or REST API.
 - **Smart Auto-Mapping**: Automatically normalizes file headers (e.g., `Customer Name` $\rightarrow$ `customer_name` $\rightarrow$ `name`) to match model fields.

@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool savedViews = false;
 
   /// Versioned items: the form sends 'version' and PUT refuses a stale
   /// '_version' with 409 (edit-conflict tests).
@@ -479,6 +480,7 @@ class FakePanel {
   Map<String, dynamic> _schema() => {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
+        'saved_views': savedViews,
         'client_pages': [
           for (final id in clientPages) {'id': id, 'label': id}
         ],

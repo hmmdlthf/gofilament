@@ -551,6 +551,11 @@ func (r *BaseResource[T]) PluralModelName(name ...string) *BaseResource[T] {
 	return r
 }
 
+// CanViewAnyRecords reports whether the user may list the resource.
+func (r *BaseResource[T]) CanViewAnyRecords(ctx *Context) bool {
+	return r.canViewAny == nil || r.canViewAny(ctx)
+}
+
 func (r *BaseResource[T]) GetPluralModelName() string {
 	return r.pluralModelName
 }
@@ -984,6 +989,7 @@ func (r *BaseResource[T]) NavigationItem(ctx *Context) *NavigationItem {
 // RegisterRoutes registers full CRUD endpoints for this Resource.
 func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 	basePath := fmt.Sprintf("%s/%s", p.GetPath(), r.slug)
+	p.mountSavedViewWeb(router, r, basePath)
 
 	// 1. List Records
 	router.GET(basePath, func(c *gcontext.Context) error {
@@ -1303,9 +1309,9 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
     <p class="filament-description">Manage all %s in your database.</p>
   </div>
 </div>
-%s`,
+%s%s`,
 		r.pluralModelName, strings.ToLower(r.pluralModelName),
-		tbl.Render(basePath),
+		savedViewsMenu(ctx, r, basePath), tbl.Render(basePath),
 	)
 
 	return r.renderPage(ctx, r.pluralModelName, content)

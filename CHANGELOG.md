@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Saved views**: `Panel.SavedViews(store)` lets users save the current list state (search, sort, filters, advanced search, columns, grouping, page size) under a name and share it; a *Views* menu on web and Flutter lists, applies and deletes them. `SavedViewsShareable` controls sharing; `sqlstore.Views()` keeps them in the database. API under `/resources/:slug/views`.
+
 ## [v1.34.0] - 2026-11-17
 
 ### Added
