@@ -96,6 +96,11 @@ class _ResourceFormState extends State<ResourceForm> {
   FormPayload? _payload;
   String? _loadError;
   String? _saveError;
+
+  /// The version the form was loaded with (see FormPayload.version), and
+  /// whether the last save hit a newer change.
+  String? _version;
+  bool _conflict = false;
   bool _saving = false;
 
   bool get _isEdit => widget.id != null;
@@ -190,6 +195,7 @@ class _ResourceFormState extends State<ResourceForm> {
         }
       }
       _labels.addAll(payload.optionLabels);
+      _version = payload.version;
       if (mounted) setState(() => _payload = payload);
     } on ApiException catch (e) {
       if (mounted) setState(() => _loadError = e.message);
@@ -269,7 +275,8 @@ class _ResourceFormState extends State<ResourceForm> {
           await widget.admin.api.relationUpdate(widget.slug, widget.parentId!,
               widget.relation!, widget.id!, data);
         } else {
-          await widget.admin.api.update(widget.slug, widget.id!, data);
+          await widget.admin.api.update(widget.slug, widget.id!,
+              {...data, if (_version != null) '_version': _version});
         }
       } else {
         if (_isRelation) {
@@ -281,7 +288,16 @@ class _ResourceFormState extends State<ResourceForm> {
       }
       if (mounted) Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) setState(() => _saveError = e.message);
+      if (mounted) {
+        setState(() {
+          _saveError = e.message;
+          _conflict = e.isConflict;
+          // Saving again overwrites the other change on purpose.
+          if (e.isConflict && e.body?['version'] != null) {
+            _version = '${e.body!['version']}';
+          }
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _saveError = 'Could not save. Please try again.');
@@ -327,8 +343,37 @@ class _ResourceFormState extends State<ResourceForm> {
                   color: theme.colorScheme.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(_saveError!,
-                    style: TextStyle(color: theme.colorScheme.error)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_saveError!,
+                          style: TextStyle(color: theme.colorScheme.error)),
+                      if (_conflict)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Wrap(spacing: 8, children: [
+                            OutlinedButton(
+                              key: const Key('conflict-reload'),
+                              onPressed: () {
+                                setState(() {
+                                  _conflict = false;
+                                  _saveError = null;
+                                  _payload = null;
+                                });
+                                _load();
+                              },
+                              child: const Text('Reload'),
+                            ),
+                            FilledButton(
+                              key: const Key('conflict-overwrite'),
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: theme.colorScheme.error),
+                              onPressed: _saving ? null : _save,
+                              child: const Text('Overwrite'),
+                            ),
+                          ]),
+                        ),
+                    ]),
               ),
             ..._nodes(context, _payload!.schema, 1),
             if (!_isRelation && !_isAction && _isEdit)

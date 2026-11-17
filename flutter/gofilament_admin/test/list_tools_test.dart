@@ -137,6 +137,27 @@ void main() {
         isFalse);
   });
 
+  testWidgets('a save that hits a newer change offers reload or overwrite',
+      (tester) async {
+    final panel = FakePanel()..itemVersion = 1;
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('row-edit-1')));
+    await tester.pumpAndSettle();
+    panel.itemVersion = 2; // someone else saved meanwhile
+
+    await tester.tap(find.byKey(const Key('form-save')));
+    await tester.pumpAndSettle();
+    expect(panel.putBodies.last['_version'], '1');
+    expect(find.textContaining('changed by someone else'), findsOneWidget);
+    expect(find.byKey(const Key('conflict-reload')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('conflict-overwrite')));
+    await tester.pumpAndSettle();
+    expect(panel.putBodies.last['_version'], '2');
+    expect(panel.itemVersion, 3);
+    expect(find.byKey(const Key('form-save')), findsNothing); // closed
+  });
+
   testWidgets('grouping adds group headers, subtotals and totals',
       (tester) async {
     final panel = FakePanel()

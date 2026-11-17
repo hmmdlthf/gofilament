@@ -90,22 +90,23 @@ type CellUpdateHandlerFunc func(ctx *Context, id, column string, value any) erro
 
 // BaseResource implements ResourceInterface with generic Ent/model type T.
 type BaseResource[T any] struct {
-	summariesUsing func(ctx *Context, search string, filters map[string]string) (tables.Summaries, error)
-	slug            string
-	modelName       string
-	pluralModelName string
-	navGroup        string
-	navIcon         string
-	navSort         int
-	navBadge        func(ctx *Context) string
-	formBuilder     func(form *forms.Form) *forms.Form
-	tableBuilder    func(table *tables.Table[T]) *tables.Table[T]
+	summariesUsing            func(ctx *Context, search string, filters map[string]string) (tables.Summaries, error)
+	versionOf                 func(record T) string
+	slug                      string
+	modelName                 string
+	pluralModelName           string
+	navGroup                  string
+	navIcon                   string
+	navSort                   int
+	navBadge                  func(ctx *Context) string
+	formBuilder               func(form *forms.Form) *forms.Form
+	tableBuilder              func(table *tables.Table[T]) *tables.Table[T]
 	defaultColumns            []string
 	selectableColumns         []string
 	advancedSearchableColumns []string
-	infolistBuilder func(infolist *infolists.Infolist) *infolists.Infolist
-	idExtractor     func(record T) string
-	relations       []RelationManager
+	infolistBuilder           func(infolist *infolists.Infolist) *infolists.Infolist
+	idExtractor               func(record T) string
+	relations                 []RelationManager
 
 	// Handlers
 	onList            ListHandlerFunc[T]
@@ -127,16 +128,16 @@ type BaseResource[T any] struct {
 	isRecordTrashed  func(record T) bool
 
 	// Authorization
-	canViewAny     func(ctx *Context) bool
-	canView        func(ctx *Context, record T) bool
+	canViewAny func(ctx *Context) bool
+	canView    func(ctx *Context, record T) bool
 	// acceptUnvalidated skips server-side form validation (AcceptUnvalidatedInput).
 	acceptUnvalidated bool
-	canCreate      func(ctx *Context) bool
-	canEdit        func(ctx *Context, record T) bool
-	canDelete      func(ctx *Context, record T) bool
-	canDeleteAny   func(ctx *Context) bool
-	canRestore     func(ctx *Context, id string) bool
-	canForceDelete func(ctx *Context, id string) bool
+	canCreate         func(ctx *Context) bool
+	canEdit           func(ctx *Context, record T) bool
+	canDelete         func(ctx *Context, record T) bool
+	canDeleteAny      func(ctx *Context) bool
+	canRestore        func(ctx *Context, id string) bool
+	canForceDelete    func(ctx *Context, id string) bool
 
 	// Global Search
 	globallySearchable  bool
@@ -161,11 +162,11 @@ type BaseResource[T any] struct {
 
 // ResourceTab represents a status or query filter tab displayed above the resource records list.
 type ResourceTab struct {
-	Key       string            `json:"key"`
-	Label     string            `json:"label"`
-	Badge     string            `json:"badge,omitempty"`
-	Icon      string            `json:"icon,omitempty"`
-	Query     map[string]string `json:"query,omitempty"`
+	Key   string            `json:"key"`
+	Label string            `json:"label"`
+	Badge string            `json:"badge,omitempty"`
+	Icon  string            `json:"icon,omitempty"`
+	Query map[string]string `json:"query,omitempty"`
 }
 
 // Tab creates a new ResourceTab with the given label.
@@ -1473,6 +1474,7 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 	if m, ok := any(record).(map[string]any); ok {
 		form.Fill(m)
 	}
+	formHTML := withVersionField(form.Render(ctx.GoContext()), r.RecordVersion(record))
 
 	deleteButton := ""
 	if r.canDelete == nil || r.canDelete(ctx, record) {
@@ -1499,7 +1501,7 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 </div>
 %s`,
 		r.modelName, id, deleteButton, basePath,
-		form.Render(ctx.GoContext()),
+		formHTML,
 		basePath,
 		r.renderRelations(ctx, basePath, id),
 	)
@@ -1587,6 +1589,12 @@ func (r *BaseResource[T]) handleUpdate(ctx *Context, basePath, id string) error 
 	}
 
 	if r.onUpdate != nil {
+		if err := r.checkVersion(ctx, id, data); err != nil {
+			var conflict *EditConflictError
+			if errors.As(err, &conflict) {
+				return r.renderConflict(ctx, basePath, id, data, conflict)
+			}
+		}
 		clean, err := r.validateInput(ctx, data, false)
 		if err != nil {
 			form := forms.New()
@@ -2137,7 +2145,9 @@ func (r *BaseResource[T]) handleLive(ctx *Context) error {
 	liveField := ctx.FormValue("_live_field")
 	if liveField != "" {
 		if comp := form.GetField(liveField); comp != nil {
-			if hook, ok := comp.(interface{ TriggerAfterUpdated(state any, f *forms.Form) }); ok {
+			if hook, ok := comp.(interface {
+				TriggerAfterUpdated(state any, f *forms.Form)
+			}); ok {
 				hook.TriggerAfterUpdated(data[liveField], form)
 			}
 		}
@@ -2235,6 +2245,9 @@ func (r *BaseResource[T]) InvokeUpdate(ctx *Context, id string, data map[string]
 	}
 	if r.onUpdate == nil {
 		return fmt.Errorf("update not implemented")
+	}
+	if err := r.checkVersion(ctx, id, data); err != nil {
+		return err
 	}
 	data, err := r.validateInput(ctx, data, false)
 	if err != nil {

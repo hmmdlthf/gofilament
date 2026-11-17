@@ -1548,10 +1548,16 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			for _, rel := range res.GetRelations() {
 				relationsMeta = append(relationsMeta, rel.GetAPISchema())
 			}
-			return c.JSON(http.StatusOK, map[string]any{
+			out := map[string]any{
 				"data":      record,
 				"relations": relationsMeta,
-			})
+			}
+			if v, ok := res.(interface{ RecordVersion(record any) string }); ok {
+				if ver := v.RecordVersion(record); ver != "" {
+					out["version"] = ver
+				}
+			}
+			return c.JSON(http.StatusOK, out)
 		}
 
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "Record not found"})
@@ -1874,6 +1880,10 @@ func (p *Panel) apiErrorStatus(c *gcontext.Context, err error, fallback int) err
 		}
 	}
 	body := map[string]any{"error": message}
+	var conflict *EditConflictError
+	if errors.As(err, &conflict) {
+		body["version"] = conflict.Current
+	}
 	var verr *forms.ValidationError
 	if errors.As(err, &verr) {
 		body["errors"] = verr.Errors
