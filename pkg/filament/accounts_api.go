@@ -287,7 +287,7 @@ func (p *Panel) mountAccountAPIRoutes(r *router.Router, prefix string, preflight
 		}
 		return c.JSON(http.StatusOK, map[string]string{
 			"secret":      secret,
-			"otpauth_uri": p.totp.ProvisioningURI(user.GetAuthIdentifier(), secret),
+			"otpauth_uri": p.totp.ProvisioningURI(p.totpAccountName(ctx, user), secret),
 		})
 	})
 

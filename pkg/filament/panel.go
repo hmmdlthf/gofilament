@@ -68,6 +68,7 @@ type Panel struct {
 	flutterFS           fs.FS
 	accountNavPlacement AccountNavPlacement
 	brandName           string
+	publicURL           string // Panel.URL: origin for links in emails
 	brandLogo           string
 	favicon             string
 	homeURL             string
