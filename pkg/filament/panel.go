@@ -1212,22 +1212,10 @@ func (p *Panel) Mount(r *router.Router) {
 			}
 
 			if targetKey != "" {
-				var targetTenant Tenant
-				if p.tenantConfig.TenantLoader != nil {
-					tenants, _ := p.tenantConfig.TenantLoader(ctx)
-					for _, t := range tenants {
-						if t.GetTenantKey() == targetKey {
-							targetTenant = t
-							break
-						}
-					}
-				}
-				if targetTenant == nil && p.tenantConfig.TenantLoader != nil {
+				targetTenant, ok := p.tenantAllowed(ctx, targetKey)
+				if !ok {
 					// Not one of the user's tenants: refuse the switch.
 					return c.String(http.StatusForbidden, "403 Forbidden: Unknown tenant")
-				}
-				if targetTenant == nil {
-					targetTenant = &TenantItem{Key: targetKey, Name: targetKey}
 				}
 
 				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", isSecureRequest(c), true)
