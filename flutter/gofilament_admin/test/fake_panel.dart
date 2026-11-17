@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool notificationsOn = false;
 
   /// Fields sent as resource_meta.bulk_edit.
   List<String> bulkEdit = [];
@@ -612,6 +613,7 @@ class FakePanel {
   Map<String, dynamic> _schema() => {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
+        'notifications': notificationsOn,
         'saved_views': savedViews,
         'background_jobs': backgroundJobs,
         'client_pages': [

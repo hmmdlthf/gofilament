@@ -22,6 +22,7 @@ export 'src/generated_support.dart';
 export 'src/links.dart';
 export 'src/icons.dart';
 export 'src/login.dart';
+export 'src/notifications.dart';
 export 'src/relations.dart';
 export 'src/resource_form.dart';
 export 'src/resource_list.dart';
