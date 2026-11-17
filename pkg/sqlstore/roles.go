@@ -62,7 +62,7 @@ func (r *Roles) DeleteRole(ctx context.Context, name string) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, r.s.q(`DELETE FROM `+r.s.table("user_roles")+` WHERE role = ?`), name); err != nil {
+	if _, err := tx.ExecContext(ctx, r.s.q(`DELETE FROM `+r.s.table("role_bindings")+` WHERE role = ?`), name); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, r.s.q(`DELETE FROM `+r.s.table("roles")+` WHERE name = ?`), name); err != nil {
@@ -71,45 +71,49 @@ func (r *Roles) DeleteRole(ctx context.Context, name string) error {
 	return tx.Commit()
 }
 
-func (r *Roles) strings(ctx context.Context, query string, arg string) ([]string, error) {
-	rows, err := r.s.db.QueryContext(ctx, r.s.q(query), arg)
+func (r *Roles) ListBindings(ctx context.Context, f filament.BindingFilter) ([]filament.RoleBinding, error) {
+	q := `SELECT user_id, role, panel, tenant FROM ` + r.s.table("role_bindings") + ` WHERE 1 = 1`
+	var args []any
+	if f.UserID != "" {
+		q += ` AND user_id = ?`
+		args = append(args, f.UserID)
+	}
+	if f.Role != "" {
+		q += ` AND role = ?`
+		args = append(args, f.Role)
+	}
+	rows, err := r.s.db.QueryContext(ctx, r.s.q(q+` ORDER BY user_id, role, panel, tenant`), args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []string
+	var out []filament.RoleBinding
 	for rows.Next() {
-		var v string
-		if err := rows.Scan(&v); err != nil {
+		var b filament.RoleBinding
+		if err := rows.Scan(&b.UserID, &b.Role, &b.Panel, &b.Tenant); err != nil {
 			return nil, err
 		}
-		out = append(out, v)
+		out = append(out, b)
 	}
 	return out, rows.Err()
 }
 
-func (r *Roles) UserRoles(ctx context.Context, userID string) ([]string, error) {
-	return r.strings(ctx, `SELECT role FROM `+r.s.table("user_roles")+` WHERE user_id = ? ORDER BY role`, userID)
+func (r *Roles) AddBinding(ctx context.Context, b filament.RoleBinding) error {
+	t := r.s.table("role_bindings")
+	q := `INSERT INTO ` + t + ` (user_id, role, panel, tenant) VALUES (?, ?, ?, ?)`
+	switch r.s.dialect {
+	case MySQL:
+		q = `INSERT IGNORE INTO ` + t + ` (user_id, role, panel, tenant) VALUES (?, ?, ?, ?)`
+	case Postgres:
+		q += ` ON CONFLICT DO NOTHING`
+	default:
+		q = `INSERT OR IGNORE INTO ` + t + ` (user_id, role, panel, tenant) VALUES (?, ?, ?, ?)`
+	}
+	_, err := r.s.db.ExecContext(ctx, r.s.q(q), b.UserID, b.Role, b.Panel, b.Tenant)
+	return err
 }
 
-func (r *Roles) RoleUsers(ctx context.Context, role string) ([]string, error) {
-	return r.strings(ctx, `SELECT user_id FROM `+r.s.table("user_roles")+` WHERE role = ? ORDER BY user_id`, role)
-}
-
-func (r *Roles) SetUserRoles(ctx context.Context, userID string, roles []string) error {
-	t := r.s.table("user_roles")
-	tx, err := r.s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, r.s.q(`DELETE FROM `+t+` WHERE user_id = ?`), userID); err != nil {
-		return err
-	}
-	for _, role := range roles {
-		if _, err := tx.ExecContext(ctx, r.s.q(`INSERT INTO `+t+` (user_id, role) VALUES (?, ?)`), userID, role); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
+func (r *Roles) RemoveBinding(ctx context.Context, b filament.RoleBinding) error {
+	_, err := r.s.db.ExecContext(ctx, r.s.q(`DELETE FROM `+r.s.table("role_bindings")+` WHERE user_id = ? AND role = ? AND panel = ? AND tenant = ?`), b.UserID, b.Role, b.Panel, b.Tenant)
+	return err
 }

@@ -21,14 +21,10 @@ var roleNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 // right to manage roles.
 var errLockout error = &endpointError{status: http.StatusConflict, msg: "This change would remove your own access to the roles screen."}
 
-func (p *Panel) currentUserRoles(ctx *Context) []string {
-	rs, _ := p.roles.store.UserRoles(ctx.GoContext(), ctx.User().GetAuthIdentifier())
-	return rs
-}
-
 // SaveRoleFor creates or updates a role (renaming it from original).
+// Only super admins (roles.manage everywhere) define roles.
 func (p *Panel) SaveRoleFor(ctx *Context, original string, r RoleDef) error {
-	if !p.canManageRoles(ctx) {
+	if !p.canDefineRoles(ctx) {
 		return ErrForbidden
 	}
 	r.Name = strings.TrimSpace(r.Name)
@@ -44,10 +40,13 @@ func (p *Panel) SaveRoleFor(ctx *Context, original string, r RoleDef) error {
 	var perms []string
 	seen := map[string]bool{}
 	for _, perm := range r.Permissions {
-		if (perm == "*" || known[perm] != "") && !seen[perm] {
-			seen[perm] = true
+		if seen[perm] {
+			continue
+		}
+		seen[perm] = true
+		if perm == "*" || known[perm] != "" {
 			perms = append(perms, perm)
-		} else if !seen[perm] {
+		} else {
 			errs["permissions"] = "Unknown permission: " + perm
 		}
 	}
@@ -57,100 +56,167 @@ func (p *Panel) SaveRoleFor(ctx *Context, original string, r RoleDef) error {
 	if err != nil {
 		return err
 	}
+	found := original == ""
 	for _, x := range roles {
 		if x.Name == r.Name && x.Name != original {
 			errs["name"] = "A role with this name exists."
 		}
+		found = found || x.Name == original
 	}
-	if original != "" {
-		found := false
-		for _, x := range roles {
-			found = found || x.Name == original
-		}
-		if !found {
-			return ErrRoleNotFound
-		}
+	if !found {
+		return ErrRoleNotFound
 	}
 	if len(errs) > 0 {
 		return &forms.ValidationError{Errors: errs}
 	}
-	// What the roles would be after the change.
-	next := []RoleDef{}
+	// The roles and bindings after the change.
+	var nextRoles []RoleDef
 	for _, x := range roles {
 		if x.Name != original {
-			next = append(next, x)
+			nextRoles = append(nextRoles, x)
 		}
 	}
-	next = append(next, r)
-	mine := p.currentUserRoles(ctx)
-	if original != "" && original != r.Name {
-		mine = append(without(mine, original), r.Name)
+	nextRoles = append(nextRoles, r)
+	all, err := p.roles.store.ListBindings(ctx.GoContext(), BindingFilter{})
+	if err != nil {
+		return err
 	}
-	if !p.keepsManager(ctx, next, mine) {
-		return errLockout
+	next := make([]RoleBinding, 0, len(all))
+	for _, bnd := range all {
+		if original != "" && bnd.Role == original {
+			bnd.Role = r.Name
+		}
+		next = append(next, bnd)
+	}
+	if err := p.keepsOwnAccess(ctx, nextRoles, next); err != nil {
+		return err
 	}
 	if err := p.roles.store.SaveRole(ctx.GoContext(), r); err != nil {
 		return err
 	}
 	if original != "" && original != r.Name {
-		users, _ := p.roles.store.RoleUsers(ctx.GoContext(), original)
-		for _, u := range users {
-			rs, _ := p.roles.store.UserRoles(ctx.GoContext(), u)
-			_ = p.roles.store.SetUserRoles(ctx.GoContext(), u, append(without(rs, original), r.Name))
+		for _, bnd := range all {
+			if bnd.Role == original {
+				moved := bnd
+				moved.Role = r.Name
+				if err := p.roles.store.AddBinding(ctx.GoContext(), moved); err != nil {
+					return err
+				}
+			}
 		}
-		_ = p.roles.store.DeleteRole(ctx.GoContext(), original)
+		return p.roles.store.DeleteRole(ctx.GoContext(), original)
 	}
 	return nil
 }
 
-// DeleteRoleFor deletes a role.
+// DeleteRoleFor deletes a role and its bindings (super admins only).
 func (p *Panel) DeleteRoleFor(ctx *Context, name string) error {
-	if !p.canManageRoles(ctx) {
+	if !p.canDefineRoles(ctx) {
 		return ErrForbidden
 	}
 	roles, err := p.roles.store.ListRoles(ctx.GoContext())
 	if err != nil {
 		return err
 	}
-	var next []RoleDef
+	var nextRoles []RoleDef
 	for _, x := range roles {
 		if x.Name != name {
-			next = append(next, x)
+			nextRoles = append(nextRoles, x)
 		}
 	}
-	if len(next) == len(roles) {
+	if len(nextRoles) == len(roles) {
 		return ErrRoleNotFound
 	}
-	if !p.keepsManager(ctx, next, without(p.currentUserRoles(ctx), name)) {
-		return errLockout
+	all, _ := p.roles.store.ListBindings(ctx.GoContext(), BindingFilter{})
+	var next []RoleBinding
+	for _, b := range all {
+		if b.Role != name {
+			next = append(next, b)
+		}
+	}
+	if err := p.keepsOwnAccess(ctx, nextRoles, next); err != nil {
+		return err
 	}
 	return p.roles.store.DeleteRole(ctx.GoContext(), name)
 }
 
-// SetUserRolesFor gives a user exactly these roles.
-func (p *Panel) SetUserRolesFor(ctx *Context, userID string, names []string) error {
+func (p *Panel) roleByName(ctx *Context, name string) (RoleDef, bool) {
+	roles, _ := p.roles.store.ListRoles(ctx.GoContext())
+	for _, r := range roles {
+		if r.Name == name {
+			return r, true
+		}
+	}
+	return RoleDef{}, false
+}
+
+// GrantRole gives userID the role in every panel x tenant pair listed
+// ("*" for all). All of them are checked before any is saved.
+func (p *Panel) GrantRole(ctx *Context, userID, role string, panels, tenants []string) error {
 	if !p.canManageRoles(ctx) {
 		return ErrForbidden
 	}
-	roles, err := p.roles.store.ListRoles(ctx.GoContext())
-	if err != nil {
+	r, ok := p.roleByName(ctx, role)
+	if !ok {
+		return &forms.ValidationError{Errors: map[string]string{"role": "Unknown role."}}
+	}
+	if strings.TrimSpace(userID) == "" || len(panels) == 0 || len(tenants) == 0 {
+		return &forms.ValidationError{Errors: map[string]string{"scope": "Choose a user, at least one panel and at least one tenant."}}
+	}
+	var add []RoleBinding
+	for _, pn := range panels {
+		for _, tn := range tenants {
+			if !p.canGrant(ctx, r, pn, tn) {
+				return errCannotGrant
+			}
+			add = append(add, RoleBinding{UserID: userID, Role: role, Panel: pn, Tenant: tn})
+		}
+	}
+	for _, b := range add {
+		if err := p.roles.store.AddBinding(ctx.GoContext(), b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RevokeBinding removes one binding.
+func (p *Panel) RevokeBinding(ctx *Context, b RoleBinding) error {
+	if !p.canManageRoles(ctx) {
+		return ErrForbidden
+	}
+	r, ok := p.roleByName(ctx, b.Role)
+	if !ok || !p.canGrant(ctx, r, b.Panel, b.Tenant) {
+		return errCannotGrant
+	}
+	roles, _ := p.roles.store.ListRoles(ctx.GoContext())
+	all, _ := p.roles.store.ListBindings(ctx.GoContext(), BindingFilter{})
+	var next []RoleBinding
+	for _, x := range all {
+		if x != b {
+			next = append(next, x)
+		}
+	}
+	if err := p.keepsOwnAccess(ctx, roles, next); err != nil {
 		return err
 	}
-	exists := map[string]bool{}
-	for _, r := range roles {
-		exists[r.Name] = true
+	return p.roles.store.RemoveBinding(ctx.GoContext(), b)
+}
+
+// visibleBindings: super admins see every binding; others see the ones
+// that apply in the current panel and tenant.
+func (p *Panel) visibleBindings(ctx *Context, userID string) []RoleBinding {
+	all, _ := p.roles.store.ListBindings(ctx.GoContext(), BindingFilter{UserID: userID})
+	if p.canDefineRoles(ctx) {
+		return all
 	}
-	var clean []string
-	for _, n := range names {
-		if !exists[n] {
-			return &forms.ValidationError{Errors: map[string]string{"roles": "Unknown role: " + n}}
+	var out []RoleBinding
+	for _, b := range all {
+		if b.covers(p.id, ctx.Tenant()) {
+			out = append(out, b)
 		}
-		clean = append(clean, n)
 	}
-	if userID == ctx.User().GetAuthIdentifier() && !p.keepsManager(ctx, roles, clean) {
-		return errLockout
-	}
-	return p.roles.store.SetUserRoles(ctx.GoContext(), userID, clean)
+	return out
 }
 
 // permissionGroups groups permission names by prefix, for the role form.
@@ -209,9 +275,13 @@ func (p *Panel) renderRolesList(ctx *Context, status int, errMsg string) error {
 	if p.roles.cfg.FindUsers != nil {
 		fmt.Fprintf(&b, `<a href="%s/roles/users" class="btn btn-secondary">Users</a>`, p.path)
 	}
-	fmt.Fprintf(&b, `<a href="%s/roles/new" class="btn btn-primary">New role</a></div></div>%s<div class="filament-card"><table class="filament-table"><thead><tr><th>Role</th><th>Permissions</th><th>Users</th><th></th></tr></thead><tbody>`, p.path, alertHTML("err", errMsg))
+	canDefine := p.canDefineRoles(ctx)
+	if canDefine {
+		fmt.Fprintf(&b, `<a href="%s/roles/new" class="btn btn-primary">New role</a>`, p.path)
+	}
+	fmt.Fprintf(&b, `</div></div>%s<div class="filament-card"><table class="filament-table"><thead><tr><th>Role</th><th>Permissions</th><th>Users</th><th></th></tr></thead><tbody>`, alertHTML("err", errMsg))
 	for _, r := range roles {
-		users, _ := p.roles.store.RoleUsers(ctx.GoContext(), r.Name)
+		users, _ := p.roles.store.ListBindings(ctx.GoContext(), BindingFilter{Role: r.Name})
 		perms := fmt.Sprintf("%d", len(r.Permissions))
 		for _, x := range r.Permissions {
 			if x == "*" {
@@ -275,7 +345,19 @@ func (p *Panel) renderRoleForm(ctx *Context, status int, original string, r Role
 	return p.renderPanelPage(ctx, status, title, b.String())
 }
 
-func (p *Panel) renderRoleUsers(ctx *Context, status int, errMsg, okMsg string) error {
+func (p *Panel) scopeLabel(opts []ScopeOption, id, all string) string {
+	if id == AnyScope {
+		return all
+	}
+	for _, o := range opts {
+		if o.ID == id {
+			return o.Label
+		}
+	}
+	return id
+}
+
+func (p *Panel) renderRoleUsers(ctx *Context, status int, errMsg string) error {
 	esc := html.EscapeString
 	q := strings.TrimSpace(ctx.Query("q"))
 	users, err := p.roles.cfg.FindUsers(ctx, q)
@@ -283,30 +365,37 @@ func (p *Panel) renderRoleUsers(ctx *Context, status int, errMsg, okMsg string) 
 		errMsg = "Users could not be loaded."
 	}
 	roles, _ := p.roles.store.ListRoles(ctx.GoContext())
+	panels, tenants := p.grantScopes(ctx)
 	csrf := p.csrfHiddenInput(ctx.Context, "")
 	var b strings.Builder
-	fmt.Fprintf(&b, `<div class="filament-header"><div><h1 class="filament-title">Users and roles</h1></div><a href="%s/roles" class="btn btn-secondary">Roles</a></div>%s%s
-<form method="GET" action="%s/roles/users" class="filament-card" style="display: flex; gap: 0.5rem;"><input class="form-control" name="q" value="%s" placeholder="Search users" /><button class="btn btn-secondary" type="submit">Search</button></form>
-<div class="filament-card"><table class="filament-table"><thead><tr><th>User</th><th>Roles</th></tr></thead><tbody>`,
-		p.path, alertHTML("err", errMsg), alertHTML("ok", okMsg), p.path, esc(q))
+	fmt.Fprintf(&b, `<div class="filament-header"><div><h1 class="filament-title">Users and roles</h1><p class="filament-description">Give roles in one or more panels and tenants.</p></div><a href="%s/roles" class="btn btn-secondary">Roles</a></div>%s
+<form method="GET" action="%s/roles/users" class="filament-card" style="display: flex; gap: 0.5rem;"><input class="form-control" name="q" value="%s" placeholder="Search users" /><button class="btn btn-secondary" type="submit">Search</button></form>`,
+		p.path, alertHTML("err", errMsg), p.path, esc(q))
 	for _, u := range users {
-		mine, _ := p.roles.store.UserRoles(ctx.GoContext(), u.ID)
-		has := map[string]bool{}
-		for _, r := range mine {
-			has[r] = true
-		}
-		fmt.Fprintf(&b, `<tr data-user="%s"><td><strong>%s</strong><br><span style="color: var(--gray-500);">%s</span></td><td><form method="POST" action="%s/roles/users/%s" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin: 0;">%s<input type="hidden" name="q" value="%s" />`,
-			esc(u.ID), esc(u.Name), esc(u.ID), p.path, esc(u.ID), csrf, esc(q))
-		for _, r := range roles {
-			c := ""
-			if has[r.Name] {
-				c = " checked"
+		fmt.Fprintf(&b, `<div class="filament-card" data-user="%s"><h3 style="font-weight: 700;">%s <span style="color: var(--gray-500); font-weight: 400;">%s</span></h3><table class="filament-table"><thead><tr><th>Role</th><th>Panel</th><th>Tenant</th><th></th></tr></thead><tbody>`, esc(u.ID), esc(u.Name), esc(u.ID))
+		for _, bnd := range p.visibleBindings(ctx, u.ID) {
+			remove := ""
+			if r, ok := p.roleByName(ctx, bnd.Role); ok && p.canGrant(ctx, r, bnd.Panel, bnd.Tenant) {
+				remove = fmt.Sprintf(`<form method="POST" action="%s/roles/users/%s/revoke" style="margin: 0;">%s<input type="hidden" name="q" value="%s" /><input type="hidden" name="role" value="%s" /><input type="hidden" name="panel" value="%s" /><input type="hidden" name="tenant" value="%s" /><button class="btn btn-danger btn-sm" type="submit">Remove</button></form>`,
+					p.path, esc(u.ID), csrf, esc(q), esc(bnd.Role), esc(bnd.Panel), esc(bnd.Tenant))
 			}
-			fmt.Fprintf(&b, `<label style="display: flex; gap: 0.25rem;"><input type="checkbox" name="roles" value="%s"%s /> %s</label>`, esc(r.Name), c, esc(r.Label))
+			fmt.Fprintf(&b, `<tr data-binding="%s|%s|%s"><td>%s</td><td>%s</td><td>%s</td><td style="text-align: end;">%s</td></tr>`,
+				esc(bnd.Role), esc(bnd.Panel), esc(bnd.Tenant), esc(bnd.Role), esc(p.scopeLabel(panels, bnd.Panel, "All panels")), esc(p.scopeLabel(tenants, bnd.Tenant, "All tenants")), remove)
 		}
-		b.WriteString(`<button type="submit" class="btn btn-secondary btn-sm">Save</button></form></td></tr>`)
+		fmt.Fprintf(&b, `</tbody></table><form method="POST" action="%s/roles/users/%s/grant" style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 0.75rem;">%s<input type="hidden" name="q" value="%s" /><label>Role <select class="form-control" name="role">`, p.path, esc(u.ID), csrf, esc(q))
+		for _, r := range roles {
+			fmt.Fprintf(&b, `<option value="%s">%s</option>`, esc(r.Name), esc(r.Label))
+		}
+		b.WriteString(`</select></label><fieldset><legend>Panels</legend>`)
+		for _, o := range panels {
+			fmt.Fprintf(&b, `<label style="margin-inline-end: 0.75rem;"><input type="checkbox" name="panels" value="%s" /> %s</label>`, esc(o.ID), esc(o.Label))
+		}
+		b.WriteString(`</fieldset><fieldset><legend>Tenants</legend>`)
+		for _, o := range tenants {
+			fmt.Fprintf(&b, `<label style="margin-inline-end: 0.75rem;"><input type="checkbox" name="tenants" value="%s" /> %s</label>`, esc(o.ID), esc(o.Label))
+		}
+		b.WriteString(`</fieldset><button class="btn btn-primary btn-sm" type="submit">Give role</button></form></div>`)
 	}
-	b.WriteString(`</tbody></table></div>`)
 	return p.renderPanelPage(ctx, status, "Users and roles", b.String())
 }
 
@@ -354,18 +443,29 @@ func (p *Panel) mountRoleRoutes(r *router.Router) {
 	r.POST(base+"/new", guard(func(c *gcontext.Context, ctx *Context) error { return save("", c, ctx) }))
 	if p.roles.cfg.FindUsers != nil {
 		r.GET(base+"/users", guard(func(c *gcontext.Context, ctx *Context) error {
-			return p.renderRoleUsers(ctx, http.StatusOK, "", "")
+			return p.renderRoleUsers(ctx, http.StatusOK, "")
 		}))
-		r.POST(base+"/users/:user", guard(func(c *gcontext.Context, ctx *Context) error {
-			_ = c.Request.ParseForm()
-			if err := p.SetUserRolesFor(ctx, c.Param("user"), c.Request.PostForm["roles"]); err != nil {
-				_, msg, errs := roleErrorMessage(err)
-				if msg == "" {
-					msg = errs["roles"]
-				}
-				return p.renderRoleUsers(ctx, webStatus(err), msg, "")
-			}
+		back := func(c *gcontext.Context) error {
 			return c.Redirect(http.StatusSeeOther, base+"/users?q="+urlQueryEscape(c.Request.PostFormValue("q")))
+		}
+		r.POST(base+"/users/:user/grant", guard(func(c *gcontext.Context, ctx *Context) error {
+			_ = c.Request.ParseForm()
+			if err := p.GrantRole(ctx, c.Param("user"), c.Request.PostFormValue("role"), c.Request.PostForm["panels"], c.Request.PostForm["tenants"]); err != nil {
+				_, msg, errs := roleErrorMessage(err)
+				for _, m := range errs {
+					msg = m
+				}
+				return p.renderRoleUsers(ctx, webStatus(err), msg)
+			}
+			return back(c)
+		}))
+		r.POST(base+"/users/:user/revoke", guard(func(c *gcontext.Context, ctx *Context) error {
+			_ = c.Request.ParseForm()
+			f := c.Request.PostFormValue
+			if err := p.RevokeBinding(ctx, RoleBinding{UserID: c.Param("user"), Role: f("role"), Panel: f("panel"), Tenant: f("tenant")}); err != nil {
+				return p.renderRoleUsers(ctx, webStatus(err), err.Error())
+			}
+			return back(c)
 		}))
 	}
 	r.GET(base+"/:role", guard(func(c *gcontext.Context, ctx *Context) error {

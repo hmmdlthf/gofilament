@@ -98,6 +98,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			s.table("saved_views"), k, k, k, k, k, k, t),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (name %s PRIMARY KEY, data %s NOT NULL)`, s.table("roles"), k, t),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (user_id %s NOT NULL, role %s NOT NULL, PRIMARY KEY (user_id, role))`, s.table("user_roles"), k, k),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (user_id %s NOT NULL, role %s NOT NULL, panel %s NOT NULL, tenant %s NOT NULL, PRIMARY KEY (user_id, role, panel, tenant))`, s.table("role_bindings"), k, k, k, k),
 	}
 	indexes := [][2]string{
 		{"sessions", "expires_at"},
@@ -108,6 +109,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"tickets", "updated_at"},
 		{"saved_views", "panel, resource"},
 		{"user_roles", "role"},
+		{"role_bindings", "role"},
 	}
 	for _, ix := range indexes {
 		name := s.table(ix[0]) + "_" + strings.NewReplacer(", ", "_").Replace(ix[1]) + "_idx"
@@ -127,7 +129,25 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("sqlstore: migrate: %w", err)
 		}
 	}
-	return nil
+	return s.migrateUserRoles(ctx)
+}
+
+// migrateUserRoles turns v1.38 role assignments (user_roles) into bindings
+// valid in every panel and tenant, then empties user_roles.
+func (s *Store) migrateUserRoles(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	b, u := s.table("role_bindings"), s.table("user_roles")
+	if _, err := tx.ExecContext(ctx, `INSERT INTO `+b+` (user_id, role, panel, tenant) SELECT ur.user_id, ur.role, '*', '*' FROM `+u+` ur WHERE NOT EXISTS (SELECT 1 FROM `+b+` x WHERE x.user_id = ur.user_id AND x.role = ur.role AND x.panel = '*' AND x.tenant = '*')`); err != nil {
+		return fmt.Errorf("sqlstore: migrate role assignments: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM `+u); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // sortableTS pads fractional seconds so text order is time order.

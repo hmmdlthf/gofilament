@@ -599,7 +599,8 @@ class AdminApi {
 
   Future<void> deleteRole(String name) => _send('DELETE', '/roles/$name');
 
-  /// Users with their roles: [{id, name, roles}].
+  /// Users with their role bindings: [{id, name, bindings: [{role, panel,
+  /// tenant, can_remove}]}].
   Future<List<Map<String, dynamic>>> roleUsers(String query) async {
     final data =
         _map(await _get('/roles/users', {if (query.isNotEmpty) 'q': query}));
@@ -612,8 +613,21 @@ class AdminApi {
         : const [];
   }
 
-  Future<void> setUserRoles(String userId, List<String> roles) =>
-      _send('PUT', '/roles/users/$userId', {'roles': roles});
+  /// Gives [userId] the role in every panel x tenant listed ('*' = all).
+  Future<void> grantRole(String userId, String role,
+          {required List<String> panels, required List<String> tenants}) =>
+      _send('POST', '/roles/bindings', {
+        'user': userId,
+        'role': role,
+        'panels': panels,
+        'tenants': tenants,
+      });
+
+  /// Takes one role binding away.
+  Future<void> revokeRole(
+          String userId, String role, String panel, String tenant) =>
+      _send('DELETE', '/roles/bindings',
+          {'user': userId, 'role': role, 'panel': panel, 'tenant': tenant});
 
   /// The user's tenants: {active_tenant, tenants: [{key, name, avatar}]}.
   Future<Map<String, dynamic>> tenants() async => _map(await _get('/tenants'));

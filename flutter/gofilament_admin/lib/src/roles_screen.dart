@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'i18n.dart';
 
 import 'api.dart';
+import 'i18n.dart';
 
 /// Roles and the users who have them (Panel.Roles).
 class RolesScreen extends StatefulWidget {
@@ -104,13 +104,46 @@ class _RolesScreenState extends State<RolesScreen> {
     }
   }
 
-  Future<void> _toggleUserRole(
-      Map<String, dynamic> user, String role, bool on) async {
-    final roles = [for (final r in (user['roles'] as List? ?? const [])) '$r'];
-    on ? roles.add(role) : roles.remove(role);
+  bool get _canDefine => _data?['can_define'] == true;
+
+  List<Map<String, dynamic>> _scopes(String key) {
+    final v = _data?[key];
+    return v is List
+        ? [
+            for (final x in v)
+              if (x is Map) Map<String, dynamic>.from(x)
+          ]
+        : const [];
+  }
+
+  String _scopeLabel(String key, String id) {
+    for (final o in _scopes(key)) {
+      if (o['id'] == id) return '${o['label']}';
+    }
+    if (id != '*') return id;
+    return key == 'panels' ? tr('All panels') : tr('All tenants');
+  }
+
+  Future<void> _grant(Map<String, dynamic> user) async {
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (_) => _GrantDialog(
+        api: widget.api,
+        user: user,
+        roles: _roles,
+        panels: _scopes('panels'),
+        tenants: _scopes('tenants'),
+      ),
+    );
+    if (done == true) _loadUsers();
+  }
+
+  Future<void> _revoke(
+      Map<String, dynamic> user, Map<String, dynamic> b) async {
     try {
-      await widget.api.setUserRoles('${user['id']}', roles);
-      setState(() => user['roles'] = roles);
+      await widget.api.revokeRole(
+          '${user['id']}', '${b['role']}', '${b['panel']}', '${b['tenant']}');
+      _loadUsers();
     } on ApiException catch (e) {
       _toast(e.message);
     }
@@ -126,7 +159,7 @@ class _RolesScreenState extends State<RolesScreen> {
             key: const Key('role-new'),
             tooltip: tr('New role'),
             icon: const Icon(Icons.add),
-            onPressed: data == null ? null : () => _edit()),
+            onPressed: data == null || !_canDefine ? null : () => _edit()),
       ]),
       body: data == null
           ? const Center(child: CircularProgressIndicator())
@@ -136,16 +169,23 @@ class _RolesScreenState extends State<RolesScreen> {
                   child: ListTile(
                     key: Key('role-${r['name']}'),
                     title: Text('${r['label']}'),
-                    subtitle: Text(
-                        '${(r['permissions'] as List).contains('*') ? 'Everything' : '${(r['permissions'] as List).length} permissions'} · ${r['users']} users'),
-                    onTap: () => _edit(r),
-                    trailing: IconButton(
-                      key: Key('role-delete-${r['name']}'),
-                      tooltip: tr('Delete'),
-                      icon: Icon(Icons.delete_outline,
-                          color: theme.colorScheme.error),
-                      onPressed: () => _delete(r),
-                    ),
+                    subtitle: Text((r['permissions'] as List).contains('*')
+                        ? tr(
+                            'Everything · {users} users', {'users': r['users']})
+                        : tr('{n} permissions · {users} users', {
+                            'n': (r['permissions'] as List).length,
+                            'users': r['users']
+                          })),
+                    onTap: _canDefine ? () => _edit(r) : null,
+                    trailing: !_canDefine
+                        ? null
+                        : IconButton(
+                            key: Key('role-delete-${r['name']}'),
+                            tooltip: tr('Delete'),
+                            icon: Icon(Icons.delete_outline,
+                                color: theme.colorScheme.error),
+                            onPressed: () => _delete(r),
+                          ),
                   ),
                 ),
               if (data['can_find_users'] == true) ...[
@@ -170,16 +210,28 @@ class _RolesScreenState extends State<RolesScreen> {
                             Text('${u['name']}',
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w600)),
-                            Wrap(spacing: 8, children: [
-                              for (final r in _roles)
-                                FilterChip(
-                                  key: Key('user-${u['id']}-role-${r['name']}'),
-                                  label: Text('${r['label']}'),
-                                  selected: (u['roles'] as List? ?? const [])
-                                      .contains(r['name']),
-                                  onSelected: (on) =>
-                                      _toggleUserRole(u, '${r['name']}', on),
-                                ),
+                            Wrap(spacing: 8, runSpacing: 4, children: [
+                              for (final b
+                                  in (u['bindings'] as List? ?? const []))
+                                if (b is Map)
+                                  InputChip(
+                                    key: Key(
+                                        'binding-${u['id']}-${b['role']}-${b['panel']}-${b['tenant']}'),
+                                    label: Text(
+                                        '${b['role']} · ${_scopeLabel('panels', '${b['panel']}')} · ${_scopeLabel('tenants', '${b['tenant']}')}'),
+                                    deleteIcon:
+                                        const Icon(Icons.close, size: 16),
+                                    onDeleted: b['can_remove'] == true
+                                        ? () => _revoke(
+                                            u, Map<String, dynamic>.from(b))
+                                        : null,
+                                  ),
+                              ActionChip(
+                                key: Key('grant-${u['id']}'),
+                                avatar: const Icon(Icons.add, size: 16),
+                                label: Text(tr('Give role')),
+                                onPressed: () => _grant(u),
+                              ),
                             ]),
                           ]),
                     ),
@@ -298,6 +350,115 @@ class _RoleDialogState extends State<_RoleDialog> {
             key: const Key('role-save'),
             onPressed: _save,
             child: Text(tr('Save'))),
+      ],
+    );
+  }
+}
+
+class _GrantDialog extends StatefulWidget {
+  const _GrantDialog({
+    required this.api,
+    required this.user,
+    required this.roles,
+    required this.panels,
+    required this.tenants,
+  });
+  final AdminApi api;
+  final Map<String, dynamic> user;
+  final List<Map<String, dynamic>> roles;
+  final List<Map<String, dynamic>> panels;
+  final List<Map<String, dynamic>> tenants;
+
+  @override
+  State<_GrantDialog> createState() => _GrantDialogState();
+}
+
+class _GrantDialogState extends State<_GrantDialog> {
+  String? _role;
+  final Set<String> _panels = {};
+  final Set<String> _tenants = {};
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.roles.isNotEmpty) _role = '${widget.roles.first['name']}';
+    if (widget.panels.length == 1) {
+      _panels.add('${widget.panels.first['id']}');
+    }
+    if (widget.tenants.length == 1) {
+      _tenants.add('${widget.tenants.first['id']}');
+    }
+  }
+
+  Future<void> _save() async {
+    try {
+      await widget.api.grantRole('${widget.user['id']}', _role ?? '',
+          panels: _panels.toList(), tenants: _tenants.toList());
+      if (mounted) Navigator.pop(context, true);
+    } on ApiException catch (e) {
+      final errs = e.body?['errors'];
+      setState(() => _error =
+          errs is Map && errs.isNotEmpty ? '${errs.values.first}' : e.message);
+    }
+  }
+
+  Widget _checks(String title, List<Map<String, dynamic>> opts, Set<String> sel,
+      String keyPrefix) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ),
+      for (final o in opts)
+        CheckboxListTile(
+          key: Key('$keyPrefix-${o['id']}'),
+          dense: true,
+          value: sel.contains('${o['id']}'),
+          title: Text(o['id'] == '*'
+              ? (keyPrefix == 'grant-panel'
+                  ? tr('All panels')
+                  : tr('All tenants'))
+              : '${o['label']}'),
+          onChanged: (v) => setState(() =>
+              v == true ? sel.add('${o['id']}') : sel.remove('${o['id']}')),
+        ),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(tr('Give {name} a role', {'name': widget.user['name']})),
+      content: SizedBox(
+        width: 420,
+        child: ListView(shrinkWrap: true, children: [
+          DropdownButtonFormField<String>(
+            key: const Key('grant-role'),
+            initialValue: _role,
+            decoration: InputDecoration(labelText: tr('Role')),
+            items: [
+              for (final r in widget.roles)
+                DropdownMenuItem(
+                    value: '${r['name']}', child: Text('${r['label']}')),
+            ],
+            onChanged: (v) => setState(() => _role = v),
+          ),
+          _checks(tr('Panels'), widget.panels, _panels, 'grant-panel'),
+          _checks(tr('Tenants'), widget.tenants, _tenants, 'grant-tenant'),
+          if (_error != null)
+            Text(_error!,
+                key: const Key('grant-error'),
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ]),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
+        FilledButton(
+            key: const Key('grant-save'),
+            onPressed: _panels.isEmpty || _tenants.isEmpty ? null : _save,
+            child: Text(tr('Give role'))),
       ],
     );
   }

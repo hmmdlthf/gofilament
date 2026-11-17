@@ -1241,25 +1241,41 @@ an edit of that one field: form validation, `CanEdit`, the trashed check,
 edit conflicts (`Versioned`) and `OnUpdate` (so the audit log records it).
 API: `GET /admin/api/resources/:slug/board`, `POST .../board/move {id, value}`.
 
-### 🛡️ Roles and permissions
+### 🛡️ Roles and permissions (role bindings)
+
+Roles are defined once and given to users **in a place**: a *role binding* is
+`{user, role, panel, tenant}`, where `*` means every panel or every tenant (the
+model used by Kubernetes and the cloud IAM systems). A user's permissions are
+those of their bindings that cover the panel and tenant they are in now.
 
 ```go
-panel.Roles(sqlStore.Roles(), filament.RolesConfig{    // or nil: in memory
-    Permissions: map[string]string{"reports.export": "Export reports"}, // your own
-    FindUsers: func(ctx *filament.Context, q string) ([]filament.UserRef, error) { ... },
+store := sqlStore.Roles() // or filament.NewMemoryRoleStore(); panels may share one store
+panel.Roles(store, filament.RolesConfig{
+    Panels:      map[string]string{"admin": "Admin", "app": "Customer app"}, // panels sharing the store
+    Permissions: map[string]string{"reports.export": "Export reports"},       // your own
+    FindUsers:   func(ctx *filament.Context, q string) ([]filament.UserRef, error) { ... },
+    // Tenants: who can be offered on the screens (default: the panel's TenantLoader)
 })
+// the first super admin, once:
+store.SaveRole(ctx, filament.RoleDef{Name: "super_admin", Label: "Super admin", Permissions: []string{"*"}})
+store.AddBinding(ctx, filament.RoleBinding{UserID: "1", Role: "super_admin", Panel: "*", Tenant: "*"})
 ```
 
-- Admins with the `roles.manage` permission (or a role with `*`) get a
-  *Roles* screen: create roles, tick their permissions, and give roles to
-  users (web, API `/admin/api/roles...`, Flutter account menu → Roles).
+- **Panel access**: users need a binding in a panel to use it
+  (`RequirePanelAccess`, default on), so someone can have the admin panel and
+  not the customer app, or the reverse.
+- **Super admins** (`roles.manage` or `*` in every panel and tenant) define
+  roles and give any role in one or more panels and tenants at once.
+- **Tenant admins** get `roles.assign` in their tenant: they give and remove
+  roles only there, and only roles whose permissions they have themselves
+  (never `*` or `roles.manage`).
 - Every resource gets `<slug>.viewAny`, `.view`, `.create`, `.update`,
-  `.delete`; resources with no `Can*` callback of their own are checked
-  against them (`EnforceResources` turns this off). `filament.Permission("x")`
-  also reads these roles, so your own checks work with them.
-- Nobody can lock themselves out: a change that would take away your own
-  `roles.manage` is refused. Give the first admin a role with `*` when you
-  set up the store (`store.SaveRole` / `store.SetUserRoles`).
+  `.delete`; resources without their own `Can*` callbacks are checked against
+  them (`EnforceResources`). `filament.Permission("x")` reads the bindings too.
+- Nobody can remove their own right to manage roles (409).
+- Screens: Roles (web Settings menu, Flutter account menu) and Users, where
+  each user's bindings are listed with *Give role* (role + panels + tenants).
+  API: `/admin/api/roles`, `/roles/users`, `POST/DELETE /roles/bindings`.
 
 ### 🌍 The Flutter app in other languages
 The Flutter app's own words (buttons, dialogs, messages) follow the panel's

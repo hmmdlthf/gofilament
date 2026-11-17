@@ -946,6 +946,14 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 		return ctx, denied(c.Redirect(http.StatusSeeOther, p.path+"/email/verify"))
 	}
 
+	if p.roles != nil && ctx.User() != nil && p.panelAccessRequired(reqPath) && !p.hasPanelAccess(ctx) {
+		if p.isAPIRequest(c) {
+			p.setCorsHeaders(c)
+			return ctx, denied(c.JSON(http.StatusForbidden, map[string]string{"error": "You have no access to this panel."}))
+		}
+		return ctx, denied(c.String(http.StatusForbidden, "403 Forbidden: you have no access to this panel."))
+	}
+
 	if p.blockedWhileImpersonating(ctx) {
 		return ctx, denied(c.String(http.StatusForbidden, "403 Forbidden: return to your own account to change this."))
 	}

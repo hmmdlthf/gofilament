@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Roles are given per panel and tenant (role bindings)**: `RoleStore` now keeps `RoleBinding{UserID, Role, Panel, Tenant}` (`*` = all) instead of a flat user → roles list. Permissions come from the bindings covering the current panel and tenant; users need a binding to enter a panel (`RolesConfig.RequirePanelAccess`, default on); `roles.manage` everywhere defines roles and grants anything, the new `roles.assign` lets tenant admins grant within their tenant only roles whose permissions they hold. `RolesConfig.Panels` / `Tenants` list where roles can be given; the screens, API (`POST/DELETE /roles/bindings`) and Flutter show and edit bindings. **Upgrade:** `sqlstore.Migrate` turns existing assignments into `*`/`*` bindings; custom `RoleStore` implementations must replace `UserRoles`/`SetUserRoles`/`RoleUsers` with `ListBindings`/`AddBinding`/`RemoveBinding`.
+
 ### Added
 - **Flutter tenant switcher**: panels with tenancy get a tenant menu in the Flutter topbar; the chosen tenant is sent as `X-Tenant-ID` (checked against the user's tenants by the panel) and remembered on the device. `/tenants` now always returns `{key, name, avatar}`, and the schema reports `tenancy` and the current `tenant`.
 - **Flutter app in other languages**: the app's own words (about 220 buttons, dialogs and messages) are translated through `tr()`; boot sends `ui_translations` for the user's language. Arabic, German, Spanish and French are built in, `Panel.UITranslations(locale, map)` adds or overrides any language, and a test fails when a new app string has no translation.
