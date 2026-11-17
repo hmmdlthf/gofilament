@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Bulk edit**: `Resource.BulkEditable(fields...)` and `OnBulkUpdate` set one field on many selected records (web *Change Selected* bulk action, Flutter *Change* button, `POST /resources/:slug/bulk-update`), with field validation and per-record `CanEdit` / trashed checks; failures are reported per record. `tables.EditBulkAction()`.
+
+### Fixed
+- **Web bulk actions needed delete rights**: every bulk action (export, restore, ...) was refused without `CanDeleteAny`; only bulk delete (and unknown actions) need it now.
+- **API bulk delete hid errors**: without a bulk delete handler, per-record delete errors were ignored and the request reported success.
+
 ## [v1.35.0] - 2026-11-17
 
 ### Added

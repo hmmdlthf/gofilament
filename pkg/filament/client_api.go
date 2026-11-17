@@ -132,6 +132,8 @@ type ResourceMeta struct {
 	SoftDeletes bool             `json:"soft_deletes"`
 	Table       tables.TableMeta `json:"table"`
 	Abilities   map[string]bool  `json:"abilities"`
+	// BulkEdit lists the fields that can be set on many records at once.
+	BulkEdit []string `json:"bulk_edit,omitempty"`
 }
 
 // DescribeForm returns the resource form as JSON nodes with dynamic options
@@ -158,6 +160,7 @@ func (r *BaseResource[T]) Meta(ctx *Context) ResourceMeta {
 		HasForm:     r.formBuilder != nil,
 		SoftDeletes: r.IsSoftDeletesEnabled(),
 		Table:       tables.TableMeta{Actions: []tables.ActionDTO{}, BulkActions: []tables.ActionDTO{}, HeaderActions: []tables.ActionDTO{}},
+		BulkEdit:    r.BulkEditFields(),
 		Abilities: map[string]bool{
 			"create":     r.onCreate != nil && (r.canCreate == nil || r.canCreate(ctx)),
 			"delete_any": r.onDelete != nil && (r.canDeleteAny == nil || r.canDeleteAny(ctx)),

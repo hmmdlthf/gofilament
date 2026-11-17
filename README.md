@@ -1177,6 +1177,16 @@ table.HeaderActions(
 - **Same rules as the create form**: imported rows go through form validation, `CanCreate` and `OnCreate`. Resources without a form keep the old behaviour (headers are normalized to field names).
 - Excel dates in date / datetime fields are converted from Excel day numbers.
 - API: `POST /admin/api/resources/:slug/import` with a `file` (multipart), `csv` or `file_base64` (JSON); add `dry_run=1` for the preview and `mapping` (`{"File header": "field"}`, `""` skips a column). Results list failed rows with field errors (`rows`).
+### ✏️ Bulk edit
+`res.BulkEditable("status", "owner_id")` lets users set one of those form
+fields to the same value on many selected rows: a *Change Selected* bulk
+action on the web, a *Change* button in the Flutter selection bar, and
+`POST /admin/api/resources/:slug/bulk-update {ids, field, value}`. The value
+goes through the field's validation; each record through `CanEdit` and the
+trashed check, then `OnUpdate` with just that field (or `OnBulkUpdate(fn)`
+once for all). Records that fail are reported, the others are changed. At
+most 1000 records per bulk edit.
+
 ### 🔖 Saved views
 Users can name the current state of a list (search, sort, filters, advanced
 search, visible columns, grouping, page size), come back to it from a *Views*

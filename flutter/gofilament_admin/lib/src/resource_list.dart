@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api.dart';
+import 'bulk_edit.dart';
 import 'cells.dart';
 import 'controller.dart';
 import 'export.dart';
@@ -965,6 +966,28 @@ class _ResourceListPageState extends State<ResourceListPage> {
     );
   }
 
+  List<String> get _bulkEditFields {
+    final f = _meta['bulk_edit'];
+    return f is List ? [for (final x in f) '$x'] : const [];
+  }
+
+  Future<void> _bulkEdit() async {
+    final res = await showBulkEditDialog(context,
+        api: api,
+        slug: widget.slug,
+        ids: _selected.toList(),
+        fields: _bulkEditFields);
+    if (res == null) return;
+    final failed = (res['failed'] as num?)?.toInt() ?? 0;
+    _toast(
+        failed == 0
+            ? '${res['updated']} records changed.'
+            : '${res['updated']} changed, $failed not changed.',
+        error: failed > 0);
+    setState(_selected.clear);
+    _load();
+  }
+
   Widget _selectionBar(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -981,6 +1004,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
         TextButton(
             onPressed: () => setState(_selected.clear),
             child: const Text('Clear')),
+        if (_bulkEditFields.isNotEmpty)
+          TextButton.icon(
+            key: const Key('bulk-edit'),
+            onPressed: _bulkEdit,
+            icon: const Icon(Icons.edit_note, size: 18),
+            label: const Text('Change'),
+          ),
         if (_canDeleteAny && _bulkActions.contains('delete_bulk'))
           TextButton.icon(
             key: const Key('bulk-delete'),
