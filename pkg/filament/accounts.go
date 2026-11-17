@@ -4,9 +4,12 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"html"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golaravel/golaravel/pkg/auth"
@@ -393,6 +396,17 @@ func (p *Panel) handleTwoFactorDisable(c *gcontext.Context) error {
 // acceptTOTPStep makes each code single-use: the step is remembered in
 // golaravel's cache (shared between instances when the cache is).
 // A new secret starts a new series of codes, so the key includes it (hashed).
+// totpAccountName labels the panel's entry in authenticator apps: the user's
+// email from Accounts.Profile when there is one, else their identifier.
+func (p *Panel) totpAccountName(ctx *Context, user auth.Authenticatable) string {
+	if p.accounts != nil && p.accounts.Profile != nil {
+		if _, email, err := p.accounts.Profile(ctx, user); err == nil && email != "" {
+			return email
+		}
+	}
+	return user.GetAuthIdentifier()
+}
+
 func (p *Panel) acceptTOTPStep(userID, secret string, step int64) bool {
 	sum := sha256.Sum256([]byte(secret))
 	ok, err := cache.Add(fmt.Sprintf("gofilament:%s:totp:%s:%x:%d", p.id, userID, sum[:8], step), 1, 3*time.Minute)
@@ -507,7 +521,21 @@ func (p *Panel) sendResetLink(c *gcontext.Context, ctx *Context, email string) {
 	}
 }
 
+// absoluteURL makes the absolute link put in emails (password reset, email
+// verification). It uses Panel.URL, else the APP_URL environment variable,
+// and only as a last resort the request's Host header, which a client
+// controls: a forged Host would send a real reset token to another site.
 func (p *Panel) absoluteURL(c *gcontext.Context, path string) string {
+	base := p.publicURL
+	if base == "" {
+		base = strings.TrimRight(os.Getenv("APP_URL"), "/")
+	}
+	if base != "" {
+		return base + path
+	}
+	warnRequestHostLinks.Do(func() {
+		slog.Warn("filament: email links use the request Host header; set Panel.URL or APP_URL to the public address")
+	})
 	scheme := "http"
 	if isSecureRequest(c) {
 		scheme = "https"
@@ -517,6 +545,22 @@ func (p *Panel) absoluteURL(c *gcontext.Context, path string) string {
 		host = c.Request.Host
 	}
 	return scheme + "://" + host + path
+}
+
+var warnRequestHostLinks sync.Once
+
+// URL sets the public origin of the application serving the panel (for
+// example "https://example.com"), used for links in emails such as password
+// resets and email verification. Default: the APP_URL environment variable.
+// It panics on a value that is not an absolute http(s) URL without a path
+// beyond "/".
+func (p *Panel) URL(origin string) *Panel {
+	u, err := url.Parse(origin)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" {
+		panic(fmt.Sprintf("filament: Panel.URL(%q): want an origin like https://example.com", origin))
+	}
+	p.publicURL = u.Scheme + "://" + u.Host
+	return p
 }
 
 func (p *Panel) handleResetPassword(c *gcontext.Context) error {
@@ -683,7 +727,7 @@ func (p *Panel) renderProfile(ctx *Context, user auth.Authenticatable, status in
 <form method="POST" action="%s/profile/two-factor/disable">%s%s<button type="submit" class="btn btn-danger">Turn off</button></form>`, p.path, csrf, pwField)
 			b.WriteString(p.recoveryCodesHTML(ctx, user, csrf, pwField))
 		case pending != "" && session.FromContext(ctx.Context) != nil:
-			uri := p.totp.ProvisioningURI(user.GetAuthIdentifier(), pending)
+			uri := p.totp.ProvisioningURI(p.totpAccountName(ctx, user), pending)
 			fmt.Fprintf(&b, `<p style="font-size: 0.875rem; margin-bottom: 0.5rem;">Add this key to your authenticator app, then enter the code it shows.</p>
 <p style="font-family: monospace; font-size: 1rem; letter-spacing: 0.1em; word-break: break-all; padding: 0.5rem; background: var(--gray-100); border-radius: 0.375rem;" data-otpauth="%s">%s</p>
 <p style="font-size: 0.75rem; margin: 0.5rem 0 1rem;"><a href="%s">Open in an authenticator app</a></p>

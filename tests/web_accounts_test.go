@@ -296,3 +296,56 @@ func TestTwoFactorRecoveryCodes(t *testing.T) {
 		t.Fatal("codes kept after turning off")
 	}
 }
+
+// Reset links must not come from the request's Host header, which a client
+// controls (password-reset poisoning).
+func TestResetLinkUsesConfiguredURL(t *testing.T) {
+	resetLink := func(t *testing.T, hook func(p *filament.Panel)) *url.URL {
+		a := newAccountAppWith(t, func(a *accountApp, _ *filament.Accounts) { a.panelHook = hook })
+		w := newWebClient(t, a.handler)
+		formPost(w, "/admin/forgot-password", "/admin/forgot-password", url.Values{"email": {"ann@example.com"}})
+		if len(a.mails) != 1 {
+			t.Fatalf("mails=%d", len(a.mails))
+		}
+		u, _ := url.Parse(a.mails[0])
+		return u
+	}
+	t.Setenv("APP_URL", "")
+	if u := resetLink(t, func(p *filament.Panel) { p.URL("https://admin.example.org") }); u.Scheme != "https" || u.Host != "admin.example.org" || u.Path != "/admin/reset-password" {
+		t.Fatalf("Panel.URL link: %s", u)
+	}
+	t.Setenv("APP_URL", "https://app.example.net/")
+	if u := resetLink(t, nil); u.Scheme != "https" || u.Host != "app.example.net" || u.Path != "/admin/reset-password" {
+		t.Fatalf("APP_URL link: %s", u)
+	}
+	for _, bad := range []string{"admin.example.org", "ftp://x.example", "https://x.example/admin", "https://"} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("Panel.URL(%q) accepted", bad)
+				}
+			}()
+			filament.NewPanel("x").URL(bad)
+		}()
+	}
+}
+
+// Authenticator apps list the account by its email, not the internal id.
+func TestTwoFactorSetupLabelsAccountByEmail(t *testing.T) {
+	a := newAccountAppWith(t, func(a *accountApp, acc *filament.Accounts) {
+		acc.Profile = func(*filament.Context, auth.Authenticatable) (string, string, error) {
+			return "Ann", "ann.work@example.org", nil
+		}
+	})
+	w := newWebClient(t, a.handler)
+	a.signIn(w, "secret-pass")
+	body := html.UnescapeString(readBody(formPost(w, "/admin/profile", "/admin/profile/two-factor/enable", url.Values{"current_password": {"secret-pass"}})))
+	m := regexp.MustCompile(`data-otpauth="([^"]*)"`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("no otpauth link on the setup page")
+	}
+	u, err := url.Parse(m[1])
+	if err != nil || !strings.Contains(u.Path, "ann.work@example.org") {
+		t.Fatalf("authenticator label: %s", m[1])
+	}
+}

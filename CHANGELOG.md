@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`Panel.URL(origin)`**: the public address used for links in emails (password reset, email verification). Without it the `APP_URL` environment variable is used.
+
+### Security
+- **Password-reset poisoning**: reset and verification links were built from the request's `Host` header, which the client controls, so a forged host could send a real reset token to another site. They now use `Panel.URL` or `APP_URL`; the request host is only a last resort, with a warning.
+
+### Fixed
+- **Authenticator apps listed the user's internal id**: the two-factor setup (web and API) now labels the account with the email from `Accounts.Profile` when there is one.
+- **GoLaravel v1.17.2**: two-factor codes accept one step of clock drift either side again (only the current 30-second code worked).
+
 ## [v1.39.1] - 2026-11-17
 
 ### Changed

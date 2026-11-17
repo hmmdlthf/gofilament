@@ -1065,6 +1065,9 @@ panel.Accounts(filament.Accounts{
   devices; a reset signs out all of them (with `panel.Sessions`).
 - Reset links are single-use, expire after `ResetTTL` (60 minutes), and the
   page answers the same for unknown addresses. Requests are throttled.
+- Links in emails (reset, verification) point at `panel.URL("https://example.com")`,
+  or the `APP_URL` environment variable. Set one of them: otherwise the link is
+  built from the request's `Host` header, which a client can forge.
 - With a TOTP secret saved, sign-in asks for a code after the password. Codes
   are single-use (golaravel's cache; use a shared cache store on several
   instances) and attempts are throttled. Turning it off needs the password.
