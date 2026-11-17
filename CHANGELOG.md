@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.34.0] - 2026-11-17
+
 ### Added
 - **Account screens (web engine)**: `Panel.Accounts(...)` adds a profile page (name and email), change password, forgot / reset password and two-factor sign-in with an authenticator app (set up and turned off from the profile page). Built on golaravel's hash, reset-token broker, TOTP, cache and sessions; reset and two-factor requests are throttled, codes and reset links are single-use, and a password change signs out the user's other devices.
 - **Range filters (`pkg/tables`)**: `DateRangeFilter` and `NumberRangeFilter`, with web inputs and a Flutter range dialog (date picker for dates). The value is `"from,to"`; `Condition` / `Rules` turn it into advanced-search rules for `BuildAdvancedSearchSQLFor`, and `Matches` checks in-memory values. New `tables.FilterValues(query)` collects a request's filter values.
