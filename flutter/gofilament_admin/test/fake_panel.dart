@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool reorderable = false;
   bool notificationsOn = false;
 
   /// Fields sent as resource_meta.bulk_edit.
@@ -703,6 +704,7 @@ class FakePanel {
               if (canImport) 'import': true,
             },
             'table': {
+              if (reorderable) 'reorderable': true,
               'actions': [
                 {'name': 'view'},
                 {'name': 'edit'},

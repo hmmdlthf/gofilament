@@ -14,6 +14,7 @@ import 'icons.dart';
 import 'import_dialog.dart';
 import 'links.dart';
 import 'list_tools.dart';
+import 'reorder_dialog.dart';
 import 'resource_form.dart';
 import 'theme.dart';
 
@@ -883,6 +884,15 @@ class _ResourceListPageState extends State<ResourceListPage> {
               ),
           ],
         ),
+      if (_reorderable)
+        IconButton(
+          key: const Key('list-reorder'),
+          tooltip: _canReorderNow
+              ? 'Reorder'
+              : 'Clear search, filters, sorting and grouping to reorder',
+          icon: const Icon(Icons.swap_vert),
+          onPressed: _canReorderNow && _rows.length > 1 ? _reorder : null,
+        ),
       if (_viewsEnabled) _viewsMenu(),
       if (admin.can(widget.slug, 'import'))
         IconButton(
@@ -1015,6 +1025,41 @@ class _ResourceListPageState extends State<ResourceListPage> {
         ]),
       ),
     );
+  }
+
+  bool get _reorderable {
+    final t = _meta['table'];
+    return t is Map && t['reorderable'] == true;
+  }
+
+  /// Rows can be reordered on the plain list only, where they are shown in
+  /// their real order.
+  bool get _canReorderNow =>
+      _search.text.trim().isEmpty &&
+      _filters.isEmpty &&
+      _advanced.isEmpty &&
+      _sort.isEmpty &&
+      _group.isEmpty;
+
+  Future<void> _reorder() async {
+    final columns = _columns;
+    final ids = await showReorderDialog(context, rows: [
+      for (final r in _rows)
+        (
+          id: recordId(r),
+          title: columns.isEmpty
+              ? recordId(r)
+              : displayValue(valueAt(r, '${columns.first['name']}')),
+        )
+    ]);
+    if (ids == null) return;
+    try {
+      await api.reorder(widget.slug, ids, offset: (_page - 1) * _perPage);
+      _toast('Order saved.');
+      _load();
+    } on ApiException catch (e) {
+      _toast(e.message, error: true);
+    }
   }
 
   List<String> get _bulkEditFields {
