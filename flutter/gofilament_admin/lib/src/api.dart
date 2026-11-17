@@ -538,6 +538,32 @@ class AdminApi {
       _map(await _send('POST', '/resources/$slug/bulk-update',
           {'ids': ids, 'field': field, 'value': value}));
 
+  /// A resource's kanban board: [{value, label, color, cards: [{id,
+  /// title, description, version}], total}].
+  Future<List<Map<String, dynamic>>> board(String slug,
+      {String search = ''}) async {
+    final data = _map(await _get(
+        '/resources/$slug/board', {if (search.isNotEmpty) 'search': search}));
+    final c = data['columns'];
+    return c is List
+        ? [
+            for (final x in c)
+              if (x is Map) Map<String, dynamic>.from(x)
+          ]
+        : const [];
+  }
+
+  /// Moves a card to another column. Returns the record's new version.
+  Future<String?> moveCard(String slug, String id, String value,
+      {String? version}) async {
+    final data = _map(await _send('POST', '/resources/$slug/board/move', {
+      'id': id,
+      'value': value,
+      if (version != null && version.isNotEmpty) '_version': version,
+    }));
+    return data['version']?.toString();
+  }
+
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});
 

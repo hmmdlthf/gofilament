@@ -119,6 +119,7 @@ type BaseResource[T any] struct {
 	onUpdate          UpdateHandlerFunc
 	onDelete          DeleteHandlerFunc
 	onDeleteBulk      DeleteBulkHandlerFunc
+	kanban            *kanbanBoard
 	bulkEditFields    []string
 	onBulkUpdate      BulkUpdateHandlerFunc
 	historyProvider   HistoryProvider
@@ -1050,6 +1051,23 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 		return r.handleImportView(ctx, basePath)
 	})
 
+	if r.kanban != nil {
+		router.GET(basePath+"/board", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			return r.handleKanbanPage(ctx, basePath)
+		})
+		router.POST(basePath+"/board/move", func(c *gcontext.Context) error {
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			return r.handleKanbanMove(ctx)
+		})
+	}
+
 	router.POST(basePath+"/bulk-edit", func(c *gcontext.Context) error {
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
@@ -1347,10 +1365,10 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
   <div>
     <h1 class="filament-title">%s</h1>
     <p class="filament-description">Manage all %s in your database.</p>
-  </div>
+  </div>%s
 </div>
 %s%s`,
-		r.pluralModelName, strings.ToLower(r.pluralModelName),
+		r.pluralModelName, strings.ToLower(r.pluralModelName), r.boardLink(basePath),
 		savedViewsMenu(ctx, r, basePath), tbl.Render(basePath),
 	)
 

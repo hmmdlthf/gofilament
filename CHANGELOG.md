@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Kanban board**: `Resource.Kanban(KanbanConfig{Field, Columns, Title, Description})` shows records as cards in columns (web board page, API `/board` and `/board/move`, Flutter Board view); moving a card is a validated, permission- and conflict-checked edit of that field.
+
 ## [v1.36.0] - 2026-11-17
 
 ### Added
