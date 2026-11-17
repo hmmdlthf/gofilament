@@ -40,6 +40,7 @@ type Table[T any] struct {
 	sortCol                   string
 	sortDir                   string
 	activeFilters             map[string]string
+	versionFunc               func(record T) string
 	idFunc                    func(record T) string
 	toggleable                bool
 	reorderable               bool
@@ -409,6 +410,13 @@ func (t *Table[T]) HeaderActions(actions ...*TableAction[T]) *Table[T] {
 // RecordID sets the closure to extract a unique string ID from record T.
 func (t *Table[T]) RecordID(fn func(record T) string) *Table[T] {
 	t.idFunc = fn
+	return t
+}
+
+// RecordVersion sets the closure giving a record's version token. Rows then
+// carry it (data-version) so inline edits can detect conflicting changes.
+func (t *Table[T]) RecordVersion(fn func(record T) string) *Table[T] {
+	t.versionFunc = fn
 	return t
 }
 
@@ -785,6 +793,9 @@ func (t *Table[T]) Render(basePath string) string {
 				}())
 			}
 
+			if t.versionFunc != nil {
+				trAttrs += fmt.Sprintf(` data-version="%s"`, html.EscapeString(t.versionFunc(rec)))
+			}
 			sb.WriteString(fmt.Sprintf(`<tr %s>`, trAttrs))
 
 			// Reorder handle cell

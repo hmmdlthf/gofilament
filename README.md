@@ -487,6 +487,8 @@ res := filament.NewResource[*Document]("documents").
 - **🚀 Server-Side Sorting & Filtering**: Multi-column sorting (`↑`, `↓`), search bars, `SelectFilter`, and `TernaryFilter` (soft-deletes).
 - **📅 Range filters**: `tables.DateRangeFilter("created_at")` and `tables.NumberRangeFilter("amount")` give "from / to" inputs (web) and a range dialog (Flutter). Your list handler receives `filters["created_at"] = "2026-01-01,2026-01-31"` (either side may be empty). Turn it into SQL with `f.Condition(value)` + `tables.BuildAdvancedSearchSQLFor` (the end date is inclusive), or check in-memory records with `f.Matches(value, v)`.
 - **🧮 Summaries & grouping**: `tables.TextColumn[T]("amount").Summarize(tables.Sum, tables.Avg)` shows aggregates under the column for the page and per group (`tables.Sum`, `Avg`, `Count`, `Min`, `Max`). `res.SummariesUsing(func(ctx, search, filters) (tables.Summaries, error))` adds an "All results" row computed by your database (and `summaries` in the API). `t.Groups("status")` / `t.DefaultGroup("status")` let users group rows with a header and subtotal per group; while grouped, the list is sorted by the group column. Web and Flutter.
+- **🔒 Edit conflicts**: `res.Versioned(func(r *Order) string { return r.UpdatedAt.String() })` stops one admin from silently overwriting another's save. Edit forms (web and Flutter) carry the version they were opened with; a stale save gets 409 and the editor offers *Reload* or *Overwrite*. For a race-free write, use `filament.ExpectedVersion(ctx)` in your `OnUpdate` (`UPDATE ... WHERE id = ? AND updated_at = ?`). Inline cell edits are checked too (rows carry their version, and each save returns the new one), and relation managers take the same `rm.Versioned(...)` (needs `OnFind`). API clients that send no `_version` are not checked.
+- **🧮 Summaries & grouping**: `tables.TextColumn[T]("amount").Summarize(tables.Sum, tables.Avg)` shows aggregates under the column for the page and per group (`tables.Sum`, `Avg`, `Count`, `Min`, `Max`). `res.SummariesUsing(func(ctx, search, filters) (tables.Summaries, error))` adds an "All results" row computed by your database (and `summaries` in the API). `t.Groups("status")` / `t.DefaultGroup("status")` let users group rows with a header and subtotal per group; while grouped, the list is sorted by the group column. Web and Flutter (table and phone layouts).
 - **🔒 Edit conflicts**: `res.Versioned(func(r *Order) string { return r.UpdatedAt.String() })` stops one admin from silently overwriting another's save. Edit forms (web and Flutter) carry the version they were opened with; a stale save gets 409 and the editor offers *Reload* or *Overwrite*. For a race-free write, use `filament.ExpectedVersion(ctx)` in your `OnUpdate` (`UPDATE ... WHERE id = ? AND updated_at = ?`). API clients that send no `_version` are not checked.
 - **📦 Streaming Bulk & Header Actions**: In-line View/Edit/Delete actions, multi-record delete, and streaming data export (`CSV`, `TSV`, `JSON`).
 
@@ -1036,6 +1038,9 @@ panel.Accounts(filament.Accounts{
     // Two-factor sign-in with an authenticator app (needs panel.Sessions)
     TwoFactorSecret:     func(ctx *filament.Context, u auth.Authenticatable) (string, error) { ... },
     SaveTwoFactorSecret: func(ctx *filament.Context, u auth.Authenticatable, secret string) error { ... },
+    // Optional single-use recovery codes (the panel passes SHA-256 hashes)
+    RecoveryCodes:     func(ctx *filament.Context, u auth.Authenticatable) ([]string, error) { ... },
+    SaveRecoveryCodes: func(ctx *filament.Context, u auth.Authenticatable, hashes []string) error { ... },
 })
 ```
 
@@ -1046,11 +1051,50 @@ panel.Accounts(filament.Accounts{
 - With a TOTP secret saved, sign-in asks for a code after the password. Codes
   are single-use (golaravel's cache; use a shared cache store on several
   instances) and attempts are throttled. Turning it off needs the password.
+- With `RecoveryCodes`, turning two-factor on makes 8 recovery codes, shown
+  once on the profile page. Each one replaces a code at sign-in once; the
+  profile shows how many are left and can make a new set.
 - The topbar now shows the signed-in user's name with the user menu
   (Profile when available, Sign Out, and `panel.UserMenu` items).
 
-Not included yet: self-registration (`Registration()` is still only a flag),
-recovery codes, and these screens in the Flutter app.
+**Flutter and other API clients** get the same screens over the API (bearer
+token): `GET/PUT /account`, `POST /account/password`,
+`/account/two-factor/{enable,confirm,disable,recovery-codes}` and
+`POST /forgot-password` (the link opens the web reset page). `GET /boot`
+lists the available ones under `auth.accounts`. The Flutter app shows *Your
+account* in the account menu, a *Forgot your password?* link and the code step
+at sign-in.
+
+With two-factor on, `POST /login` answers `{"two_factor": true, "challenge":
+"..."}` instead of a token; `POST /login/two-factor {challenge, code}` returns
+the token once a valid authenticator or recovery code is given. The issued
+token waits in golaravel's cache (use a shared store on several instances);
+without `panel.Sessions` the user is looked up as a `PanelUser` with the login
+id, so `TwoFactorSecret` should find users by `GetAuthIdentifier()`.
+
+**Sign-up and email verification**:
+
+```go
+panel.Registration().Accounts(filament.Accounts{
+    // ...the callbacks above, plus:
+    Register: func(ctx *filament.Context, name, email, passwordHash string) (auth.Authenticatable, error) {
+        // create the user; return filament.ErrEmailTaken for a used address
+    },
+    EmailVerified:        func(ctx *filament.Context, u auth.Authenticatable) (bool, error) { ... },
+    MarkEmailVerified:    func(ctx *filament.Context, u auth.Authenticatable) error { ... },
+    SendVerificationLink: func(ctx *filament.Context, u auth.Authenticatable, email, link string) error { ... },
+})
+```
+
+- `/register` (web) and `POST /api/register` create the account (throttled
+  per IP) and sign the new user in; the login screens link to it.
+- With the verification callbacks, new users get a signed link (golaravel's
+  `EmailVerificationBroker`, keyed by `VerificationSecret` or `APP_KEY`, valid
+  `VerificationTTL`, default 60 minutes). Until it is opened the web panel
+  shows only a "verify your email" page and the API answers 403 with
+  `"email_unverified": true`; the Flutter app shows a matching screen.
+  `EmailVerified` runs on every request, and existing users must count as
+  verified, so mark them before you turn this on.
 
 ### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
 
