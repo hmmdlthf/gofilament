@@ -37,6 +37,10 @@ class ListPage {
 
   /// Per-record abilities: `{id: {update, delete, actions: [...]}}`.
   Map<String, Map<String, dynamic>> rowMeta = const {};
+
+  /// Aggregates over all matching records (resource SummariesUsing):
+  /// `{column: {sum: 1.5, count: 3}}`.
+  Map<String, Map<String, double>> summaries = const {};
   final int page;
   final int perPage;
 }
@@ -267,7 +271,10 @@ class AdminApi {
       total: (data['total'] as num?)?.toInt() ?? rows.length,
       page: (data['page'] as num?)?.toInt() ?? page,
       perPage: (data['per_page'] as num?)?.toInt() ?? perPage,
-    )..rowMeta = meta.map((k, v) => MapEntry(k, _map(v)));
+    )
+      ..rowMeta = meta.map((k, v) => MapEntry(k, _map(v)))
+      ..summaries = _map(data['summaries']).map((col, v) => MapEntry(col,
+          _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toDouble() : 0.0))));
   }
 
   /// One record, as the resource's Go type serializes it.

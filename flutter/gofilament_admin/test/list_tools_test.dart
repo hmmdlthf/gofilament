@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gofilament_admin/gofilament_admin.dart';
+import 'package:gofilament_admin/src/list_tools.dart';
 
 import 'admin_test.dart' show signIn, openItems;
 import 'fake_panel.dart';
@@ -155,5 +156,116 @@ void main() {
     expect(panel.putBodies.last['_version'], '2');
     expect(panel.itemVersion, 3);
     expect(find.byKey(const Key('form-save')), findsNothing); // closed
+  });
+
+  testWidgets('grouping adds group headers, subtotals and totals',
+      (tester) async {
+    final panel = FakePanel()
+      ..extraColumns = [
+        {
+          'name': 'id',
+          'label': 'Ref',
+          'type': 'text',
+          'summaries': ['sum', 'count']
+        },
+      ]
+      ..itemsResourceExtras = {
+        'groups': ['status']
+      }
+      ..listSummaries = {
+        'id': {'sum': 99, 'count': 40}
+      };
+    await _open(tester, panel);
+
+    // Summary rows without grouping.
+    expect(find.text('This page'), findsOneWidget);
+    expect(find.text('All results'), findsOneWidget);
+    expect(find.text('Sum 99', findRichText: true), findsOneWidget);
+    expect(find.text('Sum 3', findRichText: true),
+        findsOneWidget); // page 1: ids 1 + 2
+
+    await tester.tap(find.byKey(const Key('list-group')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('group-status')));
+    await tester.pumpAndSettle();
+    expect(_lastListQuery(panel)['sort'], 'status');
+    // Page 1 sorted by status: Chains (draft), Rings (live).
+    expect(find.textContaining('draft (1)'), findsOneWidget);
+    expect(find.textContaining('live (1)'), findsOneWidget);
+    expect(find.text('Subtotal'), findsNWidgets(2));
+
+    await tester.tap(find.byKey(const Key('list-group')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('group-none')));
+    await tester.pumpAndSettle();
+    expect(find.text('Subtotal'), findsNothing);
+  });
+
+  test('computeSummaries matches the server', () {
+    final s = computeSummaries([10, '20.5', null, '', 'x', 4.5],
+        ['sum', 'avg', 'count', 'min', 'max']);
+    expect(s['sum'], 35);
+    expect(s['count'], 4);
+    expect(formatSummary(s['avg']!), '11.67');
+    expect(s['min'], 4.5);
+    expect(s['max'], 20.5);
+  });
+
+  testWidgets('a number range filter sends "min,max"', (tester) async {
+    final panel = FakePanel()
+      ..extraFilters = [
+        {
+          'name': 'price',
+          'label': 'Price',
+          'type': 'number_range',
+          'column': 'price'
+        }
+      ];
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('range-from')), '10');
+    await tester.tap(find.byKey(const Key('range-apply')));
+    await tester.pumpAndSettle();
+    expect(_lastListQuery(panel)['filter_price'], '10,');
+    expect(find.text('Price: ≥ 10'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('range-to')), '99.5');
+    await tester.tap(find.byKey(const Key('range-apply')));
+    await tester.pumpAndSettle();
+    expect(_lastListQuery(panel)['filter_price'], '10,99.5');
+
+    await tester.tap(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('range-clear')));
+    await tester.pumpAndSettle();
+    expect(_lastListQuery(panel).containsKey('filter_price'), isFalse);
+  });
+
+  testWidgets('a date range filter picks dates from the calendar',
+      (tester) async {
+    final panel = FakePanel()
+      ..extraFilters = [
+        {
+          'name': 'created_at',
+          'label': 'Created',
+          'type': 'date_range',
+          'column': 'created_at'
+        }
+      ];
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('filter-created_at')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('range-from')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('range-apply')));
+    await tester.pumpAndSettle();
+    final v = _lastListQuery(panel)['filter_created_at']!;
+    expect(RegExp(r'^\d{4}-\d{2}-15,$').hasMatch(v), isTrue, reason: v);
   });
 }

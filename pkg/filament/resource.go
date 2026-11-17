@@ -90,22 +90,23 @@ type CellUpdateHandlerFunc func(ctx *Context, id, column string, value any) erro
 
 // BaseResource implements ResourceInterface with generic Ent/model type T.
 type BaseResource[T any] struct {
-	versionOf func(record T) string
-	slug            string
-	modelName       string
-	pluralModelName string
-	navGroup        string
-	navIcon         string
-	navSort         int
-	navBadge        func(ctx *Context) string
-	formBuilder     func(form *forms.Form) *forms.Form
-	tableBuilder    func(table *tables.Table[T]) *tables.Table[T]
+	summariesUsing            func(ctx *Context, search string, filters map[string]string) (tables.Summaries, error)
+	versionOf                 func(record T) string
+	slug                      string
+	modelName                 string
+	pluralModelName           string
+	navGroup                  string
+	navIcon                   string
+	navSort                   int
+	navBadge                  func(ctx *Context) string
+	formBuilder               func(form *forms.Form) *forms.Form
+	tableBuilder              func(table *tables.Table[T]) *tables.Table[T]
 	defaultColumns            []string
 	selectableColumns         []string
 	advancedSearchableColumns []string
-	infolistBuilder func(infolist *infolists.Infolist) *infolists.Infolist
-	idExtractor     func(record T) string
-	relations       []RelationManager
+	infolistBuilder           func(infolist *infolists.Infolist) *infolists.Infolist
+	idExtractor               func(record T) string
+	relations                 []RelationManager
 
 	// Handlers
 	onList            ListHandlerFunc[T]
@@ -127,16 +128,16 @@ type BaseResource[T any] struct {
 	isRecordTrashed  func(record T) bool
 
 	// Authorization
-	canViewAny     func(ctx *Context) bool
-	canView        func(ctx *Context, record T) bool
+	canViewAny func(ctx *Context) bool
+	canView    func(ctx *Context, record T) bool
 	// acceptUnvalidated skips server-side form validation (AcceptUnvalidatedInput).
 	acceptUnvalidated bool
-	canCreate      func(ctx *Context) bool
-	canEdit        func(ctx *Context, record T) bool
-	canDelete      func(ctx *Context, record T) bool
-	canDeleteAny   func(ctx *Context) bool
-	canRestore     func(ctx *Context, id string) bool
-	canForceDelete func(ctx *Context, id string) bool
+	canCreate         func(ctx *Context) bool
+	canEdit           func(ctx *Context, record T) bool
+	canDelete         func(ctx *Context, record T) bool
+	canDeleteAny      func(ctx *Context) bool
+	canRestore        func(ctx *Context, id string) bool
+	canForceDelete    func(ctx *Context, id string) bool
 
 	// Global Search
 	globallySearchable  bool
@@ -161,11 +162,11 @@ type BaseResource[T any] struct {
 
 // ResourceTab represents a status or query filter tab displayed above the resource records list.
 type ResourceTab struct {
-	Key       string            `json:"key"`
-	Label     string            `json:"label"`
-	Badge     string            `json:"badge,omitempty"`
-	Icon      string            `json:"icon,omitempty"`
-	Query     map[string]string `json:"query,omitempty"`
+	Key   string            `json:"key"`
+	Label string            `json:"label"`
+	Badge string            `json:"badge,omitempty"`
+	Icon  string            `json:"icon,omitempty"`
+	Query map[string]string `json:"query,omitempty"`
 }
 
 // Tab creates a new ResourceTab with the given label.
@@ -728,6 +729,40 @@ func (r *BaseResource[T]) GetAdvancedSearchableColumns() []string {
 	return tbl.GetAdvancedSearchableColumns()
 }
 
+// SummariesUsing computes the aggregates of summarized columns over all
+// records matching the search and filters (not just the page), shown as
+// "All results" under the table and sent as "summaries" by the API. Without
+// it only the page (and each group) is summarized.
+func (r *BaseResource[T]) SummariesUsing(fn func(ctx *Context, search string, filters map[string]string) (tables.Summaries, error)) *BaseResource[T] {
+	r.summariesUsing = fn
+	return r
+}
+
+func (r *BaseResource[T]) totals(ctx *Context, search string, filters map[string]string) tables.Summaries {
+	if r.summariesUsing == nil {
+		return nil
+	}
+	s, err := r.summariesUsing(ctx, search, filters)
+	if err != nil {
+		return nil
+	}
+	return s
+}
+
+// ListTotals is used by the API.
+func (r *BaseResource[T]) ListTotals(ctx *Context, search string, filters map[string]string) tables.Summaries {
+	return r.totals(ctx, search, filters)
+}
+
+// GetGroups returns the table's group columns and default group.
+func (r *BaseResource[T]) GetGroups() ([]string, string) {
+	if r.tableBuilder == nil {
+		return nil, ""
+	}
+	tbl := r.tableBuilder(tables.New[T]())
+	return tbl.GetGroups(), tbl.GetDefaultGroup()
+}
+
 // IsAdvancedSearchEnabled reports whether advanced search is active on this resource.
 func (r *BaseResource[T]) IsAdvancedSearchEnabled() bool {
 	return len(r.GetAdvancedSearchableColumns()) > 0
@@ -1233,11 +1268,13 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("perPage", "15"))
 
-	filters := make(map[string]string)
-	for k, v := range ctx.Request.URL.Query() {
-		if strings.HasPrefix(k, "filter_") && len(v) > 0 {
-			filters[strings.TrimPrefix(k, "filter_")] = v[0]
-		}
+	filters := tables.FilterValues(ctx.Request.URL.Query())
+
+	// While grouped, rows are sorted by the group column so a group is
+	// never split across the page.
+	group := tbl.ResolveGroup(ctx.Query("group"))
+	if group != "" && sortCol != group {
+		sortCol, sortDir = group, "asc"
 	}
 
 	var records []T
@@ -1251,6 +1288,10 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	}
 
 	tbl.SetData(records, total, page, perPage, search, sortCol, sortDir, filters)
+	tbl.SetGroup(group)
+	if totals := r.totals(ctx, search, filters); totals != nil {
+		tbl.SetTotals(totals)
+	}
 	if r.canCreate == nil || r.canCreate(ctx) {
 		tbl.HeaderActions(tables.Action[T]("create").Label(fmt.Sprintf("New %s", r.modelName)))
 	}
@@ -1742,12 +1783,7 @@ func (r *BaseResource[T]) handleExport(ctx *Context, selectedIDs ...string) erro
 		}
 	}
 
-	filters := make(map[string]string)
-	for k, v := range ctx.Request.URL.Query() {
-		if strings.HasPrefix(k, "filter_") && len(v) > 0 {
-			filters[strings.TrimPrefix(k, "filter_")] = v[0]
-		}
-	}
+	filters := tables.FilterValues(ctx.Request.URL.Query())
 
 	if err := r.InvokeExport(ctx, format, filterIDs, search, sortCol, sortDir, filters); err != nil {
 		return ctx.String(http.StatusInternalServerError, "Export failed: %v", err)
@@ -2109,7 +2145,9 @@ func (r *BaseResource[T]) handleLive(ctx *Context) error {
 	liveField := ctx.FormValue("_live_field")
 	if liveField != "" {
 		if comp := form.GetField(liveField); comp != nil {
-			if hook, ok := comp.(interface{ TriggerAfterUpdated(state any, f *forms.Form) }); ok {
+			if hook, ok := comp.(interface {
+				TriggerAfterUpdated(state any, f *forms.Form)
+			}); ok {
 				hook.TriggerAfterUpdated(data[liveField], form)
 			}
 		}

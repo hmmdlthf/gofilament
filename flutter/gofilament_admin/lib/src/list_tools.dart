@@ -364,3 +364,169 @@ Widget sizedCell(double? width, Widget child) => width == null
         child: ClipRect(
             child: Align(
                 alignment: AlignmentDirectional.centerStart, child: child)));
+
+// ------------------------------------------------------------- range filters
+
+/// Edits a date or number range filter ("from,to", either side optional).
+/// Returns the new value ("" clears it), or null when cancelled.
+Future<String?> showRangeFilterDialog(
+  BuildContext context, {
+  required String label,
+  required bool dates,
+  required String value,
+}) {
+  final parts = value.split(',');
+  final from = TextEditingController(text: parts.isNotEmpty ? parts[0] : '');
+  final to = TextEditingController(text: parts.length > 1 ? parts[1] : '');
+  String fmt(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Widget field(String key, String hint, TextEditingController c) => SizedBox(
+        width: 160,
+        child: TextField(
+          key: Key(key),
+          controller: c,
+          readOnly: dates,
+          keyboardType: dates
+              ? null
+              : const TextInputType.numberWithOptions(
+                  decimal: true, signed: true),
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: hint,
+            suffixIcon: dates
+                ? const Icon(Icons.calendar_today_outlined, size: 18)
+                : null,
+          ),
+          onTap: !dates
+              ? null
+              : () async {
+                  final initial = DateTime.tryParse(c.text) ?? DateTime.now();
+                  final picked = await showDatePicker(
+                      context: context,
+                      initialDate: initial,
+                      firstDate: DateTime(1900),
+                      lastDate: DateTime(2200));
+                  if (picked != null) c.text = fmt(picked);
+                },
+        ),
+      );
+
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(label),
+      content: Wrap(spacing: 12, runSpacing: 12, children: [
+        field('range-from', dates ? 'From' : 'Min', from),
+        field('range-to', dates ? 'To' : 'Max', to),
+      ]),
+      actions: [
+        TextButton(
+            key: const Key('range-clear'),
+            onPressed: () => Navigator.pop(context, ''),
+            child: const Text('Clear')),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton(
+            key: const Key('range-apply'),
+            onPressed: () {
+              final a = from.text.trim(), b = to.text.trim();
+              Navigator.pop(context, a.isEmpty && b.isEmpty ? '' : '$a,$b');
+            },
+            child: const Text('Apply')),
+      ],
+    ),
+  );
+}
+
+/// The chip text of a range value: "Amount: 10 – 20", "Created: ≥ 2026-01-01".
+String rangeSummary(String label, String value) {
+  final p = value.split(',');
+  final a = p.isNotEmpty ? p[0] : '', b = p.length > 1 ? p[1] : '';
+  if (a.isEmpty && b.isEmpty) return label;
+  if (b.isEmpty) return '$label: ≥ $a';
+  if (a.isEmpty) return '$label: ≤ $b';
+  return '$label: $a – $b';
+}
+
+// ------------------------------------------------------ summaries & groups
+
+const summaryLabels = {
+  'sum': 'Sum',
+  'avg': 'Average',
+  'count': 'Count',
+  'min': 'Min',
+  'max': 'Max',
+};
+
+double? _num(dynamic v) {
+  if (v is num) return v.toDouble();
+  if (v is String) return double.tryParse(v.trim());
+  return null;
+}
+
+/// Computes the aggregates (sum, avg, count, min, max) of [values], like
+/// the server's tables.Compute.
+Map<String, double> computeSummaries(
+    Iterable<dynamic> values, List<String> kinds) {
+  final nums = <double>[];
+  var count = 0;
+  for (final v in values) {
+    if (v == null || v == '') continue;
+    count++;
+    final n = _num(v);
+    if (n != null && !n.isNaN) nums.add(n);
+  }
+  final out = <String, double>{};
+  for (final k in kinds) {
+    switch (k) {
+      case 'count':
+        out[k] = count.toDouble();
+      case 'sum':
+        out[k] = nums.fold(0.0, (a, b) => a + b);
+      case 'avg':
+        if (nums.isNotEmpty) {
+          out[k] = nums.fold(0.0, (a, b) => a + b) / nums.length;
+        }
+      case 'min':
+        if (nums.isNotEmpty) out[k] = nums.reduce((a, b) => a < b ? a : b);
+      case 'max':
+        if (nums.isNotEmpty) out[k] = nums.reduce((a, b) => a > b ? a : b);
+    }
+  }
+  return out;
+}
+
+/// Prints an aggregate with at most two decimals.
+String formatSummary(double v) {
+  if (v == v.roundToDouble() && v.abs() < 1e15) return v.toInt().toString();
+  final s = v.toStringAsFixed(2);
+  return s.endsWith('0') ? s.substring(0, s.length - 1) : s;
+}
+
+/// The summary lines of one column ("Sum 115", "Count 3").
+Widget summaryCell(
+    BuildContext context, Map<String, double>? values, List<String> kinds) {
+  if (values == null) return const SizedBox.shrink();
+  final theme = Theme.of(context);
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final k in kinds)
+        if (values[k] != null)
+          Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                    text: '${summaryLabels[k] ?? k} ',
+                    style:
+                        TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                TextSpan(
+                    text: formatSummary(values[k]!),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ]),
+              style: const TextStyle(fontSize: 12)),
+    ],
+  );
+}
