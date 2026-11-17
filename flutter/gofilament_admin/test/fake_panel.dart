@@ -93,6 +93,9 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+
+  /// Fields sent as resource_meta.bulk_edit.
+  List<String> bulkEdit = [];
   bool history = false;
   bool savedViews = false;
   bool backgroundJobs = false;
@@ -690,6 +693,7 @@ class FakePanel {
         'resource_meta': {
           'items': {
             'has_form': true,
+            if (bulkEdit.isNotEmpty) 'bulk_edit': bulkEdit,
             'abilities': {
               'create': canCreate,
               'delete_any': canDelete,

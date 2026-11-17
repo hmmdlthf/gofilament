@@ -509,6 +509,13 @@ class AdminApi {
   Future<void> forceDelete(String slug, String id) =>
       _send('POST', '/resources/$slug/force-delete', {'id': id});
 
+  /// Sets [field] to [value] on the records [ids] (Resource.BulkEditable).
+  /// Returns {updated, failed, errors: {id: message}}.
+  Future<Map<String, dynamic>> bulkUpdate(
+          String slug, List<String> ids, String field, dynamic value) async =>
+      _map(await _send('POST', '/resources/$slug/bulk-update',
+          {'ids': ids, 'field': field, 'value': value}));
+
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});
 

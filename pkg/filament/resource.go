@@ -119,6 +119,8 @@ type BaseResource[T any] struct {
 	onUpdate          UpdateHandlerFunc
 	onDelete          DeleteHandlerFunc
 	onDeleteBulk      DeleteBulkHandlerFunc
+	bulkEditFields    []string
+	onBulkUpdate      BulkUpdateHandlerFunc
 	historyProvider   HistoryProvider
 	canSeeHistory     func(ctx *Context) bool
 	onRestore         RestoreHandlerFunc
@@ -1048,6 +1050,14 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 		return r.handleImportView(ctx, basePath)
 	})
 
+	router.POST(basePath+"/bulk-edit", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return r.handleBulkEdit(ctx, basePath)
+	})
+
 	router.POST(basePath+"/import/preview", func(c *gcontext.Context) error {
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
@@ -1261,6 +1271,15 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	}
 	if r.versionOf != nil {
 		tbl.RecordVersion(r.versionOf)
+	}
+	if len(r.BulkEditFields()) > 0 {
+		has := false
+		for _, ba := range tbl.GetBulkActions() {
+			has = has || ba.GetName() == "edit_bulk"
+		}
+		if !has {
+			tbl.BulkActions(append([]*tables.BulkActionDef{tables.EditBulkAction()}, tbl.GetBulkActions()...)...)
+		}
 	}
 	if r.softDeletes {
 		tbl.SoftDeletes(true)
@@ -1665,13 +1684,19 @@ func (r *BaseResource[T]) handleDelete(ctx *Context, basePath, id string) error 
 }
 
 func (r *BaseResource[T]) handleBulk(ctx *Context, basePath string) error {
-	if r.canDeleteAny != nil && !r.canDeleteAny(ctx) {
-		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
-	}
-
 	_ = ctx.Request.ParseForm()
 	action := ctx.Request.PostFormValue("bulk_action")
 	selectedIDs := ctx.Request.PostForm["selected_ids[]"]
+
+	// Only deleting needs the delete permission (export, edit and restore
+	// have their own checks).
+	ownCheck := action == "edit_bulk" || action == "export_bulk" || action == "restore_bulk" || action == "force_delete_bulk"
+	if !ownCheck && r.canDeleteAny != nil && !r.canDeleteAny(ctx) {
+		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+	}
+	if action == "edit_bulk" {
+		return r.handleBulkEditStart(ctx, basePath, selectedIDs)
+	}
 
 	if action == "delete_bulk" && r.onDeleteBulk != nil && len(selectedIDs) > 0 {
 		if err := r.InvokeDeleteBulk(ctx, selectedIDs); err != nil {

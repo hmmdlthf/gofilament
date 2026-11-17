@@ -1244,6 +1244,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 	r.OPTIONS(resPath+"/:id", corsPreflight)
 	r.OPTIONS(resPath+"/:id/cell", corsPreflight)
 	p.mountHistoryAPI(r, res, resPath, corsPreflight)
+	p.mountBulkEditAPI(r, res, resPath, corsPreflight)
 	p.mountSavedViewAPI(r, res, resPath, corsPreflight)
 	r.OPTIONS(resPath+"/export", corsPreflight)
 	r.OPTIONS(resPath+"/import", corsPreflight)
@@ -1534,7 +1535,9 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				InvokeDelete(ctx *Context, id string) error
 			}); ok {
 				for _, id := range ids {
-					_ = singleInvoker.InvokeDelete(ctx, id)
+					if err := singleInvoker.InvokeDelete(ctx, id); err != nil {
+						return p.apiError(c, fmt.Errorf("%s: %w", id, err))
+					}
 				}
 				return c.JSON(http.StatusOK, map[string]any{
 					"success": true,
