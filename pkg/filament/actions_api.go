@@ -100,8 +100,8 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 			if trashed {
 				// a trashed record can only be restored or deleted for good
 				meta["update"], meta["delete"], meta["actions"] = false, false, []string{}
-				meta["restore"] = r.onRestore != nil && (r.canRestore == nil || r.canRestore(ctx, id))
-				meta["force_delete"] = r.onForceDelete != nil && (r.canForceDelete == nil || r.canForceDelete(ctx, id))
+				meta["restore"] = r.onRestore != nil && r.mayRestore(ctx, id)
+				meta["force_delete"] = r.onForceDelete != nil && r.mayForceDelete(ctx, id)
 			}
 		}
 		out[id] = meta

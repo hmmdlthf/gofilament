@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Soft deletes**: the "trashed" filter is now part of the API schema, so the Flutter app can show and restore trashed records. Trashed records can no longer be edited, inline-edited or deleted again (409; the web edit page offers Restore). Restore and force delete fall back to the resource's delete permission (`CanDeleteAny`) when `CanRestore` / `CanForceDelete` are not set, answer 404 on resources without soft deletes or handlers, and report handler errors instead of claiming success (single and bulk).
+
 ## [v1.34.0] - 2026-11-17
 
 ### Added
