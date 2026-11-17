@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Import preview and Excel**: imports (web, API, new Flutter Import dialog) now preview the file first: columns are matched to form fields (editable), every row is validated, and the problems are listed before the valid rows are imported. `.xlsx` files can be imported; exports gain `format=xlsx` and `columns=`. API: `dry_run`, `mapping`, `file_base64`; results include per-row field errors (`rows`). Resources report an `import` ability to API clients.
 - **Saved views**: `Panel.SavedViews(store)` lets users save the current list state (search, sort, filters, advanced search, columns, grouping, page size) under a name and share it; a *Views* menu on web and Flutter lists, applies and deletes them. `SavedViewsShareable` controls sharing; `sqlstore.Views()` keeps them in the database. API under `/resources/:slug/views`.
 - **Record history**: `activitylog.EnableAuditLog` now gives a resource a history provider (`Resource.History`): the web view/edit pages show a *History* section, `GET /resources/:slug/:id/history` serves it, and the Flutter record form has a History button. `HistoryVisible`, `EnableAuditLogWith(res, AuditOptions{Except, NoHistory})`, `filament.SetCreatedID`. Inline cell edits and bulk deletes are logged.
+
 ### Fixed
 - **API sign-in skipped two-factor**: users with two-factor sign-in on could get an API token (and sign in to the Flutter app) with the password alone. `POST /login` now returns a challenge, and the token is only handed out by `POST /login/two-factor` after a valid code.
 - **Imports skipped form validation**: imported rows went straight to `OnCreate`, without the create form's rules. They are now validated like the create form.
@@ -26,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audit log diffs**: updates compared the whole stored record with the submitted form, so untouched fields showed as removed and differently named keys (`FullName` / `full_name`) as changed; only real changes are recorded now, and no-op saves are not logged.
 - **Audit log stored secrets**: password values were stored in created / updated entries. Password fields and `*password*` / `*secret*` / `*token*` fields are now hidden.
 - **Web edit form empty for struct records**: the edit page only filled the form when records were maps. Struct records now fill it too (loose name matching); password fields are never filled.
+- **Soft deletes**: the "trashed" filter is now part of the API schema, so the Flutter app can show and restore trashed records. Trashed records can no longer be edited, inline-edited or deleted again (409; the web edit page offers Restore). Restore and force delete fall back to the resource's delete permission (`CanDeleteAny`) when `CanRestore` / `CanForceDelete` are not set, answer 404 on resources without soft deletes or handlers, and report handler errors instead of claiming success (single and bulk).
 
 
 ## [v1.34.0] - 2026-11-17

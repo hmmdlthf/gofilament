@@ -652,6 +652,7 @@ func (r *BaseResource[T]) GetFilters() []tables.FilterDTO {
 	}
 	tbl := tables.New[T]()
 	tbl = r.tableBuilder(tbl)
+	withTrashedFilter(r, tbl)
 	var dtos []tables.FilterDTO
 	for _, f := range tbl.GetFilters() {
 		dtos = append(dtos, f.ToDTO())
@@ -1264,9 +1265,7 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	if r.softDeletes {
 		tbl.SoftDeletes(true)
 		tbl.IsTrashed(r.checkIsTrashed)
-		if !tbl.HasFilter("trashed") {
-			tbl.Filters(append(tbl.GetFilters(), tables.TrashedFilter())...)
-		}
+		withTrashedFilter(r, tbl)
 		if len(tbl.GetBulkActions()) > 0 {
 			hasRestoreBulk := false
 			hasForceDelBulk := false
@@ -1492,6 +1491,15 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 	if r.canEdit != nil && !r.canEdit(ctx, record) {
 		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
 	}
+	if r.softDeletes && r.checkIsTrashed(record) {
+		restore := ""
+		if r.onRestore != nil && r.mayRestore(ctx, id) {
+			restore = fmt.Sprintf(`<form method="POST" action="%s/restore" style="margin-top: 1rem;"><input type="hidden" name="id" value="%s" /><button type="submit" class="btn btn-primary">Restore</button></form>`,
+				basePath, html.EscapeString(id))
+		}
+		return r.renderPageStatus(ctx, http.StatusConflict, fmt.Sprintf("Edit %s #%s", r.modelName, id), fmt.Sprintf(`<div class="filament-card" data-trashed><h1 class="filament-title">%s #%s is in the trash</h1><p class="filament-description">Restore it before changing it.</p>%s<a href="%s" class="btn btn-secondary" style="margin-top: 1rem;">Back</a></div>`,
+			html.EscapeString(r.modelName), html.EscapeString(id), restore, basePath))
+	}
 
 	form := forms.New()
 	if r.formBuilder != nil {
@@ -1665,40 +1673,17 @@ func (r *BaseResource[T]) handleBulk(ctx *Context, basePath string) error {
 	action := ctx.Request.PostFormValue("bulk_action")
 	selectedIDs := ctx.Request.PostForm["selected_ids[]"]
 
-	if (action == "restore_bulk" || action == "force_delete_bulk") && len(selectedIDs) > 0 {
-		// the per-record callbacks apply to bulk actions too
-		check := r.canRestore
-		if action == "force_delete_bulk" {
-			check = r.canForceDelete
-		}
-		if check != nil {
-			for _, sid := range selectedIDs {
-				if !check(ctx, sid) {
-					return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
-				}
-			}
-		}
-	}
-
 	if action == "delete_bulk" && r.onDeleteBulk != nil && len(selectedIDs) > 0 {
 		if err := r.InvokeDeleteBulk(ctx, selectedIDs); err != nil {
 			return ctx.String(webStatus(err), "%s", err.Error())
 		}
 	} else if action == "restore_bulk" && len(selectedIDs) > 0 {
-		if r.onRestoreBulk != nil {
-			_ = r.onRestoreBulk(ctx, selectedIDs)
-		} else if r.onRestore != nil {
-			for _, sid := range selectedIDs {
-				_ = r.onRestore(ctx, sid)
-			}
+		if err := r.InvokeRestore(ctx, selectedIDs...); err != nil {
+			return ctx.String(webStatus(err), "Restore failed: %s", err.Error())
 		}
 	} else if action == "force_delete_bulk" && len(selectedIDs) > 0 {
-		if r.onForceDeleteBulk != nil {
-			_ = r.onForceDeleteBulk(ctx, selectedIDs)
-		} else if r.onForceDelete != nil {
-			for _, sid := range selectedIDs {
-				_ = r.onForceDelete(ctx, sid)
-			}
+		if err := r.InvokeForceDelete(ctx, selectedIDs...); err != nil {
+			return ctx.String(webStatus(err), "Delete failed: %s", err.Error())
 		}
 	} else if action == "export_bulk" {
 		return r.handleExport(ctx, selectedIDs...)
@@ -1729,17 +1714,14 @@ func (r *BaseResource[T]) HandleRestore(ctx *Context, basePath string, idParam .
 		return ctx.String(http.StatusBadRequest, "Missing record ID for restore")
 	}
 
-	if r.canRestore != nil && !r.canRestore(ctx, id) {
-		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
-	}
-
-	if r.onRestore != nil {
-		if err := r.onRestore(ctx, id); err != nil {
-			return ctx.String(http.StatusInternalServerError, "Restore error: %v", err)
+	if err := r.InvokeRestore(ctx, id); err != nil {
+		if wantsJSON(ctx, basePath) {
+			return ctx.JSON(webStatus(err), map[string]string{"error": err.Error()})
 		}
+		return ctx.String(webStatus(err), "Restore failed: %v", err)
 	}
 
-	if strings.Contains(ctx.Request.Header.Get("Accept"), "application/json") || strings.Contains(ctx.Request.Header.Get("Content-Type"), "application/json") || strings.Contains(basePath, "/api") {
+	if wantsJSON(ctx, basePath) {
 		return ctx.JSON(http.StatusOK, map[string]any{"success": true, "id": id, "restored": true})
 	}
 	return ctx.Redirect(http.StatusSeeOther, basePath)
@@ -1767,17 +1749,14 @@ func (r *BaseResource[T]) HandleForceDelete(ctx *Context, basePath string, idPar
 		return ctx.String(http.StatusBadRequest, "Missing record ID for force delete")
 	}
 
-	if r.canForceDelete != nil && !r.canForceDelete(ctx, id) {
-		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
-	}
-
-	if r.onForceDelete != nil {
-		if err := r.onForceDelete(ctx, id); err != nil {
-			return ctx.String(http.StatusInternalServerError, "Force delete error: %v", err)
+	if err := r.InvokeForceDelete(ctx, id); err != nil {
+		if wantsJSON(ctx, basePath) {
+			return ctx.JSON(webStatus(err), map[string]string{"error": err.Error()})
 		}
+		return ctx.String(webStatus(err), "Delete failed: %v", err)
 	}
 
-	if strings.Contains(ctx.Request.Header.Get("Accept"), "application/json") || strings.Contains(ctx.Request.Header.Get("Content-Type"), "application/json") || strings.Contains(basePath, "/api") {
+	if wantsJSON(ctx, basePath) {
 		return ctx.JSON(http.StatusOK, map[string]any{"success": true, "id": id, "force_deleted": true})
 	}
 	return ctx.Redirect(http.StatusSeeOther, basePath)
@@ -2228,6 +2207,9 @@ func (r *BaseResource[T]) InvokeUpdate(ctx *Context, id string, data map[string]
 	if r.onUpdate == nil {
 		return fmt.Errorf("update not implemented")
 	}
+	if err := r.refuseTrashed(ctx, id); err != nil {
+		return err
+	}
 	if err := r.checkVersion(ctx, id, data); err != nil {
 		return err
 	}
@@ -2244,6 +2226,9 @@ func (r *BaseResource[T]) InvokeDelete(ctx *Context, id string) error {
 	}
 	if r.onDelete == nil {
 		return fmt.Errorf("delete not implemented")
+	}
+	if err := r.refuseTrashed(ctx, id); err != nil {
+		return err
 	}
 	return r.onDelete(ctx, id)
 }
@@ -2357,6 +2342,9 @@ func (r *BaseResource[T]) InvokeReorder(ctx *Context, orderedIDs []string) error
 
 func (r *BaseResource[T]) InvokeCellUpdate(ctx *Context, id, column string, value any) error {
 	if err := r.authorizeRecord(ctx, id, r.canEdit); err != nil {
+		return err
+	}
+	if err := r.refuseTrashed(ctx, id); err != nil {
 		return err
 	}
 	// Only editable table columns can be changed inline. A resource without
