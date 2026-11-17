@@ -6,7 +6,8 @@ import "strings"
 // English text (see Panel.UITranslations). Generated from the app's tr() calls.
 var defaultUITranslations = map[string]map[string]string{
 	"ar": {
-		"(shared)": "(مشتركة)",
+		"Switch tenant": "تبديل المستأجر",
+		"(shared)":      "(مشتركة)",
 		"A new verification link was sent to your email address.": "أُرسل رابط تحقق جديد إلى بريدك الإلكتروني.",
 		"Account":  "الحساب",
 		"Add":      "إضافة",
@@ -241,7 +242,8 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} صفًا: {valid} جاهزة للاستيراد، و{invalid} بها مشكلات.",
 	},
 	"de": {
-		"(shared)": "(geteilt)",
+		"Switch tenant": "Mandanten wechseln",
+		"(shared)":      "(geteilt)",
 		"A new verification link was sent to your email address.": "Ein neuer Bestätigungslink wurde an Ihre E-Mail-Adresse gesendet.",
 		"Account":  "Konto",
 		"Add":      "Hinzufügen",
@@ -476,7 +478,8 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} Zeilen: {valid} bereit zum Import, {invalid} mit Problemen.",
 	},
 	"es": {
-		"(shared)": "(compartida)",
+		"Switch tenant": "Cambiar de inquilino",
+		"(shared)":      "(compartida)",
 		"A new verification link was sent to your email address.": "Se envió un nuevo enlace de verificación a tu correo electrónico.",
 		"Account":  "Cuenta",
 		"Add":      "Añadir",
@@ -711,7 +714,8 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} filas: {valid} listas para importar, {invalid} con problemas.",
 	},
 	"fr": {
-		"(shared)": "(partagée)",
+		"Switch tenant": "Changer de locataire",
+		"(shared)":      "(partagée)",
 		"A new verification link was sent to your email address.": "Un nouveau lien de vérification a été envoyé à votre adresse e-mail.",
 		"Account":  "Compte",
 		"Add":      "Ajouter",

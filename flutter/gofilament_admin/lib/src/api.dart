@@ -137,6 +137,10 @@ class AdminApi {
   String get _key =>
       'gofilament:${Uri.parse(baseUrl).host}${Uri.parse(baseUrl).path}';
 
+  /// The tenant to work in (sent as X-Tenant-ID; the panel checks the user
+  /// belongs to it); null: the panel's default.
+  String? tenant;
+
   /// The language the panel answers in (sent as Accept-Language); null:
   /// the panel's default.
   String? locale;
@@ -145,6 +149,7 @@ class AdminApi {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         if (locale != null && locale!.isNotEmpty) 'Accept-Language': locale!,
+        if (tenant != null && tenant!.isNotEmpty) 'X-Tenant-ID': tenant!,
         if (isAuthenticated) 'Authorization': 'Bearer $token',
       };
 
@@ -623,6 +628,15 @@ class AdminApi {
           String userId, String role, String panel, String tenant) =>
       _send('DELETE', '/roles/bindings',
           {'user': userId, 'role': role, 'panel': panel, 'tenant': tenant});
+
+  /// The user's tenants: {active_tenant, tenants: [{key, name, avatar}]}.
+  Future<Map<String, dynamic>> tenants() async => _map(await _get('/tenants'));
+
+  /// Switches tenant (checked by the panel); later requests use it.
+  Future<void> switchTenant(String key) async {
+    await _send('POST', '/tenants/switch', {'tenant': key});
+    tenant = key;
+  }
 
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});

@@ -162,6 +162,10 @@ class AdminController extends ChangeNotifier {
       final saved = await api.readPreference('theme');
       if (saved == 'dark') themeMode = ThemeMode.dark;
       if (saved == 'light') themeMode = ThemeMode.light;
+      final savedTenant = await api.readPreference('tenant');
+      if (savedTenant != null && savedTenant.isNotEmpty) {
+        api.tenant = savedTenant;
+      }
       final savedLocale = await api.readPreference('locale');
       if (savedLocale != null && savedLocale.isNotEmpty) {
         api.locale = savedLocale;
@@ -273,6 +277,17 @@ class AdminController extends ChangeNotifier {
       for (final c in codes)
         '$c': labels is Map && labels['$c'] != null ? '${labels['$c']}' : '$c',
     };
+  }
+
+  /// Whether the panel has tenants, and the one in use.
+  bool get hasTenancy => schema['tenancy'] == true;
+  String get currentTenant => '${schema['tenant'] ?? ''}';
+
+  /// Switches tenant (remembered on this device) and reloads the panel.
+  Future<void> switchTenant(String key) async {
+    await api.switchTenant(key);
+    await api.writePreference('tenant', key);
+    await _loadSchema();
   }
 
   /// Switches the panel's language (remembered on this device).

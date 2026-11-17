@@ -684,9 +684,12 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			if err != nil {
 				return err
 			}
-			var list []Tenant
+			list := []map[string]string{}
 			if p.tenantConfig.TenantLoader != nil {
-				list, _ = p.tenantConfig.TenantLoader(ctx)
+				ts, _ := p.tenantConfig.TenantLoader(ctx)
+				for _, t := range ts {
+					list = append(list, map[string]string{"key": t.GetTenantKey(), "name": t.GetTenantName(), "avatar": t.GetTenantAvatar()})
+				}
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"active_tenant": ctx.Tenant(),
