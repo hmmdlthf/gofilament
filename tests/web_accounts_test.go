@@ -18,6 +18,7 @@ import (
 
 type account struct {
 	name, email, pwHash, secret string
+	codes                       []string
 }
 
 type accountApp struct {
@@ -67,6 +68,8 @@ func newAccountApp(t *testing.T) *accountApp {
 			},
 			TwoFactorSecret:     func(ctx *filament.Context, u auth.Authenticatable) (string, error) { return acct(u).secret, nil },
 			SaveTwoFactorSecret: func(ctx *filament.Context, u auth.Authenticatable, s string) error { acct(u).secret = s; return nil },
+			RecoveryCodes:       func(ctx *filament.Context, u auth.Authenticatable) ([]string, error) { return acct(u).codes, nil },
+			SaveRecoveryCodes:   func(ctx *filament.Context, u auth.Authenticatable, h []string) error { acct(u).codes = h; return nil },
 		})
 	if err := a.panel.Register(app); err != nil {
 		t.Fatal(err)
@@ -219,5 +222,59 @@ func readBody(r *http.Response) string {
 		if err != nil {
 			return sb.String()
 		}
+	}
+}
+
+var recoveryCodeRe = regexp.MustCompile(`<li>([a-z0-9]{5}-[a-z0-9]{5})</li>`)
+
+func TestTwoFactorRecoveryCodes(t *testing.T) {
+	a := newAccountApp(t)
+	totp := auth.NewTOTPManager()
+	w := newWebClient(t, a.handler)
+	a.signIn(w, "secret-pass")
+	body := readBody(formPost(w, "/admin/profile", "/admin/profile/two-factor/enable", url.Values{"current_password": {"secret-pass"}}))
+	secret := secretRe.FindStringSubmatch(html.UnescapeString(body))[1]
+	code, _ := totp.GenerateCode(secret)
+	formPost(w, "/admin/profile", "/admin/profile/two-factor/confirm", url.Values{"code": {code}})
+
+	// The codes are shown once, on the next profile page.
+	page := w.do("GET", "/admin/profile", nil).Body.String()
+	codes := recoveryCodeRe.FindAllStringSubmatch(page, -1)
+	if len(codes) != filament.RecoveryCodeCount || len(a.users["ann@example.com"].codes) != filament.RecoveryCodeCount {
+		t.Fatalf("codes shown %d, stored %d", len(codes), len(a.users["ann@example.com"].codes))
+	}
+	if strings.Contains(strings.Join(a.users["ann@example.com"].codes, " "), codes[0][1]) {
+		t.Fatal("plain code stored")
+	}
+	if again := w.do("GET", "/admin/profile", nil).Body.String(); recoveryCodeRe.MatchString(again) || !strings.Contains(again, "Recovery codes left: <strong>8</strong>") {
+		t.Fatal("codes shown twice or count missing")
+	}
+
+	signInWith := func(c string) int {
+		w2 := newWebClient(t, a.handler)
+		a.signIn(w2, "secret-pass")
+		return formPost(w2, "/admin/two-factor-challenge", "/admin/two-factor-challenge", url.Values{"code": {c}}).StatusCode
+	}
+	if st := signInWith(strings.ToUpper(codes[0][1])); st != http.StatusSeeOther {
+		t.Fatalf("recovery code: %d", st)
+	}
+	if st := signInWith(codes[0][1]); st != http.StatusUnauthorized {
+		t.Fatalf("used recovery code accepted: %d", st)
+	}
+	if n := len(a.users["ann@example.com"].codes); n != 7 {
+		t.Fatalf("left %d", n)
+	}
+
+	// New codes replace the old ones.
+	formPost(w, "/admin/profile", "/admin/profile/two-factor/recovery-codes", url.Values{"current_password": {"secret-pass"}})
+	fresh := recoveryCodeRe.FindAllStringSubmatch(w.do("GET", "/admin/profile", nil).Body.String(), -1)
+	if len(fresh) != 8 || signInWith(codes[1][1]) != http.StatusUnauthorized || signInWith(fresh[0][1]) != http.StatusSeeOther {
+		t.Fatal("regenerate did not replace the codes")
+	}
+
+	// Turning two-factor off removes them.
+	formPost(w, "/admin/profile", "/admin/profile/two-factor/disable", url.Values{"current_password": {"secret-pass"}})
+	if a.users["ann@example.com"].codes != nil {
+		t.Fatal("codes kept after turning off")
 	}
 }

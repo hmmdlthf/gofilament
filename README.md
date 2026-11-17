@@ -1036,6 +1036,9 @@ panel.Accounts(filament.Accounts{
     // Two-factor sign-in with an authenticator app (needs panel.Sessions)
     TwoFactorSecret:     func(ctx *filament.Context, u auth.Authenticatable) (string, error) { ... },
     SaveTwoFactorSecret: func(ctx *filament.Context, u auth.Authenticatable, secret string) error { ... },
+    // Optional single-use recovery codes (the panel passes SHA-256 hashes)
+    RecoveryCodes:     func(ctx *filament.Context, u auth.Authenticatable) ([]string, error) { ... },
+    SaveRecoveryCodes: func(ctx *filament.Context, u auth.Authenticatable, hashes []string) error { ... },
 })
 ```
 
@@ -1046,11 +1049,13 @@ panel.Accounts(filament.Accounts{
 - With a TOTP secret saved, sign-in asks for a code after the password. Codes
   are single-use (golaravel's cache; use a shared cache store on several
   instances) and attempts are throttled. Turning it off needs the password.
+- With `RecoveryCodes`, turning two-factor on makes 8 recovery codes, shown
+  once on the profile page. Each one replaces a code at sign-in once; the
+  profile shows how many are left and can make a new set.
 - The topbar now shows the signed-in user's name with the user menu
   (Profile when available, Sign Out, and `panel.UserMenu` items).
 
-Not included yet: self-registration (`Registration()` is still only a flag),
-recovery codes, and these screens in the Flutter app.
+Not included yet: self-registration (`Registration()` is still only a flag) and these screens in the Flutter app.
 
 ### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
 
