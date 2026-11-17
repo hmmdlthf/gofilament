@@ -1068,7 +1068,13 @@ func (p *Panel) resolveLocale(ctx *Context) {
 		}
 	}
 
-	// 3. Current context locale
+	// 3. Accept-Language (API clients such as the Flutter app): the first
+	// supported language
+	if target == "" && len(p.locales) > 0 && ctx.Request != nil {
+		target = matchAcceptLanguage(ctx.Request.Header.Get("Accept-Language"), p.locales)
+	}
+
+	// 4. Current context locale
 	if target == "" {
 		target = ctx.GetLocale()
 	}
@@ -1172,4 +1178,22 @@ func (p *Panel) renderLocaleSwitcherHTML(ctx *Context) string {
 </div>`)
 
 	return sb.String()
+}
+
+// matchAcceptLanguage returns the first language of an Accept-Language
+// header that is supported ("ar-SA" matches "ar"), or "".
+func matchAcceptLanguage(header string, supported []string) string {
+	for _, part := range strings.Split(header, ",") {
+		tag := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
+		if tag == "" || tag == "*" {
+			continue
+		}
+		for _, loc := range supported {
+			l := strings.ToLower(loc)
+			if l == tag || strings.SplitN(tag, "-", 2)[0] == l {
+				return loc
+			}
+		}
+	}
+	return ""
 }

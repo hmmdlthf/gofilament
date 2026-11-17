@@ -293,3 +293,26 @@ func TestRTLHTMLLayoutRendering(t *testing.T) {
 		t.Fatalf("expected `<html lang=\"en\" dir=\"ltr\">` in dashboard HTML, got: %s", bodyEn[:300])
 	}
 }
+
+func TestAcceptLanguagePicksASupportedLocale(t *testing.T) {
+	p := filament.NewPanel("admin").Path("/admin").Locales("en", "ar")
+	app := golaravel.New()
+	if err := p.Register(app); err != nil {
+		t.Fatal(err)
+	}
+	boot := func(lang string) map[string]any {
+		req := httptest.NewRequest("GET", "http://x/admin/api/boot", nil)
+		req.Header.Set("Accept-Language", lang)
+		rec := httptest.NewRecorder()
+		app.ServeHTTP(rec, req)
+		var out map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return out
+	}
+	if b := boot("ar-SA,ar;q=0.9"); b["locale"] != "ar" || b["direction"] != "rtl" {
+		t.Fatalf("ar: %v %v", b["locale"], b["direction"])
+	}
+	if b := boot("de-DE,fr;q=0.5"); b["locale"] != "en" {
+		t.Fatalf("unsupported language: %v", b["locale"])
+	}
+}

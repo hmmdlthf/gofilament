@@ -2327,14 +2327,9 @@ func (r *BaseResource[T]) handleReorder(ctx *Context, basePath string) error {
 	if len(order) == 0 {
 		return ctx.JSON(http.StatusBadRequest, map[string]any{"error": "No order provided"})
 	}
-	if err := r.authorizeReorder(ctx, order); err != nil {
-		return ctx.JSON(http.StatusForbidden, map[string]any{"error": "Forbidden"})
-	}
-
-	if r.onReorder != nil {
-		if err := r.onReorder(ctx, order); err != nil {
-			return ctx.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		}
+	setReorderOffset(ctx, data)
+	if err := r.InvokeReorder(ctx, order); err != nil {
+		return ctx.JSON(webStatus(err), map[string]any{"error": err.Error()})
 	}
 
 	return ctx.JSON(http.StatusOK, map[string]any{
@@ -2399,13 +2394,38 @@ func (r *BaseResource[T]) authorizeReorder(ctx *Context, ids []string) error {
 }
 
 func (r *BaseResource[T]) InvokeReorder(ctx *Context, orderedIDs []string) error {
+	if r.onReorder == nil {
+		return ErrReorderUnavailable
+	}
 	if err := r.authorizeReorder(ctx, orderedIDs); err != nil {
 		return err
 	}
-	if r.onReorder != nil {
-		return r.onReorder(ctx, orderedIDs)
+	return r.onReorder(ctx, orderedIDs)
+}
+
+// ErrReorderUnavailable is returned (404) for reordering a resource without
+// OnReorder.
+var ErrReorderUnavailable error = &endpointError{status: http.StatusNotFound, msg: "Reordering is not available"}
+
+const ctxReorderOffset = "filament_reorder_offset"
+
+// ReorderOffset is the position of the first reordered id in the whole list
+// (the page's start): OnReorder gives ids[i] the position offset+i.
+func ReorderOffset(ctx *Context) int {
+	if v, ok := ctx.Get(ctxReorderOffset); ok {
+		if n, ok := v.(int); ok {
+			return n
+		}
 	}
-	return nil
+	return 0
+}
+
+func setReorderOffset(ctx *Context, data map[string]any) {
+	if raw, ok := data["offset"]; ok {
+		if n, err := strconv.Atoi(fmt.Sprint(raw)); err == nil && n >= 0 {
+			ctx.Set(ctxReorderOffset, n)
+		}
+	}
 }
 
 func (r *BaseResource[T]) InvokeCellUpdate(ctx *Context, id, column string, value any) error {

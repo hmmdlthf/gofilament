@@ -78,6 +78,9 @@ class _GoFilamentAdminState extends State<GoFilamentAdmin> {
             fontFamily: _admin.fontFamily),
         darkTheme: buildAdminTheme(_admin.palette, Brightness.dark,
             fontFamily: _admin.fontFamily),
+        builder: (context, child) => Directionality(
+            textDirection: _admin.isRtl ? TextDirection.rtl : TextDirection.ltr,
+            child: child!),
         home: switch (_admin.stage) {
           AdminStage.loading => const _Splash(),
           AdminStage.failed => _Failure(

@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"github.com/golaravel/golaravel/pkg/auth"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -109,7 +110,7 @@ func TestTenantResolutionAndPrivacyInjection(t *testing.T) {
 
 func TestTenantDomainScoping(t *testing.T) {
 	p := filament.NewPanel("admin").
-		Tenancy().
+		Tenancy(&filament.TenantConfig{CanAccessTenant: func(ctx *filament.Context, key string) bool { return key == "tenant123" }}).
 		TenantDomainScoping("acme.io")
 
 	req := httptest.NewRequest(http.MethodGet, "http://tenant123.acme.io/admin", nil)
@@ -201,6 +202,9 @@ func TestTenantSwitchRoute(t *testing.T) {
 		Tenancy(&filament.TenantConfig{
 			Enabled:    true,
 			CookieName: "filament_tenant",
+			CanAccessTenant: func(ctx *filament.Context, key string) bool {
+				return key == "workspace_99"
+			},
 			OnTenantSwitch: func(ctx *filament.Context, newTenant filament.Tenant) error {
 				switchedTenant = newTenant.GetTenantKey()
 				return nil
@@ -220,5 +224,60 @@ func TestTenantSwitchRoute(t *testing.T) {
 	// Check callback executed
 	if switchedTenant != "workspace_99" {
 		t.Fatalf("expected switchedTenant workspace_99, got %s", switchedTenant)
+	}
+}
+
+func TestTenantKeysNeedMembership(t *testing.T) {
+	// No TenantLoader and no CanAccessTenant: requested keys are ignored.
+	p := filament.NewPanel("admin").Tenancy().TenantDomainScoping("acme.io")
+	req := httptest.NewRequest(http.MethodGet, "http://other.acme.io/admin", nil)
+	req.Header.Set("X-Tenant-ID", "victim")
+	if got := filament.NewContext(newTestContext(httptest.NewRecorder(), req), p).Tenant(); got != "" {
+		t.Fatalf("unchecked tenant key used: %q", got)
+	}
+
+	// With a loader, a key the user does not belong to is never used, even
+	// when the loader returns nothing.
+	loaderTenants := []filament.Tenant{&filament.TenantItem{Key: "mine", Name: "Mine"}}
+	p2 := filament.NewPanel("admin").Tenancy(&filament.TenantConfig{
+		TenantLoader: func(ctx *filament.Context) ([]filament.Tenant, error) { return loaderTenants, nil },
+	})
+	req = httptest.NewRequest(http.MethodGet, "http://x/admin", nil)
+	req.Header.Set("X-Tenant-ID", "victim")
+	if got := filament.NewContext(newTestContext(httptest.NewRecorder(), req), p2).Tenant(); got != "mine" {
+		t.Fatalf("loader: got %q", got)
+	}
+	loaderTenants = nil
+	if got := filament.NewContext(newTestContext(httptest.NewRecorder(), req), p2).Tenant(); got != "" {
+		t.Fatalf("empty loader fell back to the raw key: %q", got)
+	}
+}
+
+func TestAPITenantSwitchChecksMembership(t *testing.T) {
+	app := golaravel.New()
+	p := filament.NewPanel("admin").
+		TokenValidator(func(ctx *filament.Context, token string) (auth.Authenticatable, error) {
+			return &filament.PanelUser{ID: "1", Login: "a"}, nil
+		}).
+		Tenancy(&filament.TenantConfig{
+			TenantLoader: func(ctx *filament.Context) ([]filament.Tenant, error) {
+				return []filament.Tenant{&filament.TenantItem{Key: "mine", Name: "Mine"}}, nil
+			},
+		})
+	if err := p.Register(app); err != nil {
+		t.Fatal(err)
+	}
+	post := func(key string) int {
+		req := httptest.NewRequest(http.MethodPost, "http://x/admin/api/tenants/switch?tenant="+key, nil)
+		req.Header.Set("Authorization", "Bearer t")
+		rec := httptest.NewRecorder()
+		app.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if c := post("victim"); c != http.StatusForbidden {
+		t.Fatalf("switch to a foreign tenant: %d", c)
+	}
+	if c := post("mine"); c != http.StatusOK {
+		t.Fatalf("switch to own tenant: %d", c)
 	}
 }

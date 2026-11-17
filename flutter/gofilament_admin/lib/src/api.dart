@@ -136,9 +136,14 @@ class AdminApi {
   String get _key =>
       'gofilament:${Uri.parse(baseUrl).host}${Uri.parse(baseUrl).path}';
 
+  /// The language the panel answers in (sent as Accept-Language); null:
+  /// the panel's default.
+  String? locale;
+
   Map<String, String> get _headers => {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        if (locale != null && locale!.isNotEmpty) 'Accept-Language': locale!,
         if (isAuthenticated) 'Authorization': 'Bearer $token',
       };
 
@@ -563,6 +568,11 @@ class AdminApi {
     }));
     return data['version']?.toString();
   }
+
+  /// Saves a new row order: [ids] in order, the first at position [offset].
+  Future<void> reorder(String slug, List<String> ids, {int offset = 0}) =>
+      _send(
+          'POST', '/resources/$slug/reorder', {'order': ids, 'offset': offset});
 
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});

@@ -293,6 +293,24 @@ func (t *Table[T]) IsReorderable() bool {
 	return t.reorderable
 }
 
+// reorderActive reports whether rows can be dragged now: only the plain
+// list (no search, filters or grouping) in position order shows every row
+// in its real place.
+func (t *Table[T]) reorderActive() bool {
+	if !t.reorderable || t.searchQuery != "" || t.activeGroup != "" {
+		return false
+	}
+	if t.sortCol != "" && t.sortCol != t.reorderCol {
+		return false
+	}
+	for k, v := range t.activeFilters {
+		if v != "" && k != "trashed" {
+			return false
+		}
+	}
+	return true
+}
+
 // GetReorderColumn returns the sort order column name.
 func (t *Table[T]) GetReorderColumn() string {
 	return t.reorderCol
@@ -680,11 +698,15 @@ func (t *Table[T]) Render(basePath string) string {
 
 	// Table Container
 	sb.WriteString(`<div class="filament-table-wrapper">`)
-	sb.WriteString(`<table class="filament-table">`)
+	if t.reorderActive() {
+		sb.WriteString(fmt.Sprintf(`<table class="filament-table" data-reorder-offset="%d">`, max(0, (t.page-1)*t.perPage)))
+	} else {
+		sb.WriteString(`<table class="filament-table">`)
+	}
 	sb.WriteString(`<thead><tr>`)
 
 	// Reorder grip header
-	if t.reorderable {
+	if t.reorderActive() {
 		sb.WriteString(`<th style="width: 2.5rem; text-align: center;" title="Drag to reorder">&#8942;&#8942;</th>`)
 	}
 
@@ -726,7 +748,7 @@ func (t *Table[T]) Render(basePath string) string {
 		if len(t.bulkActions) > 0 {
 			colspan++
 		}
-		if t.reorderable {
+		if t.reorderActive() {
 			colspan++
 		}
 		if len(t.actions) > 0 || t.softDeletes {
@@ -735,7 +757,7 @@ func (t *Table[T]) Render(basePath string) string {
 		sb.WriteString(fmt.Sprintf(`<tr class="empty-row"><td colspan="%d" style="text-align: center; padding: 3rem 1rem; color: var(--gray-400);">No records found.</td></tr>`, colspan))
 	} else {
 		lead := 0
-		if t.reorderable {
+		if t.reorderActive() {
 			lead++
 		}
 		if len(t.bulkActions) > 0 {
@@ -777,7 +799,7 @@ func (t *Table[T]) Render(basePath string) string {
 			recID := t.extractRecordID(rec)
 			isRecTrashed := t.softDeletes && t.isTrashed != nil && t.isTrashed(rec)
 			trAttrs := ""
-			if t.reorderable {
+			if t.reorderActive() {
 				trAttrs = fmt.Sprintf(`data-id="%s" class="table-row-draggable%s" draggable="true" ondragstart="event.dataTransfer.setData('text/plain', this.dataset.id); this.classList.add('table-row-dragging');" ondragend="this.classList.remove('table-row-dragging');" ondragover="event.preventDefault(); const dragging = document.querySelector('.table-row-draggable.table-row-dragging'); if (dragging && dragging !== this) { const rect = this.getBoundingClientRect(); const next = (event.clientY - rect.top)/(rect.bottom - rect.top) > 0.5; this.parentNode.insertBefore(dragging, next ? this.nextSibling : this); }" ondrop="event.preventDefault(); Filament.reorderRows('%s/reorder', this.closest('table'));"`, recID, func() string {
 					if isRecTrashed {
 						return " table-row-trashed"
@@ -799,7 +821,7 @@ func (t *Table[T]) Render(basePath string) string {
 			sb.WriteString(fmt.Sprintf(`<tr %s>`, trAttrs))
 
 			// Reorder handle cell
-			if t.reorderable {
+			if t.reorderActive() {
 				sb.WriteString(`<td class="drag-handle" data-label="Reorder" style="width: 2.5rem; text-align: center; cursor: grab; color: var(--gray-400); user-select: none;">&#8942;&#8942;</td>`)
 			}
 

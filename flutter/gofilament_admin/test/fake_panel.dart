@@ -94,6 +94,10 @@ class FakePanel {
 
   bool globalSearch = false;
   bool board = false;
+
+  /// Boot offers English and Arabic; Accept-Language "ar" answers RTL.
+  bool bilingual = false;
+  bool reorderable = false;
   bool notificationsOn = false;
 
   /// Fields sent as resource_meta.bulk_edit.
@@ -152,6 +156,12 @@ class FakePanel {
         'brand': brand,
         'brand_name': brand['name'],
         'theme': {'colors': colors},
+        if (bilingual) ...{
+          'supported_locales': ['en', 'ar'],
+          'locale_labels': {'en': 'English', 'ar': 'العربية'},
+          'locale': req.headers['Accept-Language'] == 'ar' ? 'ar' : 'en',
+          'direction': req.headers['Accept-Language'] == 'ar' ? 'rtl' : 'ltr',
+        },
         'auth': {
           'login': true,
           if (accountFeatures.isNotEmpty) 'accounts': accountFeatures,
@@ -705,6 +715,7 @@ class FakePanel {
               if (canImport) 'import': true,
             },
             'table': {
+              if (reorderable) 'reorderable': true,
               'actions': [
                 {'name': 'view'},
                 {'name': 'edit'},
