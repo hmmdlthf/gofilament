@@ -725,11 +725,28 @@ Automatically track all Create, Update, and Delete actions with pre/post changes
 ```go
 userResource := filament.NewResource[*ent.User]("users")
 
-// Automatically logs all CRUD actions on the resource
+// Automatically logs all CRUD actions on the resource (call it after the On* handlers)
 activitylog.EnableAuditLog(userResource)
 // Or via the top-level helper:
 gofilament.EnableAuditLog(userResource)
+
+// With options: never store these fields' values
+activitylog.EnableAuditLogWith(userResource, activitylog.AuditOptions{Except: []string{"ssn"}})
 ```
+
+- **Record history**: the view and edit pages get a *History* section (who,
+  when, each changed field before → after), the API serves it at
+  `GET /admin/api/resources/:slug/:id/history`, and the Flutter record form
+  has a History button. It is shown to users who can view the record;
+  `resource.HistoryVisible(fn)` narrows that, `AuditOptions.NoHistory` turns it off.
+- Only fields that really changed are recorded (form fields are matched to the
+  record's keys, so `FullName` and `full_name` are the same field); an update
+  that changes nothing is not logged. Inline cell edits and bulk deletes are
+  logged too.
+- Password fields, fields named like `*password*`, `*secret*`, `*token*` and
+  `AuditOptions.Except` are stored as "(hidden)" / "(changed)", never their values.
+- In `OnCreate`, call `filament.SetCreatedID(ctx, id)` so the "created" entry
+  belongs to the new record.
 
 ### 3. Vertical Audit Timeline & Infolist Component
 

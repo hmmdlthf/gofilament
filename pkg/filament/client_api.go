@@ -161,6 +161,7 @@ func (r *BaseResource[T]) Meta(ctx *Context) ResourceMeta {
 		Abilities: map[string]bool{
 			"create":     r.onCreate != nil && (r.canCreate == nil || r.canCreate(ctx)),
 			"delete_any": r.onDelete != nil && (r.canDeleteAny == nil || r.canDeleteAny(ctx)),
+			"history":    r.historyAvailable(ctx),
 		},
 	}
 	if r.tableBuilder != nil {

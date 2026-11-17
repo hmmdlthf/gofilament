@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Record history**: `activitylog.EnableAuditLog` now gives a resource a history provider (`Resource.History`): the web view/edit pages show a *History* section, `GET /resources/:slug/:id/history` serves it, and the Flutter record form has a History button. `HistoryVisible`, `EnableAuditLogWith(res, AuditOptions{Except, NoHistory})`, `filament.SetCreatedID`. Inline cell edits and bulk deletes are logged.
+
+### Fixed
+- **Audit log diffs**: updates compared the whole stored record with the submitted form, so untouched fields showed as removed and differently named keys (`FullName` / `full_name`) as changed; only real changes are recorded now, and no-op saves are not logged.
+- **Audit log stored secrets**: password values were stored in created / updated entries. Password fields and `*password*` / `*secret*` / `*token*` fields are now hidden.
+- **Web edit form empty for struct records**: the edit page only filled the form when records were maps. Struct records now fill it too (loose name matching); password fields are never filled.
+
 ## [v1.34.0] - 2026-11-17
 
 ### Added

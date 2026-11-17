@@ -115,6 +115,8 @@ type BaseResource[T any] struct {
 	onUpdate          UpdateHandlerFunc
 	onDelete          DeleteHandlerFunc
 	onDeleteBulk      DeleteBulkHandlerFunc
+	historyProvider   HistoryProvider
+	canSeeHistory     func(ctx *Context) bool
 	onRestore         RestoreHandlerFunc
 	onForceDelete     ForceDeleteHandlerFunc
 	onRestoreBulk     RestoreBulkHandlerFunc
@@ -1443,9 +1445,9 @@ func (r *BaseResource[T]) handleView(ctx *Context, basePath, id string) error {
   </div>
 </div>
 %s
-%s`,
+%s%s`,
 		r.modelName, id, editButton, basePath, infolist.Render(),
-		r.renderRelations(ctx, basePath, id),
+		r.renderRelations(ctx, basePath, id), r.historyHTML(ctx, id),
 	)
 
 	return r.renderPage(ctx, fmt.Sprintf("%s #%s", r.modelName, id), content)
@@ -1471,9 +1473,7 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
 	}
 	form.Action(fmt.Sprintf("%s/%s/edit", basePath, id)).Method("POST")
 
-	if m, ok := any(record).(map[string]any); ok {
-		form.Fill(m)
-	}
+	form.Fill(r.recordFormValues(ctx, record))
 	formHTML := withVersionField(form.Render(ctx.GoContext()), r.RecordVersion(record))
 
 	deleteButton := ""
@@ -1499,11 +1499,11 @@ func (r *BaseResource[T]) handleEditView(ctx *Context, basePath, id string) erro
     <button type="submit" form="filament-form" class="btn btn-primary">Save Changes</button>
   </div>
 </div>
-%s`,
+%s%s`,
 		r.modelName, id, deleteButton, basePath,
 		formHTML,
 		basePath,
-		r.renderRelations(ctx, basePath, id),
+		r.renderRelations(ctx, basePath, id), r.historyHTML(ctx, id),
 	)
 
 	return r.renderPage(ctx, fmt.Sprintf("Edit %s #%s", r.modelName, id), content)

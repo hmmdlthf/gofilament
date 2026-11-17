@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool history = false;
 
   /// Versioned items: the form sends 'version' and PUT refuses a stale
   /// '_version' with 409 (edit-conflict tests).
@@ -558,7 +559,11 @@ class FakePanel {
         'resource_meta': {
           'items': {
             'has_form': true,
-            'abilities': {'create': canCreate, 'delete_any': canDelete},
+            'abilities': {
+              'create': canCreate,
+              'delete_any': canDelete,
+              if (history) 'history': true,
+            },
             'table': {
               'actions': [
                 {'name': 'view'},
