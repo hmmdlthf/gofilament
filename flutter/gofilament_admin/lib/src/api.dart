@@ -418,6 +418,19 @@ class AdminApi {
     return _map(_decode(await http.Response.fromStream(await _http.send(req))));
   }
 
+  /// A record's history (Resource.History): newest first, each entry
+  /// {event, description, causer_name, at, changes: [{field, label, old, new}]}.
+  Future<List<Map<String, dynamic>>> history(String slug, String id) async {
+    final data = _map(await _get('/resources/$slug/$id/history'));
+    final e = data['entries'];
+    return e is List
+        ? [
+            for (final x in e)
+              if (x is Map) Map<String, dynamic>.from(x)
+          ]
+        : const [];
+  }
+
   /// Saved views of a resource: {views: [{id, name, shared, mine,
   /// can_delete, state}], can_share}.
   Future<Map<String, dynamic>> views(String slug) async =>

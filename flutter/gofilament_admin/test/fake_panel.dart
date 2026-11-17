@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool history = false;
   bool savedViews = false;
 
   /// Items accept imports; [importRequests] keeps each request's body.
@@ -690,6 +691,7 @@ class FakePanel {
             'abilities': {
               'create': canCreate,
               'delete_any': canDelete,
+              if (history) 'history': true,
               if (canImport) 'import': true,
             },
             'table': {

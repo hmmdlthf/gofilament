@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api.dart';
+import 'history.dart';
 import 'components.dart';
 import 'controller.dart';
 import 'files.dart';
@@ -402,6 +403,17 @@ class _ResourceFormState extends State<ResourceForm> {
                   style: theme.textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.w700)),
             ),
+            if (_isEdit &&
+                !_isRelation &&
+                !_isAction &&
+                widget.admin.can(widget.slug, 'history'))
+              IconButton(
+                key: const Key('form-history'),
+                tooltip: 'History',
+                icon: const Icon(Icons.history),
+                onPressed: () => showRecordHistory(context,
+                    api: widget.admin.api, slug: widget.slug, id: widget.id!),
+              ),
             IconButton(
               key: const Key('form-close'),
               tooltip: 'Close',
