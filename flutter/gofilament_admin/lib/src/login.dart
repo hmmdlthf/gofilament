@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 import 'controller.dart';
@@ -148,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (_) {
       if (mounted) {
         setState(
-            () => _error = 'Could not reach the server. Please try again.');
+            () => _error = tr('Could not reach the server. Please try again.'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -185,13 +186,13 @@ class _LoginScreenState extends State<LoginScreen> {
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => _error = e.isUnauthorized
-            ? 'The username or password is incorrect.'
+            ? tr('The username or password is incorrect.')
             : e.message);
       }
     } catch (_) {
       if (mounted) {
         setState(
-            () => _error = 'Could not reach the server. Please try again.');
+            () => _error = tr('Could not reach the server. Please try again.'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -234,11 +235,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ]),
                 const SizedBox(height: 24),
-                Text('Sign in',
+                Text(tr('Sign in'),
                     style: theme.textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
-                Text('Enter your details to continue.',
+                Text(tr('Enter your details to continue.'),
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 20),
@@ -259,8 +260,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (_challenge != null) ...[
                   Text(
                       admin.accountFeatures['recovery_codes'] == true
-                          ? 'Enter the 6-digit code from your authenticator app, or one of your recovery codes.'
-                          : 'Enter the 6-digit code from your authenticator app.',
+                          ? tr(
+                              'Enter the 6-digit code from your authenticator app, or one of your recovery codes.')
+                          : tr(
+                              'Enter the 6-digit code from your authenticator app.'),
                       style: theme.textTheme.bodyMedium),
                   const SizedBox(height: 14),
                   TextFormField(
@@ -269,8 +272,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     autofocus: true,
                     autofillHints: const [AutofillHints.oneTimeCode],
                     onFieldSubmitted: (_) => _submitCode(),
-                    decoration: const InputDecoration(
-                        labelText: 'Authentication code',
+                    decoration: InputDecoration(
+                        labelText: tr('Authentication code'),
                         prefixIcon: Icon(Icons.pin_outlined)),
                   ),
                   const SizedBox(height: 16),
@@ -282,7 +285,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Verify'),
+                        : Text(tr('Verify')),
                   ),
                   TextButton(
                     key: const Key('login-code-back'),
@@ -292,7 +295,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               _challenge = null;
                               _error = null;
                             }),
-                    child: const Text('Back to sign in'),
+                    child: Text(tr('Back to sign in')),
                   ),
                 ] else ...[
                   TextFormField(
@@ -300,11 +303,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _username,
                     autofillHints: const [AutofillHints.username],
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                        labelText: 'Username or email',
+                    decoration: InputDecoration(
+                        labelText: tr('Username or email'),
                         prefixIcon: Icon(Icons.person_outline)),
                     validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Enter your username or email'
+                        ? tr('Enter your username or email')
                         : null,
                   ),
                   const SizedBox(height: 14),
@@ -315,24 +318,27 @@ class _LoginScreenState extends State<LoginScreen> {
                     autofillHints: const [AutofillHints.password],
                     onFieldSubmitted: (_) => _submit(),
                     decoration: InputDecoration(
-                      labelText: 'Password',
+                      labelText: tr('Password'),
                       prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
-                        tooltip: _obscure ? 'Show password' : 'Hide password',
+                        tooltip: _obscure
+                            ? tr('Show password')
+                            : tr('Hide password'),
                         icon: Icon(_obscure
                             ? Icons.visibility_outlined
                             : Icons.visibility_off_outlined),
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Enter your password' : null,
+                    validator: (v) => (v == null || v.isEmpty)
+                        ? tr('Enter your password')
+                        : null,
                   ),
                   const SizedBox(height: 6),
                   CheckboxListTile(
                     value: _remember,
                     onChanged: (v) => setState(() => _remember = v ?? false),
-                    title: const Text('Keep me signed in'),
+                    title: Text(tr('Keep me signed in')),
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     controlAffinity: ListTileControlAffinity.leading,
@@ -346,14 +352,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Sign in'),
+                        : Text(tr('Sign in')),
                   ),
                   if (widget.demoLogin?.isAvailable ?? false) ...[
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       key: const Key('demo-login-btn'),
                       icon: const Icon(Icons.bolt, size: 18),
-                      label: Text(widget.demoLogin!.label),
+                      label: Text(tr(widget.demoLogin!.label)),
                       onPressed: _busy
                           ? null
                           : () => setState(() {
@@ -372,13 +378,13 @@ class _LoginScreenState extends State<LoginScreen> {
                               MaterialPageRoute<void>(
                                   builder: (_) =>
                                       RegisterScreen(admin: widget.admin))),
-                      child: const Text('No account yet? Create one'),
+                      child: Text(tr('No account yet? Create one')),
                     ),
                   if (admin.accountFeatures['password_reset'] == true)
                     TextButton(
                       key: const Key('login-forgot'),
                       onPressed: _busy ? null : _forgotPassword,
-                      child: const Text('Forgot your password?'),
+                      child: Text(tr('Forgot your password?')),
                     ),
                 ],
               ],
@@ -412,7 +418,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 card,
                 if (brand['hide_powered_by'] != true) ...[
                   const SizedBox(height: 16),
-                  Text('Powered by GoFilament',
+                  Text(tr('Powered by GoFilament'),
                       style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant)),
                 ],
@@ -454,7 +460,7 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not reach the server.');
+      if (mounted) setState(() => _error = tr('Could not reach the server.'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -462,19 +468,19 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Reset your password'),
+        title: Text(tr('Reset your password')),
         content: SizedBox(
           width: 360,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text(
-                'Enter your email address and we will send you a link to choose a new password.'),
+            Text(tr(
+                'Enter your email address and we will send you a link to choose a new password.')),
             const SizedBox(height: 12),
             TextField(
               key: const Key('forgot-email'),
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                  labelText: 'Email address', errorText: _error),
+                  labelText: tr('Email address'), errorText: _error),
               onSubmitted: (_) => _send(),
             ),
           ]),
@@ -482,11 +488,11 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           FilledButton(
             key: const Key('forgot-send'),
             onPressed: _busy ? null : _send,
-            child: const Text('Send link'),
+            child: Text(tr('Send link')),
           ),
         ],
       );
@@ -542,7 +548,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (_) {
       if (mounted) {
         setState(
-            () => _error = 'Could not reach the server. Please try again.');
+            () => _error = tr('Could not reach the server. Please try again.'));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -555,7 +561,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     InputDecoration deco(String label, String field) =>
         InputDecoration(labelText: label, errorText: _fieldErrors[field]);
     return Scaffold(
-      appBar: AppBar(title: const Text('Create an account')),
+      appBar: AppBar(title: Text(tr('Create an account'))),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -584,7 +590,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             autofillHints: const [AutofillHints.name],
                             decoration: deco('Name', 'name'),
                             validator: (v) => (v ?? '').trim().isEmpty
-                                ? 'Enter your name'
+                                ? tr('Enter your name')
                                 : null,
                           ),
                           const SizedBox(height: 12),
@@ -593,10 +599,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             controller: _email,
                             keyboardType: TextInputType.emailAddress,
                             autofillHints: const [AutofillHints.email],
-                            decoration: deco('Email address', 'email'),
+                            decoration: deco(tr('Email address'), 'email'),
                             validator: (v) => (v ?? '').contains('@')
                                 ? null
-                                : 'Enter a valid email address',
+                                : tr('Enter a valid email address'),
                           ),
                           const SizedBox(height: 12),
                           TextFormField(
@@ -606,7 +612,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             autofillHints: const [AutofillHints.newPassword],
                             decoration: deco('Password', 'password'),
                             validator: (v) => (v ?? '').length < 8
-                                ? 'Use at least 8 characters'
+                                ? tr('Use at least 8 characters')
                                 : null,
                           ),
                           const SizedBox(height: 12),
@@ -614,9 +620,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             key: const Key('register-confirm'),
                             controller: _confirm,
                             obscureText: true,
-                            decoration: deco('Confirm password', ''),
+                            decoration: deco(tr('Confirm password'), ''),
                             validator: (v) => v != _password.text
-                                ? 'The passwords do not match'
+                                ? tr('The passwords do not match')
                                 : null,
                             onFieldSubmitted: (_) => _submit(),
                           ),
@@ -624,7 +630,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           FilledButton(
                             key: const Key('register-submit'),
                             onPressed: _busy ? null : _submit,
-                            child: const Text('Create account'),
+                            child: Text(tr('Create account')),
                           ),
                         ]),
                   ),

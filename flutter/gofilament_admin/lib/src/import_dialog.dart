@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 import 'files.dart';
@@ -70,7 +71,7 @@ class _ImportDialogState extends State<_ImportDialog> {
           e.body?['errors'] is Map ? e.body!['errors']['file'] : null;
       setState(() => _error = '${fileErr ?? e.message}');
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      setState(() => _error = tr('Could not reach the server.'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -86,7 +87,7 @@ class _ImportDialogState extends State<_ImportDialog> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      setState(() => _error = tr('Could not reach the server.'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -120,14 +121,16 @@ class _ImportDialogState extends State<_ImportDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${_result!['imported'] ?? 0} rows imported.',
+            Text(tr('{n} rows imported.', {'n': _result!['imported'] ?? 0}),
                 style: const TextStyle(fontWeight: FontWeight.w600)),
             if ((_result!['failed'] as num? ?? 0) > 0) ...[
               const SizedBox(height: 8),
-              Text('${_result!['failed']} rows were skipped.',
+              Text(tr('{n} rows were skipped.', {'n': _result!['failed']}),
                   style: TextStyle(color: theme.colorScheme.error)),
               for (final r in failed)
-                Text('Row ${r['row']}: ${_describe(r)}',
+                Text(
+                    tr('Row {row}: {problem}',
+                        {'row': r['row'], 'problem': _describe(r)}),
                     style: theme.textTheme.bodySmall),
             ],
           ]);
@@ -158,7 +161,13 @@ class _ImportDialogState extends State<_ImportDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-                '${pv['total']} rows: ${pv['valid']} ready to import, ${pv['invalid']} with problems.',
+                tr(
+                    '{total} rows: {valid} ready to import, {invalid} with problems.',
+                    {
+                      'total': pv['total'],
+                      'valid': pv['valid'],
+                      'invalid': pv['invalid']
+                    }),
                 key: const Key('import-summary'),
                 style: TextStyle(
                     fontWeight: FontWeight.w600,
@@ -168,7 +177,7 @@ class _ImportDialogState extends State<_ImportDialog> {
             if (_error != null)
               Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
             const SizedBox(height: 12),
-            Text('Columns', style: theme.textTheme.titleSmall),
+            Text(tr('Columns'), style: theme.textTheme.titleSmall),
             for (final h in headers)
               Row(children: [
                 Expanded(child: Text(h)),
@@ -180,8 +189,8 @@ class _ImportDialogState extends State<_ImportDialog> {
                     isExpanded: true,
                     value: _mapping[h] ?? '',
                     items: [
-                      const DropdownMenuItem(
-                          value: '', child: Text('Do not import')),
+                      DropdownMenuItem(
+                          value: '', child: Text(tr('Do not import'))),
                       if (fields.isEmpty && (_mapping[h] ?? '').isNotEmpty)
                         DropdownMenuItem(
                             value: _mapping[h], child: Text(_mapping[h]!)),
@@ -202,18 +211,18 @@ class _ImportDialogState extends State<_ImportDialog> {
               child: TextButton(
                   key: const Key('import-recheck'),
                   onPressed: _busy ? null : _check,
-                  child: const Text('Check again')),
+                  child: Text(tr('Check again'))),
             ),
             const SizedBox(height: 8),
-            Text('First ${rows.length} rows',
+            Text(tr('First {n} rows', {'n': rows.length}),
                 style: theme.textTheme.titleSmall),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columns: [
-                  const DataColumn(label: Text('Row')),
+                  DataColumn(label: Text(tr('Row'))),
                   for (final c in cols) DataColumn(label: Text(label(c))),
-                  const DataColumn(label: Text('Problems')),
+                  DataColumn(label: Text(tr('Problems'))),
                 ],
                 rows: [
                   for (final r in rows)
@@ -237,10 +246,12 @@ class _ImportDialogState extends State<_ImportDialog> {
             if (problems.length >
                 rows.where((r) => r['errors'] != null).length) ...[
               const SizedBox(height: 8),
-              Text('Rows that will be skipped',
+              Text(tr('Rows that will be skipped'),
                   style: theme.textTheme.titleSmall),
               for (final p in problems)
-                Text('Row ${p['row']}: ${_describe(p)}',
+                Text(
+                    tr('Row {row}: {problem}',
+                        {'row': p['row'], 'problem': _describe(p)}),
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.error)),
             ],
@@ -252,7 +263,7 @@ class _ImportDialogState extends State<_ImportDialog> {
   Widget build(BuildContext context) {
     final valid = (_preview?['valid'] as num?)?.toInt() ?? 0;
     return AlertDialog(
-      title: Text('Import ${widget.title}'),
+      title: Text(tr('Import {name}', {'name': widget.title})),
       content: SizedBox(width: 720, child: _body(context)),
       actions: _result != null
           ? [
@@ -260,16 +271,16 @@ class _ImportDialogState extends State<_ImportDialog> {
                   key: const Key('import-done'),
                   onPressed: () => Navigator.pop(
                       context, (_result!['imported'] as num?)?.toInt() ?? 0),
-                  child: const Text('Done')),
+                  child: Text(tr('Done'))),
             ]
           : [
               TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel')),
+                  child: Text(tr('Cancel'))),
               FilledButton(
                 key: const Key('import-run'),
                 onPressed: _busy || valid == 0 ? null : _import,
-                child: Text('Import $valid rows'),
+                child: Text(tr('Import {n} rows', {'n': valid})),
               ),
             ],
     );

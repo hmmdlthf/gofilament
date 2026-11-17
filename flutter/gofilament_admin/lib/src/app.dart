@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 import 'components.dart';
@@ -84,7 +85,7 @@ class _GoFilamentAdminState extends State<GoFilamentAdmin> {
         home: switch (_admin.stage) {
           AdminStage.loading => const _Splash(),
           AdminStage.failed => _Failure(
-              message: _admin.error ?? 'Something went wrong',
+              message: _admin.error ?? tr('Something went wrong'),
               onRetry: _admin.start),
           AdminStage.signedOut =>
             LoginScreen(admin: _admin, demoLogin: widget.demoLogin),
@@ -130,7 +131,7 @@ class _Failure extends StatelessWidget {
                 FilledButton.icon(
                     onPressed: onRetry,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Try again')),
+                    label: Text(tr('Try again'))),
               ],
             ),
           ),

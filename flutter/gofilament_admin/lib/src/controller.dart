@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'i18n.dart';
 import 'components.dart';
 import 'theme.dart';
 
@@ -181,6 +182,7 @@ class AdminController extends ChangeNotifier {
 
       boot = await api.boot();
       _applyTheme(boot);
+      _applyStrings(boot);
 
       if (restored || await api.restore()) {
         await _loadSchema();
@@ -191,8 +193,8 @@ class AdminController extends ChangeNotifier {
       error = e.message;
       stage = AdminStage.failed;
     } catch (_) {
-      error =
-          'Could not reach the server. Check your connection and try again.';
+      error = tr(
+          'Could not reach the server. Check your connection and try again.');
       stage = AdminStage.failed;
     }
     notifyListeners();
@@ -214,6 +216,13 @@ class AdminController extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  void _applyStrings(Map<String, dynamic> source) {
+    final t = source['ui_translations'];
+    if (t is Map) {
+      AdminStrings.use(t.map((k, v) => MapEntry('$k', '$v')));
+    }
   }
 
   void _applyTheme(Map<String, dynamic> source) {
@@ -272,6 +281,7 @@ class AdminController extends ChangeNotifier {
     await api.writePreference('locale', code);
     boot = await api.boot();
     _applyTheme(boot);
+    _applyStrings(boot);
     if (stage == AdminStage.signedIn) {
       await _loadSchema();
     } else {

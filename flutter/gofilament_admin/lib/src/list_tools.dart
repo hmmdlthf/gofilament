@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'i18n.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -24,7 +25,7 @@ Future<Set<String>?> showRefinedFilterDialog(
         content: SizedBox(
           width: 360,
           child: options.isEmpty
-              ? const Text('No options.')
+              ? Text(tr('No options.'))
               : ListView(shrinkWrap: true, children: [
                   for (final o in options)
                     CheckboxListTile(
@@ -50,14 +51,14 @@ Future<Set<String>?> showRefinedFilterDialog(
           TextButton(
               key: const Key('refined-clear'),
               onPressed: () => Navigator.pop(context, <String>{}),
-              child: const Text('Clear')),
+              child: Text(tr('Clear'))),
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           FilledButton(
               key: const Key('refined-apply'),
               onPressed: () => Navigator.pop(context, chosen),
-              child: const Text('Apply')),
+              child: Text(tr('Apply'))),
         ],
       ),
     ),
@@ -207,7 +208,7 @@ Future<AdvancedSearch?> showAdvancedSearchDialog(
                   value: r.operator,
                   items: [
                     for (final o in advancedOperators.entries)
-                      DropdownMenuItem(value: o.key, child: Text(o.value)),
+                      DropdownMenuItem(value: o.key, child: Text(tr(o.value))),
                   ],
                   onChanged: (v) =>
                       setState(() => r.operator = v ?? r.operator),
@@ -230,7 +231,7 @@ Future<AdvancedSearch?> showAdvancedSearchDialog(
                   ),
                 IconButton(
                   key: Key('adv-remove-$i'),
-                  tooltip: 'Remove rule',
+                  tooltip: tr('Remove rule'),
                   icon: const Icon(Icons.close, size: 18),
                   onPressed: () => setState(() => search.rules.removeAt(i)),
                 ),
@@ -239,7 +240,7 @@ Future<AdvancedSearch?> showAdvancedSearchDialog(
       }
 
       return AlertDialog(
-        title: const Text('Advanced search'),
+        title: Text(tr('Advanced search')),
         content: SizedBox(
           width: 620,
           child: SingleChildScrollView(
@@ -251,10 +252,12 @@ Future<AdvancedSearch?> showAdvancedSearchDialog(
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: SegmentedButton<String>(
-                        key: const Key('adv-conjunction'),
-                        segments: const [
-                          ButtonSegment(value: 'AND', label: Text('Match all')),
-                          ButtonSegment(value: 'OR', label: Text('Match any')),
+                        key: Key('adv-conjunction'),
+                        segments: [
+                          ButtonSegment(
+                              value: 'AND', label: Text(tr('Match all'))),
+                          ButtonSegment(
+                              value: 'OR', label: Text(tr('Match any'))),
                         ],
                         selected: {search.conjunction},
                         onSelectionChanged: (s) =>
@@ -269,7 +272,7 @@ Future<AdvancedSearch?> showAdvancedSearchDialog(
                         : () => setState(() =>
                             search.rules.add(AdvancedRule(fields.keys.first))),
                     icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add rule'),
+                    label: Text(tr('Add rule')),
                   ),
                 ]),
           ),
@@ -278,14 +281,14 @@ Future<AdvancedSearch?> showAdvancedSearchDialog(
           TextButton(
               key: const Key('adv-clear'),
               onPressed: () => Navigator.pop(context, AdvancedSearch()),
-              child: const Text('Clear')),
+              child: Text(tr('Clear'))),
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           FilledButton(
               key: const Key('adv-apply'),
               onPressed: () => Navigator.pop(context, search),
-              child: const Text('Apply')),
+              child: Text(tr('Apply'))),
         ],
       );
     }),
@@ -449,17 +452,16 @@ Future<String?> showRangeFilterDialog(
         TextButton(
             key: const Key('range-clear'),
             onPressed: () => Navigator.pop(context, ''),
-            child: const Text('Clear')),
+            child: Text(tr('Clear'))),
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
         FilledButton(
             key: const Key('range-apply'),
             onPressed: () {
               final a = from.text.trim(), b = to.text.trim();
               Navigator.pop(context, a.isEmpty && b.isEmpty ? '' : '$a,$b');
             },
-            child: const Text('Apply')),
+            child: Text(tr('Apply'))),
       ],
     ),
   );
@@ -544,7 +546,7 @@ Widget summaryCell(
           Text.rich(
               TextSpan(children: [
                 TextSpan(
-                    text: '${summaryLabels[k] ?? k} ',
+                    text: '${tr(summaryLabels[k] ?? k)} ',
                     style:
                         TextStyle(color: theme.colorScheme.onSurfaceVariant)),
                 TextSpan(

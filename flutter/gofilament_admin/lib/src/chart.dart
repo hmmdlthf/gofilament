@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'controller.dart';
 import 'theme.dart';
@@ -101,7 +102,7 @@ class _AdminChartCardState extends State<AdminChartCard> {
               ),
             const SizedBox(height: 16),
             if (datasets.isEmpty || labels.isEmpty)
-              Text('No data yet.',
+              Text(tr('No data yet.'),
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
             else
               SizedBox(

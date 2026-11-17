@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flutter app in other languages**: the app's own words (about 220 buttons, dialogs and messages) are translated through `tr()`; boot sends `ui_translations` for the user's language. Arabic, German, Spanish and French are built in, `Panel.UITranslations(locale, map)` adds or overrides any language, and a test fails when a new app string has no translation.
+
 ## [v1.38.0] - 2026-11-17
 
 ### Added

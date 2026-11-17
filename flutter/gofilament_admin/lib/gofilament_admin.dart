@@ -21,6 +21,7 @@ export 'src/files.dart';
 export 'src/format.dart';
 export 'src/generated_support.dart';
 export 'src/links.dart';
+export 'src/i18n.dart';
 export 'src/icons.dart';
 export 'src/login.dart';
 export 'src/notifications.dart';

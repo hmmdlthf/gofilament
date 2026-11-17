@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'format.dart';
 
@@ -135,17 +136,17 @@ class _RepeaterEditorState extends State<RepeaterEditor> {
                     const Spacer(),
                     if (widget.enabled) ...[
                       IconButton(
-                          tooltip: 'Move up',
+                          tooltip: tr('Move up'),
                           onPressed: i == 0 ? null : () => _move(i, -1),
                           icon: const Icon(Icons.arrow_upward, size: 18)),
                       IconButton(
-                          tooltip: 'Move down',
+                          tooltip: tr('Move down'),
                           onPressed:
                               i == _items.length - 1 ? null : () => _move(i, 1),
                           icon: const Icon(Icons.arrow_downward, size: 18)),
                       IconButton(
                           key: Key('$_name-remove-$i'),
-                          tooltip: 'Remove',
+                          tooltip: tr('Remove'),
                           onPressed: () => _remove(i),
                           icon: Icon(Icons.delete_outline,
                               size: 18, color: theme.colorScheme.error)),
@@ -174,7 +175,7 @@ class _RepeaterEditorState extends State<RepeaterEditor> {
                     state.didChange(_items);
                   },
                   icon: const Icon(Icons.add),
-                  label: const Text('Add item'),
+                  label: Text(tr('Add item')),
                 ),
               ),
           ],
@@ -346,7 +347,7 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
               ),
               if (widget.enabled)
                 IconButton(
-                  tooltip: 'Remove',
+                  tooltip: tr('Remove'),
                   onPressed: () {
                     setState(() {
                       final (k, v) = _rows.removeAt(i);
@@ -367,7 +368,7 @@ class _KeyValueEditorState extends State<KeyValueEditor> {
               onPressed: () => setState(() => _rows
                   .add((TextEditingController(), TextEditingController()))),
               icon: const Icon(Icons.add),
-              label: const Text('Add row'),
+              label: Text(tr('Add row')),
             ),
           ),
       ]),
@@ -441,17 +442,19 @@ class _FormStepsState extends State<FormSteps> {
                 TextButton(
                   key: const Key('step-back'),
                   onPressed: () => setState(() => _index--),
-                  child: const Text('Back'),
+                  child: Text(tr('Back')),
                 ),
               const Spacer(),
-              Text('Step ${_index + 1} of ${widget.children.length}',
+              Text(
+                  tr('Step {n} of {total}',
+                      {'n': _index + 1, 'total': widget.children.length}),
                   style: theme.textTheme.bodySmall),
               const SizedBox(width: 12),
               if (_index < last)
                 FilledButton.tonal(
                   key: const Key('step-next'),
                   onPressed: () => setState(() => _index++),
-                  child: const Text('Next'),
+                  child: Text(tr('Next')),
                 ),
             ]),
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 
@@ -34,7 +35,7 @@ class _HistoryDialogState extends State<_HistoryDialog> {
     }).catchError((Object e) {
       if (mounted) {
         setState(() => _error =
-            e is ApiException ? e.message : 'Could not load the history.');
+            e is ApiException ? e.message : tr('Could not load the history.'));
       }
     });
   }
@@ -63,7 +64,7 @@ class _HistoryDialogState extends State<_HistoryDialog> {
     } else if (_entries == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (_entries!.isEmpty) {
-      body = const Text('No changes recorded yet.', key: Key('history-empty'));
+      body = Text(tr('No changes recorded yet.'), key: Key('history-empty'));
     } else {
       body = ListView.separated(
         shrinkWrap: true,
@@ -119,12 +120,11 @@ class _HistoryDialogState extends State<_HistoryDialog> {
       );
     }
     return AlertDialog(
-      title: const Text('History'),
+      title: Text(tr('History')),
       content: SizedBox(width: 520, child: body),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close')),
+            onPressed: () => Navigator.pop(context), child: Text(tr('Close'))),
       ],
     );
   }

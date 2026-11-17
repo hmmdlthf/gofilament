@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'i18n.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -243,7 +244,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
           shared: result.$2);
       await _loadViews();
       if (mounted) setState(() => _viewId = '${v['id']}');
-      _toast('View saved.');
+      _toast(tr('View saved.'));
     } on ApiException catch (e) {
       _toast(e.message, error: true);
     }
@@ -266,7 +267,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
     }
     return PopupMenuButton<String>(
       key: const Key('list-views'),
-      tooltip: 'Saved views',
+      tooltip: tr('Saved views'),
       onSelected: (v) {
         if (v == ':all') {
           _applyView(null);
@@ -283,25 +284,25 @@ class _ResourceListPageState extends State<ResourceListPage> {
             key: const Key('view-all'),
             value: ':all',
             checked: _viewId == null,
-            child: const Text('All records')),
+            child: Text(tr('All records'))),
         for (final v in _views)
           CheckedPopupMenuItem(
             key: Key('view-${v['id']}'),
             value: '${v['id']}',
             checked: '${v['id']}' == _viewId,
-            child:
-                Text('${v['name']}${v['shared'] == true ? ' (shared)' : ''}'),
+            child: Text(
+                '${v['name']}${v['shared'] == true ? ' ${tr('(shared)')}' : ''}'),
           ),
         const PopupMenuDivider(),
-        const PopupMenuItem(
+        PopupMenuItem(
             key: Key('view-save'),
             value: ':save',
-            child: Text('Save current view…')),
+            child: Text(tr('Save current view…'))),
         if (current != null && current['can_delete'] == true)
           PopupMenuItem(
               key: const Key('view-delete'),
               value: ':delete',
-              child: Text('Delete "${current['name']}"')),
+              child: Text(tr('Delete "{name}"', {'name': current['name']}))),
       ],
       child: Padding(
         padding: const EdgeInsets.all(8),
@@ -380,7 +381,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (url == null || url.isEmpty) return;
       if (!await openLink(url)) {
         await Clipboard.setData(ClipboardData(text: url));
-        _toast('Link copied');
+        _toast(tr('Link copied'));
       }
       return;
     }
@@ -404,7 +405,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
+                child: Text(tr('Cancel'))),
             FilledButton(
               key: const Key('confirm-action'),
               onPressed: () => Navigator.pop(ctx, true),
@@ -504,7 +505,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
     } catch (_) {
       if (!mounted || request != _requestId) return;
       setState(() {
-        _error = 'Could not load the records. Please try again.';
+        _error = tr('Could not load the records. Please try again.');
         _loading = false;
       });
     }
@@ -546,13 +547,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           FilledButton(
             key: const Key('confirm-delete'),
             style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(ctx).colorScheme.error),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: Text(tr('Delete')),
           ),
         ],
       ),
@@ -561,12 +562,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
   }
 
   Future<void> _delete(Map<String, dynamic> row) async {
-    if (!await _confirm('Delete this record?', 'This cannot be undone.')) {
+    if (!await _confirm(
+        tr('Delete this record?'), tr('This cannot be undone.'))) {
       return;
     }
     try {
       await api.delete(widget.slug, recordId(row));
-      _toast('Deleted');
+      _toast(tr('Deleted'));
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -576,7 +578,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
   Future<void> _restore(Map<String, dynamic> row) async {
     try {
       await api.restoreRecord(widget.slug, recordId(row));
-      _toast('Restored');
+      _toast(tr('Restored'));
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -584,13 +586,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
   }
 
   Future<void> _forceDelete(Map<String, dynamic> row) async {
-    if (!await _confirm(
-        'Delete this record for good?', 'It cannot be restored afterwards.')) {
+    if (!await _confirm(tr('Delete this record for good?'),
+        tr('It cannot be restored afterwards.'))) {
       return;
     }
     try {
       await api.forceDelete(widget.slug, recordId(row));
-      _toast('Deleted for good');
+      _toast(tr('Deleted for good'));
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -600,15 +602,14 @@ class _ResourceListPageState extends State<ResourceListPage> {
   Future<void> _deleteSelected() async {
     final ids = _selected.toList();
     if (ids.isEmpty) return;
-    if (!await _confirm(
-        'Delete ${ids.length} record${ids.length == 1 ? '' : 's'}?',
-        'This cannot be undone.')) {
+    if (!await _confirm(tr('Delete {n} records?', {'n': ids.length}),
+        tr('This cannot be undone.'))) {
       return;
     }
     try {
       await api.deleteMany(widget.slug, ids);
       _selected.clear();
-      _toast('Deleted');
+      _toast(tr('Deleted'));
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -629,7 +630,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (mounted) setState(() => row[column] = previous);
       _toast(
           e.isConflict
-              ? 'This record was changed by someone else. Reload the list to see their changes.'
+              ? tr(
+                  'This record was changed by someone else. Reload the list to see their changes.')
               : e.message,
           error: true);
     }
@@ -664,14 +666,16 @@ class _ResourceListPageState extends State<ResourceListPage> {
         ids: _selected.toList(),
         columns: columns);
     final id = '${job['id']}';
-    _toast('Preparing the export…');
+    _toast(tr('Preparing the export…'));
     while (job['status'] == 'queued' || job['status'] == 'running') {
       await Future<void>.delayed(jobPollInterval);
       if (!mounted) return;
       job = await api.job(id);
     }
     if (job['status'] != 'done') {
-      _toast('The export failed: ${job['message'] ?? ''}', error: true);
+      _toast(
+          tr('The export failed: {message}', {'message': job['message'] ?? ''}),
+          error: true);
       return;
     }
     final bytes = await api.jobFile(id);
@@ -683,8 +687,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
             ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             : 'text/csv');
     _toast(ok
-        ? 'Exported ${job['total'] ?? ''} rows.'
-        : 'Export is not available on this device yet.');
+        ? tr('Exported {n} rows.', {'n': job['total'] ?? ''})
+        : tr('Export is not available on this device yet.'));
   }
 
   Future<void> _export(String format) async {
@@ -753,10 +757,11 @@ class _ResourceListPageState extends State<ResourceListPage> {
               'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
           : await saveFile('$name.csv', export.toCsv(), 'text/csv');
       if (ok) {
-        _toast('Exported ${rows.length} row${rows.length == 1 ? '' : 's'}'
-            '${rows.length >= maxRows && _selected.isEmpty ? ' (limit reached)' : ''}');
+        _toast(rows.length >= maxRows && _selected.isEmpty
+            ? tr('Exported {n} rows (limit reached).', {'n': rows.length})
+            : tr('Exported {n} rows.', {'n': rows.length}));
       } else {
-        _toast('Export is not available on this device yet.', error: true);
+        _toast(tr('Export is not available on this device yet.'), error: true);
       }
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -805,12 +810,12 @@ class _ResourceListPageState extends State<ResourceListPage> {
         _load();
       },
       decoration: InputDecoration(
-        hintText: 'Search',
+        hintText: tr('Search'),
         prefixIcon: const Icon(Icons.search, size: 20),
         suffixIcon: _search.text.isEmpty
             ? null
             : IconButton(
-                tooltip: 'Clear',
+                tooltip: tr('Clear'),
                 icon: const Icon(Icons.close, size: 18),
                 onPressed: () {
                   _search.clear();
@@ -825,13 +830,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
 
     final actions = <Widget>[
       IconButton(
-          tooltip: 'Refresh',
+          tooltip: tr('Refresh'),
           icon: const Icon(Icons.refresh),
           onPressed: _load),
       if (_groups.isNotEmpty)
         PopupMenuButton<String>(
           key: const Key('list-group'),
-          tooltip: 'Group by',
+          tooltip: tr('Group by'),
           icon: Icon(Icons.segment,
               color: _group.isEmpty
                   ? null
@@ -848,7 +853,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
                 key: const Key('group-none'),
                 value: '',
                 checked: _group.isEmpty,
-                child: const Text('No grouping')),
+                child: Text(tr('No grouping'))),
             for (final g in _groups)
               CheckedPopupMenuItem(
                   key: Key('group-$g'),
@@ -860,7 +865,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (_advancedEnabled)
         IconButton(
           key: const Key('list-advanced-search'),
-          tooltip: 'Advanced search',
+          tooltip: tr('Advanced search'),
           isSelected: !_advanced.isEmpty,
           icon: Badge(
             isLabelVisible: !_advanced.isEmpty,
@@ -872,7 +877,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (_allColumns.any((c) => c['toggleable'] == true))
         PopupMenuButton<String>(
           key: const Key('list-columns'),
-          tooltip: 'Columns',
+          tooltip: tr('Columns'),
           icon: const Icon(Icons.view_column_outlined),
           onSelected: _toggleColumn,
           itemBuilder: (_) => [
@@ -899,7 +904,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
           key: const Key('list-reorder'),
           tooltip: _canReorderNow
               ? 'Reorder'
-              : 'Clear search, filters, sorting and grouping to reorder',
+              : tr('Clear search, filters, sorting and grouping to reorder'),
           icon: const Icon(Icons.swap_vert),
           onPressed: _canReorderNow && _rows.length > 1 ? _reorder : null,
         ),
@@ -907,7 +912,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (admin.can(widget.slug, 'import'))
         IconButton(
           key: const Key('list-import'),
-          tooltip: 'Import',
+          tooltip: tr('Import'),
           icon: const Icon(Icons.upload_file_outlined),
           onPressed: () async {
             final n = await showImportDialog(context,
@@ -919,13 +924,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
         ),
       if (_exportEnabled)
         PopupMenuButton<String>(
-          key: const Key('list-export'),
-          tooltip: 'Export',
+          key: Key('list-export'),
+          tooltip: tr('Export'),
           enabled: !_exporting,
           onSelected: _export,
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'csv', child: Text('Export CSV')),
-            PopupMenuItem(value: 'xlsx', child: Text('Export Excel')),
+          itemBuilder: (_) => [
+            PopupMenuItem(value: 'csv', child: Text(tr('Export CSV'))),
+            PopupMenuItem(value: 'xlsx', child: Text(tr('Export Excel'))),
           ],
           child: Padding(
             padding: const EdgeInsets.all(8),
@@ -943,8 +948,9 @@ class _ResourceListPageState extends State<ResourceListPage> {
           key: const Key('list-create'),
           onPressed: () => _openForm(),
           icon: const Icon(Icons.add, size: 18),
-          label: Text(
-              wide ? 'New ${_resource['model_name'] ?? ''}'.trim() : 'New'),
+          label: Text(wide
+              ? tr('New {name}', {'name': _resource['model_name'] ?? ''}).trim()
+              : tr('New')),
         ),
       ],
     ];
@@ -1007,7 +1013,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
         _load();
       },
       itemBuilder: (_) => [
-        const PopupMenuItem(value: '', child: Text('All')),
+        PopupMenuItem(value: '', child: Text(tr('All'))),
         for (final o in options)
           PopupMenuItem(value: o.value, child: Text(o.label)),
       ],
@@ -1069,7 +1075,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
     if (ids == null) return;
     try {
       await api.reorder(widget.slug, ids, offset: (_page - 1) * _perPage);
-      _toast('Order saved.');
+      _toast(tr('Order saved.'));
       _load();
     } on ApiException catch (e) {
       _toast(e.message, error: true);
@@ -1091,8 +1097,9 @@ class _ResourceListPageState extends State<ResourceListPage> {
     final failed = (res['failed'] as num?)?.toInt() ?? 0;
     _toast(
         failed == 0
-            ? '${res['updated']} records changed.'
-            : '${res['updated']} changed, $failed not changed.',
+            ? tr('{n} records changed.', {'n': res['updated']})
+            : tr('{n} changed, {failed} not changed.',
+                {'n': res['updated'], 'failed': failed}),
         error: failed > 0);
     setState(_selected.clear);
     _load();
@@ -1108,18 +1115,18 @@ class _ResourceListPageState extends State<ResourceListPage> {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(children: [
-        Text('${_selected.length} selected',
+        Text(tr('{n} selected', {'n': _selected.length}),
             style: const TextStyle(fontWeight: FontWeight.w600)),
         const Spacer(),
         TextButton(
             onPressed: () => setState(_selected.clear),
-            child: const Text('Clear')),
+            child: Text(tr('Clear'))),
         if (_bulkEditFields.isNotEmpty)
           TextButton.icon(
             key: const Key('bulk-edit'),
             onPressed: _bulkEdit,
             icon: const Icon(Icons.edit_note, size: 18),
-            label: const Text('Change'),
+            label: Text(tr('Change')),
           ),
         if (_canDeleteAny && _bulkActions.contains('delete_bulk'))
           TextButton.icon(
@@ -1127,7 +1134,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
             onPressed: _deleteSelected,
             icon: Icon(Icons.delete_outline,
                 size: 18, color: theme.colorScheme.error),
-            label: Text('Delete',
+            label: Text(tr('Delete'),
                 style: TextStyle(color: theme.colorScheme.error)),
           ),
       ]),
@@ -1149,7 +1156,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
           const SizedBox(height: 12),
-          OutlinedButton(onPressed: _load, child: const Text('Try again')),
+          OutlinedButton(onPressed: _load, child: Text(tr('Try again'))),
         ]),
       );
     }
@@ -1160,7 +1167,10 @@ class _ResourceListPageState extends State<ResourceListPage> {
           Icon(Icons.inbox_outlined,
               size: 44, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(height: 10),
-          Text(filtered ? 'No records match your search.' : 'No records yet.',
+          Text(
+              filtered
+                  ? tr('No records match your search.')
+                  : tr('No records yet.'),
               style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
         ]),
       );
@@ -1391,11 +1401,11 @@ class _ResourceListPageState extends State<ResourceListPage> {
       }
     }
     if (summarized.isNotEmpty && _rows.isNotEmpty) {
-      out.add(
-          _TableRow(label: 'This page', kind: 'summary', sums: sums(_rows)));
+      out.add(_TableRow(
+          label: tr('This page'), kind: 'summary', sums: sums(_rows)));
       if (_totals.isNotEmpty) {
-        out.add(
-            _TableRow(label: 'All results', kind: 'summary', sums: _totals));
+        out.add(_TableRow(
+            label: tr('All results'), kind: 'summary', sums: _totals));
       }
     }
     for (var i = 0; i < out.length; i++) {
@@ -1539,7 +1549,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (_actions.contains('view') && _hasForm)
         IconButton(
           key: Key('row-view-$id'),
-          tooltip: 'View',
+          tooltip: tr('View'),
           visualDensity: VisualDensity.compact,
           icon: const Icon(Icons.visibility_outlined, size: 19),
           onPressed: () => _openForm(id: id, readOnly: true),
@@ -1560,7 +1570,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (_actions.contains('edit') && _hasForm && _rowAllows(row, 'update'))
         IconButton(
           key: Key('row-edit-$id'),
-          tooltip: 'Edit',
+          tooltip: tr('Edit'),
           visualDensity: VisualDensity.compact,
           icon: const Icon(Icons.edit_outlined, size: 19),
           onPressed: () => _openForm(id: id),
@@ -1568,7 +1578,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (_rowMeta[id]?['restore'] == true)
         IconButton(
           key: Key('row-restore-$id'),
-          tooltip: 'Restore',
+          tooltip: tr('Restore'),
           visualDensity: VisualDensity.compact,
           icon: const Icon(Icons.restore_from_trash_outlined, size: 19),
           onPressed: () => _restore(row),
@@ -1576,7 +1586,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
       if (_rowMeta[id]?['force_delete'] == true)
         IconButton(
           key: Key('row-force-delete-$id'),
-          tooltip: 'Delete for good',
+          tooltip: tr('Delete for good'),
           visualDensity: VisualDensity.compact,
           icon: Icon(Icons.delete_forever_outlined,
               size: 19, color: theme.colorScheme.error),
@@ -1587,7 +1597,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
           _rowAllows(row, 'delete'))
         IconButton(
           key: Key('row-delete-$id'),
-          tooltip: 'Delete',
+          tooltip: tr('Delete'),
           visualDensity: VisualDensity.compact,
           icon: Icon(Icons.delete_outline,
               size: 19, color: theme.colorScheme.error),
@@ -1623,7 +1633,9 @@ class _ResourceListPageState extends State<ResourceListPage> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       child: Row(children: [
         Expanded(
-          child: Text('$from–$to of $_total',
+          child: Text(
+              tr('{from}–{to} of {total}',
+                  {'from': from, 'to': to, 'total': _total}),
               key: const Key('list-count'),
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
@@ -1636,7 +1648,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
               ?.copyWith(color: theme.colorScheme.onSurface),
           items: [
             for (final o in options)
-              DropdownMenuItem(value: o, child: Text('$o / page'))
+              DropdownMenuItem(
+                  value: o, child: Text(tr('{n} / page', {'n': o})))
           ],
           onChanged: (v) {
             if (v == null) return;
@@ -1649,7 +1662,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
         ),
         IconButton(
           key: const Key('list-prev'),
-          tooltip: 'Previous page',
+          tooltip: tr('Previous page'),
           icon: const Icon(Icons.chevron_left),
           onPressed: _page > 1
               ? () {
@@ -1661,7 +1674,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
         Text('$_page / $pages', style: theme.textTheme.bodySmall),
         IconButton(
           key: const Key('list-next'),
-          tooltip: 'Next page',
+          tooltip: tr('Next page'),
           icon: const Icon(Icons.chevron_right),
           onPressed: _page < pages
               ? () {
@@ -1709,21 +1722,21 @@ class _SaveViewDialogState extends State<_SaveViewDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Save view'),
+        title: Text(tr('Save view')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
             key: const Key('view-name'),
             controller: _name,
             autofocus: true,
             maxLength: 80,
-            decoration: const InputDecoration(labelText: 'Name'),
+            decoration: InputDecoration(labelText: tr('Name')),
             onSubmitted: (_) => _ok(),
           ),
           if (widget.canShare)
             SwitchListTile(
               key: const Key('view-shared'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Share with everyone'),
+              title: Text(tr('Share with everyone')),
               value: _shared,
               onChanged: (v) => setState(() => _shared = v),
             ),
@@ -1731,11 +1744,11 @@ class _SaveViewDialogState extends State<_SaveViewDialog> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           FilledButton(
               key: const Key('view-save-ok'),
               onPressed: _ok,
-              child: const Text('Save')),
+              child: Text(tr('Save'))),
         ],
       );
 }

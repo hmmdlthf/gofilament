@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 
@@ -74,7 +75,7 @@ class _KanbanBoardViewState extends State<KanbanBoardView> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(e.isConflict
-              ? 'This record was changed by someone else.'
+              ? tr('This record was changed by someone else.')
               : e.message)));
       _load();
     }

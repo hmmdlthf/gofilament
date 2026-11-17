@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 import 'cells.dart';
@@ -147,7 +148,7 @@ class _RelationTableState extends State<_RelationTable> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'Could not load.';
+          _error = tr('Could not load.');
           _loading = false;
         });
       }
@@ -187,18 +188,18 @@ class _RelationTableState extends State<_RelationTable> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete this row?'),
-        content: const Text('This cannot be undone.'),
+        title: Text(tr('Delete this row?')),
+        content: Text(tr('This cannot be undone.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           FilledButton(
             key: const Key('confirm-delete'),
             style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(ctx).colorScheme.error),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            child: Text(tr('Delete')),
           ),
         ],
       ),
@@ -229,7 +230,7 @@ class _RelationTableState extends State<_RelationTable> {
     } else if (_rows.isEmpty) {
       body = Padding(
         padding: const EdgeInsets.all(18),
-        child: Text(_loading ? 'Loading…' : 'Nothing added yet.',
+        child: Text(_loading ? 'Loading…' : tr('Nothing added yet.'),
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
       );
     } else {
@@ -267,7 +268,7 @@ class _RelationTableState extends State<_RelationTable> {
                         if (canEdit)
                           IconButton(
                             key: Key('rel-$_name-edit-${recordId(row)}'),
-                            tooltip: 'Edit',
+                            tooltip: tr('Edit'),
                             visualDensity: VisualDensity.compact,
                             icon: const Icon(Icons.edit_outlined, size: 18),
                             onPressed: () => _open(childId: recordId(row)),
@@ -275,7 +276,7 @@ class _RelationTableState extends State<_RelationTable> {
                         if (canDelete)
                           IconButton(
                             key: Key('rel-$_name-delete-${recordId(row)}'),
-                            tooltip: 'Delete',
+                            tooltip: tr('Delete'),
                             visualDensity: VisualDensity.compact,
                             icon: Icon(Icons.delete_outline,
                                 size: 18, color: theme.colorScheme.error),
@@ -316,7 +317,7 @@ class _RelationTableState extends State<_RelationTable> {
                 key: Key('rel-$_name-add'),
                 onPressed: () => _open(),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add'),
+                label: Text(tr('Add')),
               ),
           ]),
         ),
@@ -327,7 +328,9 @@ class _RelationTableState extends State<_RelationTable> {
         if (_total > _rows.length)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-            child: Text('Showing ${_rows.length} of $_total',
+            child: Text(
+                tr('Showing {n} of {total}',
+                    {'n': _rows.length, 'total': _total}),
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ),
