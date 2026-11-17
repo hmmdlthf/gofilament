@@ -130,6 +130,8 @@ type Panel struct {
 	viewStore           SavedViewStore
 	canShareViews       func(ctx *Context) bool
 	canManageViews      func(ctx *Context) bool
+	verifyOnce          sync.Once
+	verifyBroker        *auth.EmailVerificationBroker
 	corsAllowOriginFunc func(origin string) bool
 	resources           []ResourceInterface
 	pages               []PageInterface
@@ -932,6 +934,14 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 		return ctx, denied(c.String(http.StatusUnauthorized, "401 Unauthorized: Authentication required"))
 	}
 
+	if u := ctx.User(); u != nil && !p.verificationExempt(reqPath) && p.emailUnverified(ctx, u) {
+		if p.isAPIRequest(c) {
+			p.setCorsHeaders(c)
+			return ctx, denied(c.JSON(http.StatusForbidden, map[string]any{"error": "Verify your email address to continue.", "email_unverified": true}))
+		}
+		return ctx, denied(c.Redirect(http.StatusSeeOther, p.path+"/email/verify"))
+	}
+
 	if p.canAccess != nil && !p.canAccess(ctx) {
 		if strings.Contains(reqPath, "/api/") {
 			p.setCorsHeaders(c)
@@ -1296,6 +1306,7 @@ func (p *Panel) Mount(r *router.Router) {
 		// (HttpOnly, SameSite=Lax cookie; see SessionCookieName).
 		r.POST(p.path+"/login", p.handleWebLogin)
 		p.mountAccountRoutes(r)
+		p.mountRegistrationRoutes(r)
 		logout := func(c *gcontext.Context) error {
 			if !p.checkCrossOrigin(c) {
 				return c.String(http.StatusForbidden, "403 Forbidden: cross-origin request refused")
@@ -1862,6 +1873,10 @@ func (p *Panel) renderLoginScreen(ctx *Context, status int, errMsg, identifier s
 	if errMsg == "" {
 		errHTML = alertHTML("ok", loginNotice(ctx.Context))
 	}
+	register := ""
+	if p.registrationAvailable() {
+		register = fmt.Sprintf(`<p style="text-align: center; margin-top: 1rem; font-size: 0.8125rem;">No account yet? <a href="%s/register">Create one</a></p>`, p.path)
+	}
 	forgot := ""
 	if p.canResetPassword() {
 		forgot = fmt.Sprintf(`<a href="%s/forgot-password" style="font-size: 0.8125rem;">Forgot password?</a>`, p.path)
@@ -1901,10 +1916,11 @@ func (p *Panel) renderLoginScreen(ctx *Context, status int, errMsg, identifier s
       </div>
       <button type="submit" class="btn btn-primary" style="width: 100%%;">Sign In</button>
     </form>
+    %s
   </div>
   %s
 </body>
-</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, errHTML, p.path, p.csrfHiddenInput(ctx.Context, ""), html.EscapeString(identifier), forgot, p.RenderBodyEndHTML(ctx))
+</html>`, ctx.Locale(), ctx.Direction(), p.brandName, p.path, p.path, p.RenderHeadHTML(ctx), p.brandName, errHTML, p.path, p.csrfHiddenInput(ctx.Context, ""), html.EscapeString(identifier), forgot, register, p.RenderBodyEndHTML(ctx))
 
 	return ctx.HTML(status, page)
 }

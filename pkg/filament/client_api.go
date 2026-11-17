@@ -165,6 +165,11 @@ func (r *BaseResource[T]) Meta(ctx *Context) ResourceMeta {
 	}
 	if r.tableBuilder != nil {
 		m.Table = r.tableBuilder(tables.New[T]()).Meta()
+		for _, a := range m.Table.HeaderActions {
+			if a.Name == "import" {
+				m.Abilities["import"] = m.Abilities["create"]
+			}
+		}
 	}
 	return m
 }
@@ -266,6 +271,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 				"login":          p.hasLogin,
 				"registration":   p.hasRegistration,
 				"password_reset": p.hasPasswordReset,
+				"accounts":       p.apiAccountsFeatures(),
 			},
 			"locale":            ctx.Locale(),
 			"direction":         ctx.Direction(),
@@ -508,14 +514,20 @@ func (p *Panel) registerRelationClientRoutes(r *router.Router, res ResourceInter
 			}); ok {
 				_, parentAbilities, _ = guard.RecordAbilities(ctx, parentID)
 			}
-			return c.JSON(http.StatusOK, map[string]any{
+			out := map[string]any{
 				"mode": "edit", "schema": nodes, "state": record, "option_labels": labels,
 				"abilities": map[string]bool{
 					"view":   true,
 					"update": abilities["update"] && parentAbilities["may_edit"],
 					"delete": abilities["delete"] && parentAbilities["may_edit"],
 				},
-			})
+			}
+			if v, ok := rel.(interface{ RecordVersion(record any) string }); ok {
+				if ver := v.RecordVersion(record); ver != "" {
+					out["version"] = ver
+				}
+			}
+			return c.JSON(http.StatusOK, out)
 		})
 
 		// GET .../relations/<rel>/form/options?field=&q=

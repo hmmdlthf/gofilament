@@ -10,6 +10,7 @@ import 'controller.dart';
 import 'export.dart';
 import 'format.dart';
 import 'icons.dart';
+import 'import_dialog.dart';
 import 'links.dart';
 import 'list_tools.dart';
 import 'resource_form.dart';
@@ -612,11 +613,19 @@ class _ResourceListPageState extends State<ResourceListPage> {
       Map<String, dynamic> row, String column, bool value) async {
     final previous = row[column];
     setState(() => row[column] = value);
+    final id = recordId(row);
+    final meta = _rowMeta[id];
     try {
-      await api.updateCell(widget.slug, recordId(row), column, value);
+      final version = await api.updateCell(widget.slug, id, column, value,
+          version: meta?['version']?.toString());
+      if (version != null && meta != null) meta['version'] = version;
     } on ApiException catch (e) {
       if (mounted) setState(() => row[column] = previous);
-      _toast(e.message, error: true);
+      _toast(
+          e.isConflict
+              ? 'This record was changed by someone else. Reload the list to see their changes.'
+              : e.message,
+          error: true);
     }
   }
 
@@ -823,6 +832,19 @@ class _ResourceListPageState extends State<ResourceListPage> {
           ],
         ),
       if (_viewsEnabled) _viewsMenu(),
+      if (admin.can(widget.slug, 'import'))
+        IconButton(
+          key: const Key('list-import'),
+          tooltip: 'Import',
+          icon: const Icon(Icons.upload_file_outlined),
+          onPressed: () async {
+            final n = await showImportDialog(context,
+                api: api,
+                slug: widget.slug,
+                title: '${_resource['plural_model_name'] ?? widget.slug}');
+            if (n != null && n > 0) _load();
+          },
+        ),
       if (_exportEnabled)
         PopupMenuButton<String>(
           key: const Key('list-export'),
@@ -1272,11 +1294,17 @@ class _ResourceListPageState extends State<ResourceListPage> {
   Widget _cards(BuildContext context) {
     final theme = Theme.of(context);
     final columns = _columns;
+    final entries = _tableRows(columns);
     return ListView.separated(
-      itemCount: _rows.length,
-      separatorBuilder: (_, __) => const Divider(),
+      itemCount: entries.length,
+      separatorBuilder: (_, i) => entries[i].row == null &&
+              (i + 1 >= entries.length || entries[i + 1].row == null)
+          ? const SizedBox.shrink()
+          : const Divider(height: 1),
       itemBuilder: (context, i) {
-        final row = _rows[i];
+        final entry = entries[i];
+        if (entry.row == null) return _extraCard(context, entry);
+        final row = entry.row!;
         final title = columns.isEmpty
             ? recordId(row)
             : displayValue(valueAt(row, '${columns.first['name']}'));
@@ -1312,6 +1340,47 @@ class _ResourceListPageState extends State<ResourceListPage> {
           ),
         );
       },
+    );
+  }
+
+  /// A group header or summary block of the card layout.
+  Widget _extraCard(BuildContext context, _TableRow entry) {
+    final theme = Theme.of(context);
+    if (entry.kind == 'group') {
+      return Container(
+        key: Key('group-card-${entry.label}'),
+        color: theme.colorScheme.surfaceContainerHighest,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Text(entry.label,
+            key: Key('group-row-${entry.label}'),
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+      );
+    }
+    final summarized = _summarized;
+    return Container(
+      key: Key('${entry.kind}-card-${entry.pos}'),
+      color: theme.colorScheme.surfaceContainerLow,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(entry.label,
+            style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        Wrap(spacing: 20, runSpacing: 6, children: [
+          for (final e in summarized.entries)
+            if (entry.sums?[e.key] != null)
+              Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_columnLabel(e.key),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                    summaryCell(context, entry.sums![e.key], e.value),
+                  ]),
+        ]),
+      ]),
     );
   }
 
