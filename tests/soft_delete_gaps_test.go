@@ -38,7 +38,10 @@ func newTrashApp(t *testing.T, soft, canDelete bool, forceErr error) (*golaravel
 			}
 			return nil, errors.New("not found")
 		}).
-		OnUpdate(func(ctx *filament.Context, id string, data map[string]any) error { db[id].Title = fmt.Sprint(data["title"]); return nil }).
+		OnUpdate(func(ctx *filament.Context, id string, data map[string]any) error {
+			db[id].Title = fmt.Sprint(data["title"])
+			return nil
+		}).
 		OnRestore(func(ctx *filament.Context, id string) error { db[id].DeletedAt = nil; return nil }).
 		OnForceDelete(func(ctx *filament.Context, id string) error {
 			if forceErr != nil {
