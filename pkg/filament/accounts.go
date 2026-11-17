@@ -70,6 +70,24 @@ type Accounts struct {
 	// (HashRecoveryCode); store the hashes as they are.
 	RecoveryCodes     func(ctx *Context, user auth.Authenticatable) ([]string, error)
 	SaveRecoveryCodes func(ctx *Context, user auth.Authenticatable, hashes []string) error
+
+	// Register creates a user (Panel.Registration) from the sign-up form;
+	// passwordHash is made with golaravel's hash.Make. Return ErrEmailTaken
+	// for an address in use, or a *forms.ValidationError for other field
+	// problems. The new user is signed in.
+	Register func(ctx *Context, name, email, passwordHash string) (auth.Authenticatable, error)
+
+	// Email verification: EmailVerified reports whether the user's address
+	// is verified, MarkEmailVerified records it, SendVerificationLink mails
+	// the signed link. Needs Profile (for the address). Unverified users can
+	// only reach the "verify your email" page until they open the link.
+	EmailVerified        func(ctx *Context, user auth.Authenticatable) (bool, error)
+	MarkEmailVerified    func(ctx *Context, user auth.Authenticatable) error
+	SendVerificationLink func(ctx *Context, user auth.Authenticatable, email, link string) error
+	// VerificationSecret signs verification links (default: APP_KEY).
+	VerificationSecret string
+	// VerificationTTL is how long a verification link works (default 60 minutes).
+	VerificationTTL time.Duration
 }
 
 // Accounts configures the profile, password and two-factor screens.

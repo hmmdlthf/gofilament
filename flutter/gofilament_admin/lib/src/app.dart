@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'components.dart';
+import 'account.dart';
 import 'controller.dart';
 import 'login.dart';
 import 'shell.dart';
@@ -85,6 +86,7 @@ class _GoFilamentAdminState extends State<GoFilamentAdmin> {
           AdminStage.signedOut =>
             LoginScreen(admin: _admin, demoLogin: widget.demoLogin),
           AdminStage.signedIn => AdminShell(admin: _admin),
+          AdminStage.verifyEmail => VerifyEmailScreen(admin: _admin),
         },
       ),
     );

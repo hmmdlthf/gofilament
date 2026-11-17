@@ -19,6 +19,7 @@ import (
 type account struct {
 	name, email, pwHash, secret string
 	codes                       []string
+	verified                    bool
 }
 
 type accountApp struct {
@@ -29,10 +30,12 @@ type accountApp struct {
 	panel   *filament.Panel
 }
 
-func newAccountApp(t *testing.T) *accountApp {
+func newAccountApp(t *testing.T) *accountApp { return newAccountAppWith(t, nil) }
+
+func newAccountAppWith(t *testing.T, extra func(a *accountApp, acc *filament.Accounts)) *accountApp {
 	h, _ := hash.Make("secret-pass")
 	a := &accountApp{t: t, users: map[string]*account{
-		"ann@example.com": {name: "Ann", email: "ann@example.com", pwHash: h},
+		"ann@example.com": {name: "Ann", email: "ann@example.com", pwHash: h, verified: true},
 	}}
 	user := func(id string) (auth.Authenticatable, error) {
 		if _, ok := a.users[id]; ok {
@@ -42,8 +45,31 @@ func newAccountApp(t *testing.T) *accountApp {
 	}
 	acct := func(u auth.Authenticatable) *account { return a.users[u.GetAuthIdentifier()] }
 	mgr := session.NewManager(session.Config{SecretKey: "accounts-test-key"})
+	accounts := filament.Accounts{
+		Profile: func(ctx *filament.Context, u auth.Authenticatable) (string, string, error) {
+			return acct(u).name, acct(u).email, nil
+		},
+		UpdateProfile: func(ctx *filament.Context, u auth.Authenticatable, name, email string) error {
+			acct(u).name = name
+			return nil
+		},
+		PasswordHash:   func(ctx *filament.Context, u auth.Authenticatable) (string, error) { return acct(u).pwHash, nil },
+		UpdatePassword: func(ctx *filament.Context, u auth.Authenticatable, h string) error { acct(u).pwHash = h; return nil },
+		FindByEmail:    func(ctx *filament.Context, email string) (auth.Authenticatable, error) { return user(email) },
+		SendResetLink: func(ctx *filament.Context, u auth.Authenticatable, email, link string) error {
+			a.mails = append(a.mails, link)
+			return nil
+		},
+		TwoFactorSecret:     func(ctx *filament.Context, u auth.Authenticatable) (string, error) { return acct(u).secret, nil },
+		SaveTwoFactorSecret: func(ctx *filament.Context, u auth.Authenticatable, s string) error { acct(u).secret = s; return nil },
+		RecoveryCodes:       func(ctx *filament.Context, u auth.Authenticatable) ([]string, error) { return acct(u).codes, nil },
+		SaveRecoveryCodes:   func(ctx *filament.Context, u auth.Authenticatable, h []string) error { acct(u).codes = h; return nil },
+	}
+	if extra != nil {
+		extra(a, &accounts)
+	}
 	app := golaravel.New()
-	a.panel = filament.NewPanel("admin").Path("/admin").Login().Profile().PasswordReset().
+	a.panel = filament.NewPanel("admin").Path("/admin").Login().Profile().PasswordReset().Registration().
 		AuthValidator(func(ctx *filament.Context, login, pw string) (auth.Authenticatable, string, error) {
 			if u, ok := a.users[login]; ok && hash.Check(pw, u.pwHash) {
 				return &filament.PanelUser{ID: login, Login: login}, "tok-" + login, nil
@@ -57,26 +83,7 @@ func newAccountApp(t *testing.T) *accountApp {
 			return nil, errors.New("bad token")
 		}).
 		Sessions(mgr, func(ctx *filament.Context, id string) (auth.Authenticatable, error) { return user(id) }).
-		Accounts(filament.Accounts{
-			Profile: func(ctx *filament.Context, u auth.Authenticatable) (string, string, error) {
-				return acct(u).name, acct(u).email, nil
-			},
-			UpdateProfile: func(ctx *filament.Context, u auth.Authenticatable, name, email string) error {
-				acct(u).name = name
-				return nil
-			},
-			PasswordHash:   func(ctx *filament.Context, u auth.Authenticatable) (string, error) { return acct(u).pwHash, nil },
-			UpdatePassword: func(ctx *filament.Context, u auth.Authenticatable, h string) error { acct(u).pwHash = h; return nil },
-			FindByEmail:    func(ctx *filament.Context, email string) (auth.Authenticatable, error) { return user(email) },
-			SendResetLink: func(ctx *filament.Context, u auth.Authenticatable, email, link string) error {
-				a.mails = append(a.mails, link)
-				return nil
-			},
-			TwoFactorSecret:     func(ctx *filament.Context, u auth.Authenticatable) (string, error) { return acct(u).secret, nil },
-			SaveTwoFactorSecret: func(ctx *filament.Context, u auth.Authenticatable, s string) error { acct(u).secret = s; return nil },
-			RecoveryCodes:       func(ctx *filament.Context, u auth.Authenticatable) ([]string, error) { return acct(u).codes, nil },
-			SaveRecoveryCodes:   func(ctx *filament.Context, u auth.Authenticatable, h []string) error { acct(u).codes = h; return nil },
-		})
+		Accounts(accounts)
 	if err := a.panel.Register(app); err != nil {
 		t.Fatal(err)
 	}

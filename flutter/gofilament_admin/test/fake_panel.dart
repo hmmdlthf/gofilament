@@ -101,6 +101,12 @@ class FakePanel {
   bool twoFactorLogin = false;
   final List<String> resetRequests = [];
 
+  /// Sign-ups received; /schema answers "email_unverified" while
+  /// [emailUnverified] is true.
+  final List<Map<String, dynamic>> registrations = [];
+  bool emailUnverified = false;
+  int verificationMails = 0;
+
   /// Versioned items: the form sends 'version' and PUT refuses a stale
   /// '_version' with 409 (edit-conflict tests).
   int? itemVersion;
@@ -140,6 +146,23 @@ class FakePanel {
         }
       });
     }
+    if (path == '/register') {
+      final body = Map<String, dynamic>.from(json.decode(req.body) as Map);
+      registrations.add(body);
+      if (body['email'] == 'o@acme.test') {
+        return _json({
+          'error': 'An account with this email address already exists.',
+          'errors': {
+            'email': 'An account with this email address already exists.'
+          }
+        }, 422);
+      }
+      return _json({
+        'token': 'token-1',
+        'user': {'id': '9', 'login': body['email'], 'name': body['name']},
+        'email_verified': !emailUnverified,
+      }, 201);
+    }
     if (path == '/forgot-password') {
       resetRequests.add('${(json.decode(req.body) as Map)['email']}');
       return _json(
@@ -178,6 +201,16 @@ class FakePanel {
     if (!authed) return _json({'error': 'Unauthorized'}, 401);
 
     if (path == '/logout') return _json({'status': 'logged_out'});
+    if (path == '/email/verification-notification') {
+      verificationMails++;
+      return _json({'email_verified': !emailUnverified});
+    }
+    if (path == '/schema' && emailUnverified) {
+      return _json({
+        'error': 'Verify your email address to continue.',
+        'email_unverified': true
+      }, 403);
+    }
     if (path == '/schema') return _json(_schema());
     if (path == '/widgets') return _json({'widgets': _widgets()});
 

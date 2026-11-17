@@ -50,12 +50,14 @@ func hashKey(s string) string {
 // apiAccountsFeatures describes which account screens the API offers.
 func (p *Panel) apiAccountsFeatures() map[string]bool {
 	return map[string]bool{
-		"profile":        p.accounts != nil && p.accounts.Profile != nil,
-		"update_profile": p.accounts != nil && p.accounts.UpdateProfile != nil,
-		"password":       p.canChangePassword(),
-		"password_reset": p.canResetPassword(),
-		"two_factor":     p.twoFactorAvailable(),
-		"recovery_codes": p.recoveryCodesAvailable(),
+		"profile":            p.accounts != nil && p.accounts.Profile != nil,
+		"update_profile":     p.accounts != nil && p.accounts.UpdateProfile != nil,
+		"password":           p.canChangePassword(),
+		"password_reset":     p.canResetPassword(),
+		"two_factor":         p.twoFactorAvailable(),
+		"recovery_codes":     p.recoveryCodesAvailable(),
+		"registration":       p.registrationAvailable(),
+		"email_verification": p.verificationAvailable(),
 	}
 }
 
@@ -188,6 +190,7 @@ func (p *Panel) mountAccountAPIRoutes(r *router.Router, prefix string, preflight
 	if p.accounts == nil {
 		return
 	}
+	p.mountRegistrationAPIRoutes(r, prefix, preflight)
 	for _, path := range []string{"/account", "/account/password", "/account/two-factor/enable", "/account/two-factor/confirm",
 		"/account/two-factor/disable", "/account/two-factor/recovery-codes", "/forgot-password"} {
 		r.OPTIONS(prefix+path, preflight)
@@ -397,4 +400,68 @@ func formString(data map[string]any, key string) string {
 		return fmt.Sprint(v)
 	}
 	return ""
+}
+
+func (p *Panel) mountRegistrationAPIRoutes(r *router.Router, prefix string, preflight func(c *gcontext.Context) error) {
+	if p.registrationAvailable() {
+		r.OPTIONS(prefix+"/register", preflight)
+		r.POST(prefix+"/register", func(c *gcontext.Context) error {
+			p.setCorsHeaders(c)
+			ctx := NewContext(c, p)
+			data := parseRequestData(c)
+			email, pw := formString(data, "email"), formString(data, "password")
+			user, msg, field, status := p.register(c, ctx, formString(data, "name"), email, pw, formString(data, "password_confirmation"))
+			if user == nil {
+				out := map[string]any{"error": msg}
+				if field != "" {
+					out["errors"] = map[string]string{field: msg}
+				}
+				return c.JSON(status, out)
+			}
+			// Sign the new user in through the panel's normal validator.
+			if p.authValidator == nil {
+				return c.JSON(http.StatusCreated, map[string]any{"status": "registered"})
+			}
+			d := p.ResolveTokenDuration(false)
+			ctx.Set("token_duration", d)
+			authUser, token, err := p.authValidator(ctx, strings.ToLower(strings.TrimSpace(email)), pw)
+			if err != nil || authUser == nil || token == "" {
+				return c.JSON(http.StatusCreated, map[string]any{"status": "registered"})
+			}
+			info := map[string]any{"id": authUser.GetAuthIdentifier(), "login": authUser.GetAuthIdentifier(), "name": authUser.GetAuthIdentifier()}
+			if pu, ok := authUser.(interface{ ToMap() map[string]any }); ok {
+				info = pu.ToMap()
+			}
+			return c.JSON(http.StatusCreated, map[string]any{
+				"status":         "success",
+				"token":          token,
+				"user":           info,
+				"expires_at":     time.Now().Add(d).Format(time.RFC3339),
+				"expires_in":     int(d.Seconds()),
+				"email_verified": !p.emailUnverified(ctx, authUser),
+			})
+		})
+	}
+	if p.verificationAvailable() {
+		r.OPTIONS(prefix+"/email/verification-notification", preflight)
+		r.POST(prefix+"/email/verification-notification", func(c *gcontext.Context) error {
+			ctx, user, ok := p.apiAccountUser(c)
+			if !ok {
+				return nil
+			}
+			key := "verify:" + user.GetAuthIdentifier()
+			if blocked, wait := p.loginBlocked(c, key); blocked {
+				setRetryAfter(c, wait)
+				return apiFail(c, statusTooManyRequests, throttleMessage(wait))
+			}
+			p.loginFailed(c, key)
+			if !p.emailUnverified(ctx, user) {
+				return c.JSON(http.StatusOK, map[string]any{"email_verified": true})
+			}
+			if err := p.sendVerification(c, ctx, user); err != nil {
+				return apiFail(c, http.StatusInternalServerError, "The link could not be sent.")
+			}
+			return c.JSON(http.StatusOK, map[string]any{"email_verified": false, "message": "A new verification link was sent to your email address."})
+		})
+	}
 }

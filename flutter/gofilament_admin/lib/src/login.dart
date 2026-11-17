@@ -363,6 +363,17 @@ class _LoginScreenState extends State<LoginScreen> {
                               }),
                     ),
                   ],
+                  if (admin.accountFeatures['registration'] == true)
+                    TextButton(
+                      key: const Key('login-register'),
+                      onPressed: _busy
+                          ? null
+                          : () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      RegisterScreen(admin: widget.admin))),
+                      child: const Text('No account yet? Create one'),
+                    ),
                   if (admin.accountFeatures['password_reset'] == true)
                     TextButton(
                       key: const Key('login-forgot'),
@@ -479,4 +490,150 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
           ),
         ],
       );
+}
+
+/// Self-registration (Panel.Registration with Accounts.Register).
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key, required this.admin});
+  final AdminController admin;
+
+  @override
+  State<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends State<RegisterScreen> {
+  final _form = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _busy = false;
+  String? _error;
+  Map<String, String> _fieldErrors = const {};
+
+  @override
+  void dispose() {
+    for (final c in [_name, _email, _password, _confirm]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_busy || !(_form.currentState?.validate() ?? false)) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _fieldErrors = const {};
+    });
+    try {
+      await widget.admin.register(
+          _name.text.trim(), _email.text.trim(), _password.text, _confirm.text);
+      if (mounted) Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      final errs = e.body?['errors'];
+      setState(() {
+        _error = e.message;
+        _fieldErrors =
+            errs is Map ? errs.map((k, v) => MapEntry('$k', '$v')) : const {};
+      });
+      if (e.status == 200 && mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) {
+        setState(
+            () => _error = 'Could not reach the server. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    InputDecoration deco(String label, String field) =>
+        InputDecoration(labelText: label, errorText: _fieldErrors[field]);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Create an account')),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _form,
+                  child: AutofillGroup(
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_error != null && _fieldErrors.isEmpty) ...[
+                            Text(_error!,
+                                key: const Key('register-error'),
+                                style:
+                                    TextStyle(color: theme.colorScheme.error)),
+                            const SizedBox(height: 12),
+                          ],
+                          TextFormField(
+                            key: const Key('register-name'),
+                            controller: _name,
+                            autofillHints: const [AutofillHints.name],
+                            decoration: deco('Name', 'name'),
+                            validator: (v) => (v ?? '').trim().isEmpty
+                                ? 'Enter your name'
+                                : null,
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            key: const Key('register-email'),
+                            controller: _email,
+                            keyboardType: TextInputType.emailAddress,
+                            autofillHints: const [AutofillHints.email],
+                            decoration: deco('Email address', 'email'),
+                            validator: (v) => (v ?? '').contains('@')
+                                ? null
+                                : 'Enter a valid email address',
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            key: const Key('register-password'),
+                            controller: _password,
+                            obscureText: true,
+                            autofillHints: const [AutofillHints.newPassword],
+                            decoration: deco('Password', 'password'),
+                            validator: (v) => (v ?? '').length < 8
+                                ? 'Use at least 8 characters'
+                                : null,
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            key: const Key('register-confirm'),
+                            controller: _confirm,
+                            obscureText: true,
+                            decoration: deco('Confirm password', ''),
+                            validator: (v) => v != _password.text
+                                ? 'The passwords do not match'
+                                : null,
+                            onFieldSubmitted: (_) => _submit(),
+                          ),
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            key: const Key('register-submit'),
+                            onPressed: _busy ? null : _submit,
+                            child: const Text('Create account'),
+                          ),
+                        ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

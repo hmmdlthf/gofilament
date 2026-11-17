@@ -1072,7 +1072,29 @@ token waits in golaravel's cache (use a shared store on several instances);
 without `panel.Sessions` the user is looked up as a `PanelUser` with the login
 id, so `TwoFactorSecret` should find users by `GetAuthIdentifier()`.
 
-Not included yet: self-registration (`Registration()` is still only a flag).
+**Sign-up and email verification**:
+
+```go
+panel.Registration().Accounts(filament.Accounts{
+    // ...the callbacks above, plus:
+    Register: func(ctx *filament.Context, name, email, passwordHash string) (auth.Authenticatable, error) {
+        // create the user; return filament.ErrEmailTaken for a used address
+    },
+    EmailVerified:        func(ctx *filament.Context, u auth.Authenticatable) (bool, error) { ... },
+    MarkEmailVerified:    func(ctx *filament.Context, u auth.Authenticatable) error { ... },
+    SendVerificationLink: func(ctx *filament.Context, u auth.Authenticatable, email, link string) error { ... },
+})
+```
+
+- `/register` (web) and `POST /api/register` create the account (throttled
+  per IP) and sign the new user in; the login screens link to it.
+- With the verification callbacks, new users get a signed link (golaravel's
+  `EmailVerificationBroker`, keyed by `VerificationSecret` or `APP_KEY`, valid
+  `VerificationTTL`, default 60 minutes). Until it is opened the web panel
+  shows only a "verify your email" page and the API answers 403 with
+  `"email_unverified": true`; the Flutter app shows a matching screen.
+  `EmailVerified` runs on every request, and existing users must count as
+  verified, so mark them before you turn this on.
 
 ### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
 
