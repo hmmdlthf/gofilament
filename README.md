@@ -1139,10 +1139,10 @@ GoFilament features a streaming data export and interactive column-mapping impor
 
 ### 📤 High-Throughput Export:
 - Stream thousands of records directly to the browser or API clients without buffering whole tables in memory.
-- Formats supported: **CSV** (`text/csv`), **TSV** (`text/tab-separated-values`), and **JSON** (`application/json`).
+- Formats supported: **CSV** (`text/csv`), **TSV** (`text/tab-separated-values`), **Excel** (`.xlsx`, `format=xlsx`) and **JSON** (`application/json`). `columns=name,email` limits the export to those columns.
 - Automatically exports configured table columns and labels, stripping HTML tags to output clean data.
 - Row-level bulk export via `tables.ExportBulkAction()`, or header actions with `tables.ExportAction()`.
-- Filter-aware: respects table search terms, active column filters, and selected record IDs.
+- Filter-aware: respects table search terms, active column filters, advanced search and selected record IDs. The web list's Export buttons (CSV and Excel) download the list as it is filtered and sorted.
 
 ```go
 // Add Export to table header actions or bulk actions
@@ -1154,11 +1154,12 @@ table.HeaderActions(
 )
 ```
 
-### 📥 Interactive Column-Mapping Import:
-- Upload CSV or TSV files via web modal (`/admin/{resource}/import`) or REST API.
-- **Smart Auto-Mapping**: Automatically normalizes file headers (e.g., `Customer Name` $\rightarrow$ `customer_name` $\rightarrow$ `name`) to match model fields.
-- **Explicit Mapping**: Override column definitions with custom mapping fields.
-- **Batch Processing & Error Resilience**: Processes rows sequentially with `OnCreate`, collecting failure logs without terminating the batch.
+### 📥 Import with preview:
+- Upload **CSV, TSV or Excel (.xlsx)** files (up to 10 MB) on the web (`/admin/{resource}/import`), from the Flutter app (an Import button when the table has `tables.ImportAction`) or through the API.
+- **Preview before saving**: the file's columns are matched to form fields (by name or label; change any of them), and every row is checked against the resource form. The preview shows the first rows with their problems and lists all rows that will be skipped; only then are the valid rows imported.
+- **Same rules as the create form**: imported rows go through form validation, `CanCreate` and `OnCreate`. Resources without a form keep the old behaviour (headers are normalized to field names).
+- Excel dates in date / datetime fields are converted from Excel day numbers.
+- API: `POST /admin/api/resources/:slug/import` with a `file` (multipart), `csv` or `file_base64` (JSON); add `dry_run=1` for the preview and `mapping` (`{"File header": "field"}`, `""` skips a column). Results list failed rows with field errors (`rows`).
 - **Real-Time Notification**: Dispatches toast and drawer notifications with success counts and warning reports via `notifications.Send(...)`.
 
 ---

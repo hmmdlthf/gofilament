@@ -94,6 +94,10 @@ class FakePanel {
 
   bool globalSearch = false;
 
+  /// Items accept imports; [importRequests] keeps each request's body.
+  bool canImport = false;
+  final List<String> importRequests = [];
+
   /// Account features sent in boot (auth.accounts); empty = none.
   Map<String, dynamic> accountFeatures = {};
 
@@ -214,6 +218,49 @@ class FakePanel {
     if (path == '/schema') return _json(_schema());
     if (path == '/widgets') return _json({'widgets': _widgets()});
 
+    if (path == '/resources/items/import') {
+      final body = utf8.decode(req.bodyBytes, allowMalformed: true);
+      importRequests.add(body);
+      final mapped = body.contains('"Mail":"email"');
+      final dry = body.contains('name="dry_run"');
+      final invalid = mapped ? 1 : 2;
+      if (!dry) {
+        return _json({
+          'imported': 2 - invalid + 1,
+          'failed': invalid,
+          'rows': [
+            {
+              'row': 3,
+              'errors': {'email': 'Enter a valid email.'}
+            }
+          ],
+        });
+      }
+      return _json({
+        'headers': ['Name', 'Mail'],
+        'mapping': {'Name': 'name', 'Mail': mapped ? 'email' : ''},
+        'fields': [
+          {'name': 'name', 'label': 'Name', 'required': true},
+          {'name': 'email', 'label': 'Email', 'required': true},
+        ],
+        'rows': [
+          {
+            'row': 2,
+            'values': {'name': 'Bea', if (mapped) 'email': 'bea@x.io'},
+            if (!mapped) 'errors': {'email': 'Required.'}
+          },
+          {
+            'row': 3,
+            'values': {'name': 'Cal', if (mapped) 'email': 'nope'},
+            'errors': {'email': mapped ? 'Enter a valid email.' : 'Required.'}
+          },
+        ],
+        'total': 2,
+        'valid': 2 - invalid,
+        'invalid': invalid,
+        'problems': [],
+      });
+    }
     if (path == '/resources/items' && req.method == 'GET') {
       return _json(_list(req.url.queryParameters));
     }
@@ -638,7 +685,11 @@ class FakePanel {
         'resource_meta': {
           'items': {
             'has_form': true,
-            'abilities': {'create': canCreate, 'delete_any': canDelete},
+            'abilities': {
+              'create': canCreate,
+              'delete_any': canDelete,
+              if (canImport) 'import': true,
+            },
             'table': {
               'actions': [
                 {'name': 'view'},

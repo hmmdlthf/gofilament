@@ -165,6 +165,11 @@ func (r *BaseResource[T]) Meta(ctx *Context) ResourceMeta {
 	}
 	if r.tableBuilder != nil {
 		m.Table = r.tableBuilder(tables.New[T]()).Meta()
+		for _, a := range m.Table.HeaderActions {
+			if a.Name == "import" {
+				m.Abilities["import"] = m.Abilities["create"]
+			}
+		}
 	}
 	return m
 }

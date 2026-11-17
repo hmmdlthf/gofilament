@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"bytes"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"github.com/golaravel/gofilament/pkg/notifications"
 	"github.com/golaravel/gofilament/pkg/tables"
 	"github.com/golaravel/golaravel/pkg/auth"
+	"github.com/golaravel/golaravel/pkg/cache"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
 	"github.com/golaravel/golaravel/pkg/router"
 )
@@ -50,6 +52,8 @@ type ImportResult struct {
 	SuccessCount int      `json:"imported"`
 	FailedCount  int      `json:"failed"`
 	Errors       []string `json:"errors,omitempty"`
+	// Rows lists the rows that were not imported (at most 200).
+	Rows []ImportRowError `json:"rows,omitempty"`
 }
 
 // ListHandlerFunc is the callback to query records for the data table.
@@ -1035,6 +1039,14 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 		return r.handleImportView(ctx, basePath)
 	})
 
+	router.POST(basePath+"/import/preview", func(c *gcontext.Context) error {
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		return r.handleImportPreview(ctx, basePath)
+	})
+
 	router.POST(basePath+"/import", func(c *gcontext.Context) error {
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
@@ -1300,7 +1312,8 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 		tbl.SetTotals(totals)
 	}
 	if r.canCreate == nil || r.canCreate(ctx) {
-		tbl.HeaderActions(tables.Action[T]("create").Label(fmt.Sprintf("New %s", r.modelName)))
+		// "New" first, keeping the table's own header actions (import, export, ...)
+		tbl.HeaderActions(append([]*tables.TableAction[T]{tables.Action[T]("create").Label(fmt.Sprintf("New %s", r.modelName))}, tbl.GetHeaderActions()...)...)
 	}
 
 	content := fmt.Sprintf(`
@@ -1791,6 +1804,9 @@ func (r *BaseResource[T]) handleExport(ctx *Context, selectedIDs ...string) erro
 	}
 
 	filters := tables.FilterValues(ctx.Request.URL.Query())
+	if adv := ctx.Query("advanced_search"); adv != "" {
+		filters["_advanced_search"] = adv
+	}
 
 	if err := r.InvokeExport(ctx, format, filterIDs, search, sortCol, sortDir, filters); err != nil {
 		return ctx.String(http.StatusInternalServerError, "Export failed: %v", err)
@@ -1815,6 +1831,9 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 	case "json":
 		ext = "json"
 		contentType = "application/json; charset=utf-8"
+	case "xlsx":
+		ext = "xlsx"
+		contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	default:
 		format = "csv"
 		ext = "csv"
@@ -1826,15 +1845,27 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 
 	var tbl *tables.Table[T]
 	var headers []string
+	var columns []tables.ColumnRenderer[T]
 	if r.tableBuilder != nil {
 		tbl = r.tableBuilder(tables.New[T]())
+		only := map[string]bool{}
+		for _, c := range strings.Split(ctx.Query("columns"), ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				only[c] = true
+			}
+		}
 		for _, col := range tbl.GetColumns() {
+			if len(only) > 0 && !only[col.GetName()] {
+				continue
+			}
+			columns = append(columns, col)
 			headers = append(headers, col.FormatLabel())
 		}
 	}
 	if len(headers) == 0 {
 		headers = []string{"ID", "Name", "Details"}
 	}
+	var xlsxRows [][]string
 
 	filterIDMap := make(map[string]bool)
 	for _, fid := range filterIDs {
@@ -1879,8 +1910,8 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 
 			if format == "json" {
 				rowMap := make(map[string]any)
-				if tbl != nil && len(tbl.GetColumns()) > 0 {
-					for _, col := range tbl.GetColumns() {
+				if tbl != nil && len(columns) > 0 {
+					for _, col := range columns {
 						raw := tbl.ExtractFieldValue(rec, col.GetName())
 						rendered := stripHTML(col.RenderCell(rec, raw))
 						if rendered != "" {
@@ -1907,8 +1938,8 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 				firstRow = false
 			} else {
 				var row []string
-				if tbl != nil && len(tbl.GetColumns()) > 0 {
-					for _, col := range tbl.GetColumns() {
+				if tbl != nil && len(columns) > 0 {
+					for _, col := range columns {
 						raw := tbl.ExtractFieldValue(rec, col.GetName())
 						cell := stripHTML(col.RenderCell(rec, raw))
 						if cell == "" && raw != nil {
@@ -1918,6 +1949,10 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 					}
 				} else {
 					row = []string{recID, fmt.Sprintf("%v", rec), "Exported from GoFilament"}
+				}
+				if format == "xlsx" {
+					xlsxRows = append(xlsxRows, row)
+					continue
 				}
 				for i := range row {
 					row[i] = csvSafeCell(row[i])
@@ -1942,6 +1977,13 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 	if format == "json" {
 		_, _ = ctx.Response.Write([]byte("\n]\n"))
 	}
+	if format == "xlsx" {
+		book, err := buildXLSX(r.pluralModelName, headers, xlsxRows)
+		if err != nil {
+			return err
+		}
+		_, _ = ctx.Response.Write(book)
+	}
 	return nil
 }
 
@@ -1949,38 +1991,7 @@ func (r *BaseResource[T]) handleImportView(ctx *Context, basePath string) error 
 	if r.canCreate != nil && !r.canCreate(ctx) {
 		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
 	}
-
-	content := fmt.Sprintf(`
-<div style="max-width: 48rem; margin: 0 auto; padding: 2rem 1rem;">
-  <div style="margin-bottom: 1.5rem;">
-    <a href="%s" style="font-size: 0.875rem; color: var(--primary-600); text-decoration: none;">&larr; Back to %s</a>
-    <h1 style="font-size: 1.875rem; font-weight: 700; color: var(--gray-900); margin-top: 0.5rem;">Import %s</h1>
-    <p style="font-size: 0.875rem; color: var(--gray-500); margin-top: 0.25rem;">
-      Upload a CSV or TSV file to bulk import records. Column headers will be automatically mapped to resource fields.
-    </p>
-  </div>
-
-  <div class="filament-card" style="padding: 2rem;">
-    <form method="POST" action="%s/import" enctype="multipart/form-data">
-      <div style="margin-bottom: 1.5rem;">
-        <label style="display: block; font-size: 0.875rem; font-weight: 500; color: var(--gray-700); margin-bottom: 0.5rem;">
-          CSV or TSV Data File
-        </label>
-        <input type="file" name="file" accept=".csv,.tsv,.txt" required class="form-control" style="padding: 0.5rem;" />
-        <p style="font-size: 0.75rem; color: var(--gray-500); margin-top: 0.375rem;">
-          Supported formats: .csv, .tsv. Need a sample format? <a href="%s/export?format=csv" style="color: var(--primary-600);">Download CSV Template</a>.
-        </p>
-      </div>
-
-      <div style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 2rem;">
-        <a href="%s" class="btn btn-secondary">Cancel</a>
-        <button type="submit" class="btn btn-primary">Start Import</button>
-      </div>
-    </form>
-  </div>
-</div>`, basePath, html.EscapeString(r.pluralModelName), html.EscapeString(r.pluralModelName), basePath, basePath, basePath)
-
-	return r.renderPage(ctx, "Import "+r.pluralModelName, content)
+	return r.renderImportUpload(ctx, basePath, http.StatusOK, "")
 }
 
 func (r *BaseResource[T]) handleImportSubmit(ctx *Context, basePath string) error {
@@ -1988,27 +1999,30 @@ func (r *BaseResource[T]) handleImportSubmit(ctx *Context, basePath string) erro
 		return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
 	}
 
-	_ = ctx.Request.ParseMultipartForm(32 << 20)
-	file, _, err := ctx.Request.FormFile("file")
-	if err != nil {
-		file, _, err = ctx.Request.FormFile("csv_file")
+	_ = ctx.Request.ParseMultipartForm(MaxImportBytes + 1<<20)
+	mapping := importFormMapping(ctx)
+
+	// From the preview page: the stashed file, then a result page.
+	if token := ctx.Request.FormValue("token"); token != "" {
+		raw, ok := r.stashedImportFile(ctx, token)
+		if !ok {
+			return r.renderImportUpload(ctx, basePath, http.StatusGone, "The preview expired. Upload the file again.")
+		}
+		result, err := r.InvokeImportCSV(ctx, bytes.NewReader(raw), mapping)
+		if err != nil {
+			return r.renderImportUpload(ctx, basePath, webStatus(err), err.Error())
+		}
+		_ = cache.Forget(r.importCacheKey(ctx, token))
+		return r.renderImportResult(ctx, basePath, result)
 	}
+
+	raw, err := uploadedImportFile(ctx)
 	if err != nil {
 		return ctx.String(http.StatusBadRequest, "Please select a valid CSV file to import")
 	}
-	defer file.Close()
-
-	mapping := make(map[string]string)
-	for k, v := range ctx.Request.PostForm {
-		if strings.HasPrefix(k, "mapping[") && strings.HasSuffix(k, "]") && len(v) > 0 {
-			src := strings.TrimSuffix(strings.TrimPrefix(k, "mapping["), "]")
-			mapping[src] = v[0]
-		}
-	}
-
-	result, err := r.InvokeImportCSV(ctx, file, mapping)
+	result, err := r.InvokeImportCSV(ctx, bytes.NewReader(raw), mapping)
 	if err != nil {
-		return ctx.String(http.StatusInternalServerError, "Import failed: %v", err)
+		return ctx.String(webStatus(err), "Import failed: %v", err)
 	}
 
 	return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s?imported=%d&failed=%d", basePath, result.SuccessCount, result.FailedCount))
@@ -2021,63 +2035,20 @@ func (r *BaseResource[T]) InvokeImportCSV(ctx *Context, rdr io.Reader, explicitM
 	if r.onCreate == nil {
 		return nil, fmt.Errorf("create handler not configured on resource")
 	}
-
-	csvReader := csv.NewReader(rdr)
-	csvReader.TrimLeadingSpace = true
-	csvReader.FieldsPerRecord = -1
-
-	headers, err := csvReader.Read()
+	raw, err := io.ReadAll(io.LimitReader(rdr, MaxImportBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CSV headers: %w", err)
+		return nil, err
 	}
-
-	var mappedFields []string
-	for _, h := range headers {
-		norm := normalizeHeader(h)
-		if field, ok := explicitMapping[norm]; ok && field != "" {
-			mappedFields = append(mappedFields, field)
-		} else if field, ok := explicitMapping[h]; ok && field != "" {
-			mappedFields = append(mappedFields, field)
-		} else {
-			mappedFields = append(mappedFields, norm)
-		}
+	rows, err := readImportTable(bytes.NewReader(raw))
+	if err != nil {
+		return nil, &forms.ValidationError{Errors: map[string]string{"file": err.Error()}}
 	}
+	_, result := r.runImport(ctx, rows, explicitMapping, false, bytes.HasPrefix(raw, []byte("PK\x03\x04")))
+	r.notifyImport(ctx, result)
+	return result, nil
+}
 
-	result := &ImportResult{}
-	rowNum := 1
-	for {
-		record, err := csvReader.Read()
-		if err == io.EOF {
-			break
-		}
-		rowNum++
-		if err != nil {
-			result.FailedCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Row %d: parse error: %v", rowNum, err))
-			continue
-		}
-
-		data := make(map[string]any)
-		for i, val := range record {
-			if i < len(mappedFields) {
-				col := mappedFields[i]
-				if col != "" {
-					data[col] = strings.TrimSpace(val)
-				}
-			}
-		}
-		if len(data) == 0 {
-			continue
-		}
-
-		if err := r.onCreate(ctx, data); err != nil {
-			result.FailedCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Row %d: %v", rowNum, err))
-		} else {
-			result.SuccessCount++
-		}
-	}
-
+func (r *BaseResource[T]) notifyImport(ctx *Context, result *ImportResult) {
 	user := "all"
 	if ctx.User() != nil {
 		user = ctx.User().GetAuthIdentifier()
@@ -2091,8 +2062,6 @@ func (r *BaseResource[T]) InvokeImportCSV(ctx *Context, rdr io.Reader, explicitM
 			Warning().
 			Body(fmt.Sprintf("Imported %d %s records with %d failures.", result.SuccessCount, r.pluralModelName, result.FailedCount)))
 	}
-
-	return result, nil
 }
 
 func (r *BaseResource[T]) InvokeImportRecords(ctx *Context, rows []map[string]any) (*ImportResult, error) {
@@ -2106,28 +2075,28 @@ func (r *BaseResource[T]) InvokeImportRecords(ctx *Context, rows []map[string]an
 	result := &ImportResult{}
 	for i, row := range rows {
 		rowNum := i + 1
-		if err := r.onCreate(ctx, row); err != nil {
+		data, err := r.validateInput(ctx, row, true)
+		if err == nil {
+			err = r.onCreate(ctx, data)
+		}
+		if err != nil {
 			result.FailedCount++
-			result.Errors = append(result.Errors, fmt.Sprintf("Record %d: %v", rowNum, err))
+			rowErr := ImportRowError{Row: rowNum}
+			var verr *forms.ValidationError
+			if errors.As(err, &verr) {
+				rowErr.Errors = verr.Errors
+			} else {
+				rowErr.Message = err.Error()
+			}
+			if len(result.Rows) < importMaxProblems {
+				result.Rows = append(result.Rows, rowErr)
+				result.Errors = append(result.Errors, fmt.Sprintf("Record %d: %s", rowNum, rowErr.describe()))
+			}
 		} else {
 			result.SuccessCount++
 		}
 	}
-
-	user := "all"
-	if ctx.User() != nil {
-		user = ctx.User().GetAuthIdentifier()
-	}
-	if result.FailedCount == 0 {
-		_ = notifications.Send(user, notifications.Make("Import Completed").
-			Success().
-			Body(fmt.Sprintf("Successfully imported %d %s records.", result.SuccessCount, r.pluralModelName)))
-	} else {
-		_ = notifications.Send(user, notifications.Make("Import Completed with Warnings").
-			Warning().
-			Body(fmt.Sprintf("Imported %d %s records with %d failures.", result.SuccessCount, r.pluralModelName, result.FailedCount)))
-	}
-
+	r.notifyImport(ctx, result)
 	return result, nil
 }
 
