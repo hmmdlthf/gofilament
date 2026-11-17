@@ -365,6 +365,91 @@ Widget sizedCell(double? width, Widget child) => width == null
             child: Align(
                 alignment: AlignmentDirectional.centerStart, child: child)));
 
+// ------------------------------------------------------------- range filters
+
+/// Edits a date or number range filter ("from,to", either side optional).
+/// Returns the new value ("" clears it), or null when cancelled.
+Future<String?> showRangeFilterDialog(
+  BuildContext context, {
+  required String label,
+  required bool dates,
+  required String value,
+}) {
+  final parts = value.split(',');
+  final from = TextEditingController(text: parts.isNotEmpty ? parts[0] : '');
+  final to = TextEditingController(text: parts.length > 1 ? parts[1] : '');
+  String fmt(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Widget field(String key, String hint, TextEditingController c) => SizedBox(
+        width: 160,
+        child: TextField(
+          key: Key(key),
+          controller: c,
+          readOnly: dates,
+          keyboardType: dates
+              ? null
+              : const TextInputType.numberWithOptions(
+                  decimal: true, signed: true),
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: hint,
+            suffixIcon: dates
+                ? const Icon(Icons.calendar_today_outlined, size: 18)
+                : null,
+          ),
+          onTap: !dates
+              ? null
+              : () async {
+                  final initial = DateTime.tryParse(c.text) ?? DateTime.now();
+                  final picked = await showDatePicker(
+                      context: context,
+                      initialDate: initial,
+                      firstDate: DateTime(1900),
+                      lastDate: DateTime(2200));
+                  if (picked != null) c.text = fmt(picked);
+                },
+        ),
+      );
+
+  return showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(label),
+      content: Wrap(spacing: 12, runSpacing: 12, children: [
+        field('range-from', dates ? 'From' : 'Min', from),
+        field('range-to', dates ? 'To' : 'Max', to),
+      ]),
+      actions: [
+        TextButton(
+            key: const Key('range-clear'),
+            onPressed: () => Navigator.pop(context, ''),
+            child: const Text('Clear')),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton(
+            key: const Key('range-apply'),
+            onPressed: () {
+              final a = from.text.trim(), b = to.text.trim();
+              Navigator.pop(context, a.isEmpty && b.isEmpty ? '' : '$a,$b');
+            },
+            child: const Text('Apply')),
+      ],
+    ),
+  );
+}
+
+/// The chip text of a range value: "Amount: 10 – 20", "Created: ≥ 2026-01-01".
+String rangeSummary(String label, String value) {
+  final p = value.split(',');
+  final a = p.isNotEmpty ? p[0] : '', b = p.length > 1 ? p[1] : '';
+  if (a.isEmpty && b.isEmpty) return label;
+  if (b.isEmpty) return '$label: ≥ $a';
+  if (a.isEmpty) return '$label: ≤ $b';
+  return '$label: $a – $b';
+}
+
 // ------------------------------------------------------ summaries & groups
 
 const summaryLabels = {

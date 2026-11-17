@@ -189,4 +189,62 @@ void main() {
     expect(s['min'], 4.5);
     expect(s['max'], 20.5);
   });
+
+  testWidgets('a number range filter sends "min,max"', (tester) async {
+    final panel = FakePanel()
+      ..extraFilters = [
+        {
+          'name': 'price',
+          'label': 'Price',
+          'type': 'number_range',
+          'column': 'price'
+        }
+      ];
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('range-from')), '10');
+    await tester.tap(find.byKey(const Key('range-apply')));
+    await tester.pumpAndSettle();
+    expect(_lastListQuery(panel)['filter_price'], '10,');
+    expect(find.text('Price: ≥ 10'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('range-to')), '99.5');
+    await tester.tap(find.byKey(const Key('range-apply')));
+    await tester.pumpAndSettle();
+    expect(_lastListQuery(panel)['filter_price'], '10,99.5');
+
+    await tester.tap(find.byKey(const Key('filter-price')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('range-clear')));
+    await tester.pumpAndSettle();
+    expect(_lastListQuery(panel).containsKey('filter_price'), isFalse);
+  });
+
+  testWidgets('a date range filter picks dates from the calendar',
+      (tester) async {
+    final panel = FakePanel()
+      ..extraFilters = [
+        {
+          'name': 'created_at',
+          'label': 'Created',
+          'type': 'date_range',
+          'column': 'created_at'
+        }
+      ];
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('filter-created_at')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('range-from')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15'));
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('range-apply')));
+    await tester.pumpAndSettle();
+    final v = _lastListQuery(panel)['filter_created_at']!;
+    expect(RegExp(r'^\d{4}-\d{2}-15,$').hasMatch(v), isTrue, reason: v);
+  });
 }

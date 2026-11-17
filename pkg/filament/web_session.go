@@ -290,6 +290,12 @@ func (p *Panel) handleWebLogin(c *gcontext.Context) error {
 		return p.renderLoginScreen(ctx, http.StatusUnauthorized, "These credentials do not match our records.", identifier)
 	}
 	p.loginSucceeded(c, identifier)
+	if needed, err := p.beginTwoFactor(c, ctx, user, remember); needed {
+		if err != nil {
+			return p.renderLoginScreen(ctx, http.StatusServiceUnavailable, "Sign-in is unavailable right now. Please try again.", identifier)
+		}
+		return c.Redirect(http.StatusSeeOther, p.path+"/two-factor-challenge")
+	}
 	if err := p.startWebSession(c, user, token, d); err != nil {
 		return p.renderLoginScreen(ctx, http.StatusServiceUnavailable, "Sign-in is unavailable right now. Please try again.", identifier)
 	}

@@ -485,6 +485,7 @@ res := filament.NewResource[*Document]("documents").
 - **👁️ Dynamic Column Toggling (Show/Hide)**: Operators can customize which columns are visible via a "Columns" dropdown menu. Preferences are automatically persisted to browser `localStorage` across page visits.
 - **↕️ Drag-and-Drop Row Reordering**: Reorder records with grip handles (`⋮⋮`). Dragging a row dispatches an asynchronous update to `POST /admin/{resource}/reorder` and `POST /admin/api/resources/{slug}/reorder`, calling `r.OnReorder(func(ctx, orderedIDs) error)`.
 - **🚀 Server-Side Sorting & Filtering**: Multi-column sorting (`↑`, `↓`), search bars, `SelectFilter`, and `TernaryFilter` (soft-deletes).
+- **📅 Range filters**: `tables.DateRangeFilter("created_at")` and `tables.NumberRangeFilter("amount")` give "from / to" inputs (web) and a range dialog (Flutter). Your list handler receives `filters["created_at"] = "2026-01-01,2026-01-31"` (either side may be empty). Turn it into SQL with `f.Condition(value)` + `tables.BuildAdvancedSearchSQLFor` (the end date is inclusive), or check in-memory records with `f.Matches(value, v)`.
 - **🧮 Summaries & grouping**: `tables.TextColumn[T]("amount").Summarize(tables.Sum, tables.Avg)` shows aggregates under the column for the page and per group (`tables.Sum`, `Avg`, `Count`, `Min`, `Max`). `res.SummariesUsing(func(ctx, search, filters) (tables.Summaries, error))` adds an "All results" row computed by your database (and `summaries` in the API). `t.Groups("status")` / `t.DefaultGroup("status")` let users group rows with a header and subtotal per group; while grouped, the list is sorted by the group column. Web and Flutter.
 - **📦 Streaming Bulk & Header Actions**: In-line View/Edit/Delete actions, multi-record delete, and streaming data export (`CSV`, `TSV`, `JSON`).
 
@@ -1013,6 +1014,42 @@ checks bearer tokens with golaravel's guard (`TokenValidator` still works).
 deprecated; existing sessions in `gofilament_web_sessions` are not carried
 over, so users sign in once more. Using a `TokenValidator` token as the web
 cookie keeps working but is superseded by `Sessions`.
+
+### 👤 Profile, password and two-factor screens
+
+`panel.Accounts(...)` turns on the web engine's account screens. Each group of
+callbacks enables one feature:
+
+```go
+panel.Accounts(filament.Accounts{
+    // Profile page (user menu → Profile)
+    Profile:       func(ctx *filament.Context, u auth.Authenticatable) (name, email string, err error) { ... },
+    UpdateProfile: func(ctx *filament.Context, u auth.Authenticatable, name, email string) error { ... },
+    // Change password (profile page) and reset password
+    PasswordHash:   func(ctx *filament.Context, u auth.Authenticatable) (string, error) { ... },
+    UpdatePassword: func(ctx *filament.Context, u auth.Authenticatable, newHash string) error { ... },
+    // Forgot password: "Forgot password?" on the sign-in page
+    FindByEmail:   func(ctx *filament.Context, email string) (auth.Authenticatable, error) { ... },
+    SendResetLink: func(ctx *filament.Context, u auth.Authenticatable, email, link string) error { ... }, // e.g. golaravel mail
+    ResetTokens:   resets, // auth.NewSQLResetTokenStore(db, dialect); default in memory
+    // Two-factor sign-in with an authenticator app (needs panel.Sessions)
+    TwoFactorSecret:     func(ctx *filament.Context, u auth.Authenticatable) (string, error) { ... },
+    SaveTwoFactorSecret: func(ctx *filament.Context, u auth.Authenticatable, secret string) error { ... },
+})
+```
+
+- Changing the password needs the current one and signs out the user's other
+  devices; a reset signs out all of them (with `panel.Sessions`).
+- Reset links are single-use, expire after `ResetTTL` (60 minutes), and the
+  page answers the same for unknown addresses. Requests are throttled.
+- With a TOTP secret saved, sign-in asks for a code after the password. Codes
+  are single-use (golaravel's cache; use a shared cache store on several
+  instances) and attempts are throttled. Turning it off needs the password.
+- The topbar now shows the signed-in user's name with the user menu
+  (Profile when available, Sign Out, and `panel.UserMenu` items).
+
+Not included yet: self-registration (`Registration()` is still only a flag),
+recovery codes, and these screens in the Flutter app.
 
 ### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
 
