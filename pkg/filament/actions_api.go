@@ -94,6 +94,9 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 		if links != nil {
 			meta["links"] = links
 		}
+		if r.versionOf != nil {
+			meta["version"] = r.versionOf(rec)
+		}
 		if r.IsSoftDeletesEnabled() {
 			trashed := r.checkIsTrashed(rec)
 			meta["trashed"] = trashed

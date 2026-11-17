@@ -93,10 +93,32 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool history = false;
+  bool savedViews = false;
+
+  /// Items accept imports; [importRequests] keeps each request's body.
+  bool canImport = false;
+  final List<String> importRequests = [];
+
+  /// Account features sent in boot (auth.accounts); empty = none.
+  Map<String, dynamic> accountFeatures = {};
+
+  /// When true, signing in needs the code "123456" (two-factor step).
+  bool twoFactorLogin = false;
+  final List<String> resetRequests = [];
+
+  /// Sign-ups received; /schema answers "email_unverified" while
+  /// [emailUnverified] is true.
+  final List<Map<String, dynamic>> registrations = [];
+  bool emailUnverified = false;
+  int verificationMails = 0;
 
   /// Versioned items: the form sends 'version' and PUT refuses a stale
   /// '_version' with 409 (edit-conflict tests).
   int? itemVersion;
+
+  /// Bodies of inline cell saves.
+  final List<Map<String, dynamic>> cellBodies = [];
   final List<Map<String, dynamic>> putBodies = [];
 
   /// Row meta merged into the list's row_meta by record id.
@@ -124,11 +146,51 @@ class FakePanel {
         'brand': brand,
         'brand_name': brand['name'],
         'theme': {'colors': colors},
-        'auth': {'login': true}
+        'auth': {
+          'login': true,
+          if (accountFeatures.isNotEmpty) 'accounts': accountFeatures,
+        }
       });
     }
-    if (path == '/login') {
-      final body = json.decode(req.body) as Map;
+    if (path == '/register') {
+      final body = Map<String, dynamic>.from(json.decode(req.body) as Map);
+      registrations.add(body);
+      if (body['email'] == 'o@acme.test') {
+        return _json({
+          'error': 'An account with this email address already exists.',
+          'errors': {
+            'email': 'An account with this email address already exists.'
+          }
+        }, 422);
+      }
+      return _json({
+        'token': 'token-1',
+        'user': {'id': '9', 'login': body['email'], 'name': body['name']},
+        'email_verified': !emailUnverified,
+      }, 201);
+    }
+    if (path == '/forgot-password') {
+      resetRequests.add('${(json.decode(req.body) as Map)['email']}');
+      return _json(
+          {'message': 'If an account uses that address, we sent a link.'});
+    }
+    final loginBody = path == '/login' || path == '/login/two-factor'
+        ? json.decode(req.body) as Map
+        : const {};
+    if (path == '/login' &&
+        twoFactorLogin &&
+        loginBody['username'] == 'owner' &&
+        loginBody['password'] == 'secret-pass') {
+      return _json({'two_factor': true, 'challenge': 'ch-1'});
+    }
+    if (path == '/login/two-factor' &&
+        (loginBody['challenge'] != 'ch-1' || loginBody['code'] != '123456')) {
+      return _json({'error': 'The code is not valid.'}, 401);
+    }
+    if (path == '/login' || path == '/login/two-factor') {
+      final body = path == '/login/two-factor'
+          ? {'username': 'owner', 'password': 'secret-pass'}
+          : loginBody;
       if (body['username'] == 'owner' && body['password'] == 'secret-pass') {
         return _json({
           'token': 'token-1',
@@ -145,9 +207,62 @@ class FakePanel {
     if (!authed) return _json({'error': 'Unauthorized'}, 401);
 
     if (path == '/logout') return _json({'status': 'logged_out'});
+    if (path == '/email/verification-notification') {
+      verificationMails++;
+      return _json({'email_verified': !emailUnverified});
+    }
+    if (path == '/schema' && emailUnverified) {
+      return _json({
+        'error': 'Verify your email address to continue.',
+        'email_unverified': true
+      }, 403);
+    }
     if (path == '/schema') return _json(_schema());
     if (path == '/widgets') return _json({'widgets': _widgets()});
 
+    if (path == '/resources/items/import') {
+      final body = utf8.decode(req.bodyBytes, allowMalformed: true);
+      importRequests.add(body);
+      final mapped = body.contains('"Mail":"email"');
+      final dry = body.contains('name="dry_run"');
+      final invalid = mapped ? 1 : 2;
+      if (!dry) {
+        return _json({
+          'imported': 2 - invalid + 1,
+          'failed': invalid,
+          'rows': [
+            {
+              'row': 3,
+              'errors': {'email': 'Enter a valid email.'}
+            }
+          ],
+        });
+      }
+      return _json({
+        'headers': ['Name', 'Mail'],
+        'mapping': {'Name': 'name', 'Mail': mapped ? 'email' : ''},
+        'fields': [
+          {'name': 'name', 'label': 'Name', 'required': true},
+          {'name': 'email', 'label': 'Email', 'required': true},
+        ],
+        'rows': [
+          {
+            'row': 2,
+            'values': {'name': 'Bea', if (mapped) 'email': 'bea@x.io'},
+            if (!mapped) 'errors': {'email': 'Required.'}
+          },
+          {
+            'row': 3,
+            'values': {'name': 'Cal', if (mapped) 'email': 'nope'},
+            'errors': {'email': mapped ? 'Enter a valid email.' : 'Required.'}
+          },
+        ],
+        'total': 2,
+        'valid': 2 - invalid,
+        'invalid': invalid,
+        'problems': [],
+      });
+    }
     if (path == '/resources/items' && req.method == 'GET') {
       return _json(_list(req.url.queryParameters));
     }
@@ -280,11 +395,24 @@ class FakePanel {
     }
     final cell = RegExp(r'^/resources/items/(\d+)/cell$').firstMatch(path);
     if (cell != null) {
-      final body = json.decode(req.body) as Map;
+      final body = Map<String, dynamic>.from(json.decode(req.body) as Map);
+      cellBodies.add({...body});
+      final sent = body['_version'];
+      if (itemVersion != null && sent != null && sent != '$itemVersion') {
+        return _json({
+          'error': 'This record was changed by someone else.',
+          'conflict': true,
+          'version': '$itemVersion',
+        }, 409);
+      }
       items.firstWhere(
               (i) => '${i['id']}' == cell.group(1))['${body['column']}'] =
           body['value'];
-      return _json({'success': true});
+      if (itemVersion != null) itemVersion = itemVersion! + 1;
+      return _json({
+        'success': true,
+        if (itemVersion != null) 'version': '$itemVersion',
+      });
     }
     final one = RegExp(r'^/resources/items/(\d+)$').firstMatch(path);
     if (one != null) {
@@ -341,6 +469,7 @@ class FakePanel {
           '${r['id']}': {
             'update': r['id'] != 2,
             'delete': r['id'] != 2,
+            if (itemVersion != null) 'version': '$itemVersion',
             ...?extraRowMeta['${r['id']}'],
             'actions': [
               if (r['archived'] != true) 'archive',
@@ -479,6 +608,7 @@ class FakePanel {
   Map<String, dynamic> _schema() => {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
+        'saved_views': savedViews,
         'client_pages': [
           for (final id in clientPages) {'id': id, 'label': id}
         ],
@@ -558,7 +688,12 @@ class FakePanel {
         'resource_meta': {
           'items': {
             'has_form': true,
-            'abilities': {'create': canCreate, 'delete_any': canDelete},
+            'abilities': {
+              'create': canCreate,
+              'delete_any': canDelete,
+              if (history) 'history': true,
+              if (canImport) 'import': true,
+            },
             'table': {
               'actions': [
                 {'name': 'view'},

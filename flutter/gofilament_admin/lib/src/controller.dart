@@ -5,7 +5,15 @@ import 'components.dart';
 import 'theme.dart';
 
 /// Where the app is in its start-up sequence.
-enum AdminStage { loading, signedOut, signedIn, failed }
+enum AdminStage {
+  loading,
+  signedOut,
+  signedIn,
+  failed,
+
+  /// Signed in, but the email address must be verified first.
+  verifyEmail,
+}
 
 /// A custom page an application adds to the panel (for example a POS screen).
 class AdminPage {
@@ -194,6 +202,8 @@ class AdminController extends ChangeNotifier {
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
         stage = AdminStage.signedOut;
+      } else if (e.isEmailUnverified) {
+        stage = AdminStage.verifyEmail;
       } else {
         error = e.message;
         stage = AdminStage.failed;
@@ -213,11 +223,42 @@ class AdminController extends ChangeNotifier {
   }
 
   /// Signs in. Throws [ApiException] with a message for the login form.
-  Future<void> login(String username, String password,
+  /// Returns a challenge id when a two-factor code is needed next
+  /// ([loginTwoFactor]).
+  Future<String?> login(String username, String password,
       {bool remember = false}) async {
-    await api.login(username, password, remember: remember);
+    final challenge = await api.login(username, password, remember: remember);
+    if (challenge != null) return challenge;
+    await _loadSchema();
+    return null;
+  }
+
+  /// Creates an account and signs it in.
+  Future<void> register(
+      String name, String email, String password, String confirmation) async {
+    await api.register(name, email, password, confirmation);
     await _loadSchema();
   }
+
+  /// Finishes a two-factor sign-in.
+  Future<void> loginTwoFactor(String challenge, String code) async {
+    await api.loginTwoFactor(challenge, code);
+    await _loadSchema();
+  }
+
+  /// Which account screens the server offers (profile, update_profile,
+  /// password, password_reset, two_factor, recovery_codes).
+  Map<String, dynamic> get accountFeatures {
+    final a = boot['auth'];
+    final f = a is Map ? a['accounts'] : null;
+    return f is Map ? Map<String, dynamic>.from(f) : const {};
+  }
+
+  /// Whether the account screen has anything to show.
+  bool get hasAccountScreen =>
+      accountFeatures['profile'] == true ||
+      accountFeatures['password'] == true ||
+      accountFeatures['two_factor'] == true;
 
   Future<void> logout() async {
     await api.logout();

@@ -49,7 +49,44 @@ type BaseRelationManager[T any] struct {
 	onDetach func(ctx *Context, parentID, childID string) error
 	onFind   func(ctx *Context, parentID, childID string) (T, error)
 
+	versionOf func(record T) string
+
 	acceptUnvalidated bool
+}
+
+// Versioned turns on edit-conflict detection for related records (see
+// BaseResource.Versioned); it needs OnFind.
+func (rm *BaseRelationManager[T]) Versioned(version func(record T) string) *BaseRelationManager[T] {
+	rm.versionOf = version
+	return rm
+}
+
+// RecordVersion returns a related record's version ("" when not Versioned).
+func (rm *BaseRelationManager[T]) RecordVersion(record any) string {
+	if rec, ok := record.(T); ok && rm.versionOf != nil {
+		return rm.versionOf(rec)
+	}
+	return ""
+}
+
+// checkVersion takes the submitted version out of data and compares it with
+// the related record's current version.
+func (rm *BaseRelationManager[T]) checkVersion(ctx *Context, parentID, childID string, data map[string]any) error {
+	raw, sent := data[VersionField]
+	delete(data, VersionField)
+	want := fmt.Sprint(raw)
+	if rm.versionOf == nil || rm.onFind == nil || !sent || want == "" {
+		return nil
+	}
+	ctx.Set(ctxExpectedVersion, want)
+	rec, err := rm.onFind(ctx, parentID, childID)
+	if err != nil {
+		return nil
+	}
+	if cur := rm.versionOf(rec); cur != want {
+		return &EditConflictError{Current: cur}
+	}
+	return nil
 }
 
 // NewRelationManager creates a new typed relation manager.
@@ -181,6 +218,9 @@ func (rm *BaseRelationManager[T]) HandleCreate(ctx *Context, parentID string, da
 // HandleUpdate fulfills RelationManager interface.
 func (rm *BaseRelationManager[T]) HandleUpdate(ctx *Context, parentID, childID string, data map[string]any) error {
 	if rm.onUpdate != nil {
+		if err := rm.checkVersion(ctx, parentID, childID, data); err != nil {
+			return err
+		}
 		data, err := rm.validateInput(ctx, parentID, data, false)
 		if err != nil {
 			return err
@@ -304,7 +344,7 @@ func (rm *BaseRelationManager[T]) Render(ctx *Context, parentBasePath, parentID 
 			editModalID,
 			html.EscapeString(rm.title),
 			editModalID,
-			form.Render(ctx.GoContext()),
+			withVersionField(form.Render(ctx.GoContext()), rm.RecordVersion(rec)),
 			editModalID,
 		))
 	}
