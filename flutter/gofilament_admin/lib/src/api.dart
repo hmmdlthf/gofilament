@@ -543,6 +543,11 @@ class AdminApi {
       _map(await _send('POST', '/resources/$slug/bulk-update',
           {'ids': ids, 'field': field, 'value': value}));
 
+  /// Saves a new row order: [ids] in order, the first at position [offset].
+  Future<void> reorder(String slug, List<String> ids, {int offset = 0}) =>
+      _send(
+          'POST', '/resources/$slug/reorder', {'order': ids, 'offset': offset});
+
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});
 

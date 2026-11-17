@@ -96,6 +96,7 @@ class FakePanel {
 
   /// Boot offers English and Arabic; Accept-Language "ar" answers RTL.
   bool bilingual = false;
+  bool reorderable = false;
   bool notificationsOn = false;
 
   /// Fields sent as resource_meta.bulk_edit.
@@ -712,6 +713,7 @@ class FakePanel {
               if (canImport) 'import': true,
             },
             'table': {
+              if (reorderable) 'reorderable': true,
               'actions': [
                 {'name': 'view'},
                 {'name': 'edit'},

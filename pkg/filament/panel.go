@@ -1212,22 +1212,10 @@ func (p *Panel) Mount(r *router.Router) {
 			}
 
 			if targetKey != "" {
-				var targetTenant Tenant
-				if p.tenantConfig.TenantLoader != nil {
-					tenants, _ := p.tenantConfig.TenantLoader(ctx)
-					for _, t := range tenants {
-						if t.GetTenantKey() == targetKey {
-							targetTenant = t
-							break
-						}
-					}
-				}
-				if targetTenant == nil && p.tenantConfig.TenantLoader != nil {
+				targetTenant, ok := p.tenantAllowed(ctx, targetKey)
+				if !ok {
 					// Not one of the user's tenants: refuse the switch.
 					return c.String(http.StatusForbidden, "403 Forbidden: Unknown tenant")
-				}
-				if targetTenant == nil {
-					targetTenant = &TenantItem{Key: targetKey, Name: targetKey}
 				}
 
 				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", isSecureRequest(c), true)
@@ -1360,7 +1348,7 @@ func (p *Panel) Mount(r *router.Router) {
 		}
 
 		for _, w := range p.widgets {
-			if w.ID() == widgetID {
+			if w.ID() == widgetID && widgetVisible(ctx, w) {
 				if chartWidget, ok := w.(interface {
 					EvaluateChartData(ctx *Context, filter string) any
 				}); ok {
@@ -1495,6 +1483,9 @@ func (p *Panel) renderDefaultDashboard(ctx *Context) error {
 		var sb strings.Builder
 		sb.WriteString(`<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">`)
 		for _, w := range sortedWidgets {
+			if !widgetVisible(ctx, w) {
+				continue
+			}
 			spanClass := "col-span-1"
 			if w.ColumnSpan() >= 3 {
 				spanClass = "col-span-1 md:col-span-3"
@@ -2010,4 +2001,12 @@ func safeLinkURL(raw string) bool {
 		return true
 	}
 	return false
+}
+
+// widgetVisible applies a widget's CanView (when it has one).
+func widgetVisible(ctx *Context, w WidgetInterface) bool {
+	if v, ok := w.(interface{ CanView(ctx *Context) bool }); ok {
+		return v.CanView(ctx)
+	}
+	return true
 }

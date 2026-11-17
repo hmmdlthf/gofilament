@@ -6,10 +6,23 @@ import (
 
 // BaseWidget provides common sorting and grid layout properties.
 type BaseWidget struct {
+	visible func(ctx *filament.Context) bool
 	id         string
 	sort       int
 	columnSpan int
 	polling    string
+}
+
+// VisibleWhen shows the widget (and serves its data) only to users for
+// whom fn returns true.
+func (w *BaseWidget) VisibleWhen(fn func(ctx *filament.Context) bool) *BaseWidget {
+	w.visible = fn
+	return w
+}
+
+// CanView reports whether the widget is shown to the request's user.
+func (w *BaseWidget) CanView(ctx *filament.Context) bool {
+	return w.visible == nil || w.visible(ctx)
 }
 
 func (w *BaseWidget) ID() string {

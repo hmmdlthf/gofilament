@@ -104,6 +104,12 @@ func (c *Context) TenantRecord() Tenant {
 	return nil
 }
 
+func (c *Context) clearTenant() {
+	c.tenant = ""
+	c.Set("current_tenant", "")
+	c.Set("filament_tenant_record", nil)
+}
+
 func (c *Context) setTenantInstance(t Tenant) {
 	if t == nil {
 		return
