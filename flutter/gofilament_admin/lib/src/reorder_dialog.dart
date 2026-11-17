@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 /// Lets the user drag rows into a new order. Returns the ids in the new
 /// order, or null when cancelled.
@@ -24,7 +25,7 @@ class _ReorderDialogState extends State<_ReorderDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Reorder'),
+      title: Text(tr('Reorder')),
       content: SizedBox(
         width: 420,
         height: 420,
@@ -49,13 +50,12 @@ class _ReorderDialogState extends State<_ReorderDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
         FilledButton(
             key: const Key('reorder-save'),
             onPressed: () =>
                 Navigator.pop(context, [for (final r in _rows) r.id]),
-            child: const Text('Save order')),
+            child: Text(tr('Save order'))),
       ],
     );
   }

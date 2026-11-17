@@ -1261,6 +1261,19 @@ panel.Roles(sqlStore.Roles(), filament.RolesConfig{    // or nil: in memory
   `roles.manage` is refused. Give the first admin a role with `*` when you
   set up the store (`store.SaveRole` / `store.SetUserRoles`).
 
+### 🌍 The Flutter app in other languages
+The Flutter app's own words (buttons, dialogs, messages) follow the panel's
+language: they come with boot as `ui_translations`, keyed by the English text.
+Arabic, German, Spanish and French are built in; add or change words for any
+language with:
+
+```go
+panel.UITranslations("pt", map[string]string{"Sign in": "Entrar", "{n} selected": "{n} selecionados"})
+```
+
+Keep placeholders such as `{n}` in the translation. Labels that come from the
+panel (resources, fields, columns) use the panel's normal translations.
+
 ### 🔖 Saved views
 Users can name the current state of a list (search, sort, filters, advanced
 search, visible columns, grouping, page size), come back to it from a *Views*

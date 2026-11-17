@@ -161,6 +161,11 @@ class FakePanel {
         'brand': brand,
         'brand_name': brand['name'],
         'theme': {'colors': colors},
+        if (req.headers['Accept-Language'] == 'de')
+          'ui_translations': {
+            'Sign in': 'Anmelden',
+            'Username or email': 'Benutzername oder E-Mail'
+          },
         if (bilingual) ...{
           'supported_locales': ['en', 'ar'],
           'locale_labels': {'en': 'English', 'ar': 'العربية'},

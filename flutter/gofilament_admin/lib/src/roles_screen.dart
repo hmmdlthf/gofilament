@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 
@@ -81,16 +82,16 @@ class _RolesScreenState extends State<RolesScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete ${role['label']}?'),
-        content: const Text('Users with this role lose its permissions.'),
+        title: Text(tr('Delete {name}?', {'name': role['label']})),
+        content: Text(tr('Users with this role lose its permissions.')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           FilledButton(
               key: const Key('role-delete-ok'),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
+              child: Text(tr('Delete'))),
         ],
       ),
     );
@@ -120,10 +121,10 @@ class _RolesScreenState extends State<RolesScreen> {
     final theme = Theme.of(context);
     final data = _data;
     return Scaffold(
-      appBar: AppBar(title: const Text('Roles'), actions: [
+      appBar: AppBar(title: Text(tr('Roles')), actions: [
         IconButton(
             key: const Key('role-new'),
-            tooltip: 'New role',
+            tooltip: tr('New role'),
             icon: const Icon(Icons.add),
             onPressed: data == null ? null : () => _edit()),
       ]),
@@ -140,7 +141,7 @@ class _RolesScreenState extends State<RolesScreen> {
                     onTap: () => _edit(r),
                     trailing: IconButton(
                       key: Key('role-delete-${r['name']}'),
-                      tooltip: 'Delete',
+                      tooltip: tr('Delete'),
                       icon: Icon(Icons.delete_outline,
                           color: theme.colorScheme.error),
                       onPressed: () => _delete(r),
@@ -149,12 +150,13 @@ class _RolesScreenState extends State<RolesScreen> {
                 ),
               if (data['can_find_users'] == true) ...[
                 const SizedBox(height: 24),
-                Text('Users', style: theme.textTheme.titleMedium),
+                Text(tr('Users'), style: theme.textTheme.titleMedium),
                 TextField(
                   key: const Key('role-user-search'),
                   controller: _query,
-                  decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search), hintText: 'Search users'),
+                  decoration: InputDecoration(
+                      prefixIcon: Icon(Icons.search),
+                      hintText: tr('Search users')),
                   onSubmitted: (_) => _loadUsers(),
                 ),
                 for (final u in _users ?? const <Map<String, dynamic>>[])
@@ -244,7 +246,7 @@ class _RoleDialogState extends State<_RoleDialog> {
     }
     final names = groups.keys.toList()..sort();
     return AlertDialog(
-      title: Text(widget.role == null ? 'New role' : 'Edit role'),
+      title: Text(widget.role == null ? tr('New role') : tr('Edit role')),
       content: SizedBox(
         width: 520,
         child: ListView(shrinkWrap: true, children: [
@@ -256,18 +258,18 @@ class _RoleDialogState extends State<_RoleDialog> {
             key: const Key('role-name'),
             controller: _name,
             decoration: InputDecoration(
-                labelText: 'Name (used in code)',
+                labelText: tr('Name (used in code)'),
                 errorText: _fieldErrors['name']),
           ),
           TextField(
             key: const Key('role-label'),
             controller: _label,
-            decoration: const InputDecoration(labelText: 'Label'),
+            decoration: InputDecoration(labelText: tr('Label')),
           ),
           CheckboxListTile(
             key: const Key('perm-*'),
             value: _perms.contains('*'),
-            title: const Text('Everything'),
+            title: Text(tr('Everything')),
             onChanged: (v) => setState(
                 () => v == true ? _perms.add('*') : _perms.remove('*')),
           ),
@@ -291,12 +293,11 @@ class _RoleDialogState extends State<_RoleDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
         FilledButton(
             key: const Key('role-save'),
             onPressed: _save,
-            child: const Text('Save')),
+            child: Text(tr('Save'))),
       ],
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'api.dart';
 import 'controller.dart';
+import 'i18n.dart';
 
 /// The topbar tenant menu: the current tenant, and the others to switch to.
 class TenantSwitcher extends StatefulWidget {
@@ -57,7 +58,7 @@ class _TenantSwitcherState extends State<TenantSwitcher> {
         orElse: () => _tenants.first)['name'];
     return PopupMenuButton<String>(
       key: const Key('tenant-menu'),
-      tooltip: 'Switch',
+      tooltip: tr('Switch tenant'),
       position: PopupMenuPosition.under,
       onSelected: _switch,
       itemBuilder: (_) => [

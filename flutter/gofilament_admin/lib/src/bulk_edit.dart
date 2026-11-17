@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 
@@ -113,7 +114,7 @@ class _BulkEditDialogState extends State<_BulkEditDialog> {
       setState(() => _error =
           errs is Map && errs[_field] != null ? '${errs[_field]}' : e.message);
     } catch (_) {
-      setState(() => _error = 'Could not reach the server.');
+      setState(() => _error = tr('Could not reach the server.'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -122,7 +123,7 @@ class _BulkEditDialogState extends State<_BulkEditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Change ${widget.ids.length} records'),
+      title: Text(tr('Change {n} records', {'n': widget.ids.length})),
       content: SizedBox(
         width: 380,
         child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -130,7 +131,7 @@ class _BulkEditDialogState extends State<_BulkEditDialog> {
             DropdownButtonFormField<String>(
               key: const Key('bulk-field'),
               initialValue: _field,
-              decoration: const InputDecoration(labelText: 'Field'),
+              decoration: InputDecoration(labelText: tr('Field')),
               items: [
                 for (final f in widget.fields)
                   DropdownMenuItem(value: f, child: Text(_label(f))),
@@ -154,12 +155,11 @@ class _BulkEditDialogState extends State<_BulkEditDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context), child: Text(tr('Cancel'))),
         FilledButton(
             key: const Key('bulk-apply'),
             onPressed: _busy ? null : _apply,
-            child: const Text('Apply')),
+            child: Text(tr('Apply'))),
       ],
     );
   }

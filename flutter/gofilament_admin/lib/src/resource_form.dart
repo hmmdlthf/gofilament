@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'i18n.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -202,8 +203,8 @@ class _ResourceFormState extends State<ResourceForm> {
       if (mounted) setState(() => _loadError = e.message);
     } catch (_) {
       if (mounted) {
-        setState(
-            () => _loadError = 'Could not load the form. Please try again.');
+        setState(() =>
+            _loadError = tr('Could not load the form. Please try again.'));
       }
     }
   }
@@ -305,7 +306,7 @@ class _ResourceFormState extends State<ResourceForm> {
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _saveError = 'Could not save. Please try again.');
+        setState(() => _saveError = tr('Could not save. Please try again.'));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -321,7 +322,11 @@ class _ResourceFormState extends State<ResourceForm> {
         '${widget.admin.resource(widget.slug)?['model_name'] ?? ''}';
     final title = _isAction
         ? '${widget.action!['modal_heading'] ?? widget.action!['label'] ?? ''}'
-        : (widget.readOnly ? model : (_isEdit ? 'Edit $model' : 'New $model'));
+        : (widget.readOnly
+            ? model
+            : (_isEdit
+                ? tr('Edit {name}', {'name': model})
+                : tr('New {name}', {'name': model})));
 
     Widget body;
     if (_loadError != null) {
@@ -367,14 +372,14 @@ class _ResourceFormState extends State<ResourceForm> {
                                 });
                                 _load();
                               },
-                              child: const Text('Reload'),
+                              child: Text(tr('Reload')),
                             ),
                             FilledButton(
                               key: const Key('conflict-overwrite'),
                               style: FilledButton.styleFrom(
                                   backgroundColor: theme.colorScheme.error),
                               onPressed: _saving ? null : _save,
-                              child: const Text('Overwrite'),
+                              child: Text(tr('Overwrite')),
                             ),
                           ]),
                         ),
@@ -409,14 +414,14 @@ class _ResourceFormState extends State<ResourceForm> {
                 widget.admin.can(widget.slug, 'history'))
               IconButton(
                 key: const Key('form-history'),
-                tooltip: 'History',
+                tooltip: tr('History'),
                 icon: const Icon(Icons.history),
                 onPressed: () => showRecordHistory(context,
                     api: widget.admin.api, slug: widget.slug, id: widget.id!),
               ),
             IconButton(
               key: const Key('form-close'),
-              tooltip: 'Close',
+              tooltip: tr('Close'),
               icon: const Icon(Icons.close),
               onPressed: () => Navigator.of(context).pop(false),
             ),
@@ -452,7 +457,7 @@ class _ResourceFormState extends State<ResourceForm> {
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : Text(_isAction
                         ? '${widget.action!['label'] ?? 'Run'}'
-                        : (_isEdit ? 'Save changes' : 'Create')),
+                        : (_isEdit ? tr('Save changes') : 'Create')),
               ),
             ],
           ]),
@@ -639,7 +644,7 @@ class _ResourceFormState extends State<ResourceForm> {
       final builder = widget.admin.components.fields['${f['component']}'];
       if (builder == null) {
         return _unsupported(
-            context, label, 'This field is not available in this app.');
+            context, label, tr('This field is not available in this app.'));
       }
       return FormField<dynamic>(
         key: Key('field-$name'),
@@ -710,7 +715,7 @@ class _ResourceFormState extends State<ResourceForm> {
           }
           if (type == 'email' &&
               !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text)) {
-            return 'Enter a valid email address';
+            return tr('Enter a valid email address');
           }
           return null;
         },
@@ -812,7 +817,7 @@ class _ResourceFormState extends State<ResourceForm> {
     }
 
     return _unsupported(
-        context, label, 'This field type cannot be edited here yet.');
+        context, label, tr('This field type cannot be edited here yet.'));
   }
 
   Future<void> _pickDate(
@@ -1001,7 +1006,7 @@ class _OptionPickerState extends State<_OptionPicker> {
               controller: _query,
               autofocus: true,
               decoration: InputDecoration(
-                hintText: 'Search ${widget.title}'.trim(),
+                hintText: tr('Search {name}', {'name': widget.title}).trim(),
                 prefixIcon: const Icon(Icons.search, size: 20),
               ),
               onChanged: (v) {
@@ -1019,7 +1024,7 @@ class _OptionPickerState extends State<_OptionPicker> {
                 ListTile(
                   dense: true,
                   leading: const Icon(Icons.clear, size: 18),
-                  title: const Text('None'),
+                  title: Text(tr('None')),
                   onTap: () => Navigator.pop(context, FieldOption('', '')),
                 ),
               for (final o in _results)
@@ -1033,7 +1038,7 @@ class _OptionPickerState extends State<_OptionPicker> {
               if (_results.isEmpty && !_loading)
                 Padding(
                   padding: const EdgeInsets.all(20),
-                  child: Text('No matches',
+                  child: Text(tr('No matches'),
                       textAlign: TextAlign.center,
                       style:
                           TextStyle(color: theme.colorScheme.onSurfaceVariant)),
@@ -1046,7 +1051,7 @@ class _OptionPickerState extends State<_OptionPicker> {
               padding: const EdgeInsets.all(8),
               child: TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel')),
+                  child: Text(tr('Cancel'))),
             ),
           ),
         ]),

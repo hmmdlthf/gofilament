@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'i18n.dart';
 
 import 'account.dart';
 import 'controller.dart';
@@ -390,7 +391,7 @@ class _TopBar extends StatelessWidget {
       child: Row(children: [
         if (showMenu)
           IconButton(
-            tooltip: 'Menu',
+            tooltip: tr('Menu'),
             icon: const Icon(Icons.menu),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
@@ -408,7 +409,7 @@ class _TopBar extends StatelessWidget {
         if (onSearch != null)
           IconButton(
             key: const Key('global-search'),
-            tooltip: 'Search',
+            tooltip: tr('Search'),
             icon: const Icon(Icons.search),
             onPressed: onSearch,
           ),
@@ -416,8 +417,8 @@ class _TopBar extends StatelessWidget {
             admin.brand['theme_mode'] != 'light')
           IconButton(
             tooltip: theme.brightness == Brightness.dark
-                ? 'Light mode'
-                : 'Dark mode',
+                ? tr('Light mode')
+                : tr('Dark mode'),
             icon: Icon(theme.brightness == Brightness.dark
                 ? Icons.light_mode_outlined
                 : Icons.dark_mode_outlined),
@@ -426,7 +427,7 @@ class _TopBar extends StatelessWidget {
         const SizedBox(width: 4),
         PopupMenuButton<String>(
           key: const Key('account-menu'),
-          tooltip: 'Account',
+          tooltip: tr('Account'),
           position: PopupMenuPosition.under,
           onSelected: (v) {
             if (v == 'logout') admin.logout();
@@ -457,23 +458,23 @@ class _TopBar extends StatelessWidget {
             ),
             const PopupMenuDivider(),
             if (admin.schema['manage_roles'] == true)
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 key: Key('account-menu-roles'),
                 value: 'roles',
                 child: Row(children: [
                   Icon(Icons.admin_panel_settings_outlined, size: 18),
                   SizedBox(width: 10),
-                  Text('Roles')
+                  Text(tr('Roles'))
                 ]),
               ),
             if (admin.hasAccountScreen)
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 key: Key('account-menu-profile'),
                 value: 'account',
                 child: Row(children: [
                   Icon(Icons.manage_accounts_outlined, size: 18),
                   SizedBox(width: 10),
-                  Text('Your account')
+                  Text(tr('Your account'))
                 ]),
               ),
             for (final l in admin.languages.entries)
@@ -484,12 +485,12 @@ class _TopBar extends StatelessWidget {
                 child: Text(l.value),
               ),
             if (admin.languages.isNotEmpty) const PopupMenuDivider(),
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               value: 'logout',
               child: Row(children: [
                 Icon(Icons.logout, size: 18),
                 SizedBox(width: 10),
-                Text('Sign out')
+                Text(tr('Sign out'))
               ]),
             ),
           ],

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'i18n.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -213,7 +214,7 @@ class AdminApi {
     if (data['two_factor'] == true) {
       final challenge = '${data['challenge'] ?? ''}';
       if (challenge.isEmpty) {
-        throw ApiException(500, 'The server did not return a challenge');
+        throw ApiException(500, tr('The server did not return a challenge'));
       }
       return challenge;
     }
@@ -232,7 +233,7 @@ class AdminApi {
     token = data['token'] as String?;
     user = _map(data['user']);
     if (token == null || token!.isEmpty) {
-      throw ApiException(500, 'The server did not return a session');
+      throw ApiException(500, tr('The server did not return a session'));
     }
     await _store.write(
         '$_key:session',
@@ -285,7 +286,7 @@ class AdminApi {
     }));
     if (data['token'] == null) {
       throw ApiException(
-          200, 'Your account was created. Sign in to continue.', data);
+          200, tr('Your account was created. Sign in to continue.'), data);
     }
     await _storeSession(data);
   }

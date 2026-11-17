@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'i18n.dart';
 
 import 'package:flutter/material.dart';
 
@@ -56,7 +57,7 @@ class _NotificationBellState extends State<NotificationBell> {
   Widget build(BuildContext context) {
     return IconButton(
       key: const Key('notifications'),
-      tooltip: 'Notifications',
+      tooltip: tr('Notifications'),
       onPressed: _open,
       icon: Badge(
         key: const Key('notifications-badge'),
@@ -137,7 +138,7 @@ class _NotificationsDialogState extends State<_NotificationsDialog> {
     if (items == null) {
       body = const Center(child: CircularProgressIndicator());
     } else if (items.isEmpty) {
-      body = const Text('No notifications.', key: Key('notifications-empty'));
+      body = Text(tr('No notifications.'), key: Key('notifications-empty'));
     } else {
       body = ListView.separated(
         shrinkWrap: true,
@@ -173,7 +174,7 @@ class _NotificationsDialogState extends State<_NotificationsDialog> {
       );
     }
     return AlertDialog(
-      title: const Text('Notifications'),
+      title: Text(tr('Notifications')),
       content: SizedBox(width: 420, child: body),
       actions: [
         TextButton(
@@ -182,7 +183,7 @@ class _NotificationsDialogState extends State<_NotificationsDialog> {
             await widget.api.clearNotifications();
             _load();
           },
-          child: const Text('Clear'),
+          child: Text(tr('Clear')),
         ),
         TextButton(
           key: const Key('notifications-read-all'),
@@ -190,11 +191,10 @@ class _NotificationsDialogState extends State<_NotificationsDialog> {
             await widget.api.markAllNotificationsRead();
             _load();
           },
-          child: const Text('Mark all read'),
+          child: Text(tr('Mark all read')),
         ),
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close')),
+            onPressed: () => Navigator.pop(context), child: Text(tr('Close'))),
       ],
     );
   }

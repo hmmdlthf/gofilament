@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 import 'controller.dart';
@@ -67,7 +68,9 @@ class _AccountScreenState extends State<AccountScreen> {
     } on ApiException catch (e) {
       if (mounted) setState(() => _loadError = e.message);
     } catch (_) {
-      if (mounted) setState(() => _loadError = 'Could not reach the server.');
+      if (mounted) {
+        setState(() => _loadError = tr('Could not reach the server.'));
+      }
     }
   }
 
@@ -86,7 +89,7 @@ class _AccountScreenState extends State<AccountScreen> {
     } on ApiException catch (e) {
       if (mounted) _toast(e.message, error: true);
     } catch (_) {
-      if (mounted) _toast('Could not reach the server.', error: true);
+      if (mounted) _toast(tr('Could not reach the server.'), error: true);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -114,7 +117,7 @@ class _AccountScreenState extends State<AccountScreen> {
           'name': a['name'],
           'email': a['email'],
         };
-        _toast('Your profile was saved.');
+        _toast(tr('Your profile was saved.'));
       });
 
   Future<void> _changePassword() => _run(() async {
@@ -122,11 +125,11 @@ class _AccountScreenState extends State<AccountScreen> {
         _current.clear();
         _password.clear();
         _confirm.clear();
-        _toast('Your password was changed.');
+        _toast(tr('Your password was changed.'));
       });
 
   Future<void> _startTwoFactor() async {
-    final pw = await _askPassword('Set up two-factor sign-in');
+    final pw = await _askPassword(tr('Set up two-factor sign-in'));
     if (pw == null) return;
     await _run(() async {
       final setup = await api.twoFactorEnable(pw);
@@ -143,11 +146,11 @@ class _AccountScreenState extends State<AccountScreen> {
           _setup = null;
           _takeCodes(reply);
         });
-        _toast('Two-factor sign-in is on.');
+        _toast(tr('Two-factor sign-in is on.'));
       });
 
   Future<void> _disableTwoFactor() async {
-    final pw = await _askPassword('Turn off two-factor sign-in');
+    final pw = await _askPassword(tr('Turn off two-factor sign-in'));
     if (pw == null) return;
     await _run(() async {
       final reply = await api.twoFactorDisable(pw);
@@ -155,12 +158,12 @@ class _AccountScreenState extends State<AccountScreen> {
         _account = {...?_account, ...reply};
         _freshCodes = null;
       });
-      _toast('Two-factor sign-in is off.');
+      _toast(tr('Two-factor sign-in is off.'));
     });
   }
 
   Future<void> _newCodes() async {
-    final pw = await _askPassword('Make new recovery codes');
+    final pw = await _askPassword(tr('Make new recovery codes'));
     if (pw == null) return;
     await _run(() async {
       final reply = await api.newRecoveryCodes(pw);
@@ -209,7 +212,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         key: const Key('account-name'),
                         controller: _name,
                         readOnly: _features['update_profile'] != true,
-                        decoration: const InputDecoration(labelText: 'Name'),
+                        decoration: InputDecoration(labelText: tr('Name')),
                       ),
                       gap,
                       TextField(
@@ -218,7 +221,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         readOnly: _features['update_profile'] != true,
                         keyboardType: TextInputType.emailAddress,
                         decoration:
-                            const InputDecoration(labelText: 'Email address'),
+                            InputDecoration(labelText: tr('Email address')),
                       ),
                       if (_features['update_profile'] == true) ...[
                         gap,
@@ -227,37 +230,37 @@ class _AccountScreenState extends State<AccountScreen> {
                           child: FilledButton(
                               key: const Key('account-save'),
                               onPressed: _busy ? null : _saveProfile,
-                              child: const Text('Save profile')),
+                              child: Text(tr('Save profile'))),
                         ),
                       ],
                     ]),
                   if (_features['password'] == true)
                     section(
-                        'Change password',
+                        tr('Change password'),
                         key: const Key('account-password'),
                         [
                           TextField(
                             key: const Key('account-current-password'),
                             controller: _current,
                             obscureText: true,
-                            decoration: const InputDecoration(
-                                labelText: 'Current password'),
+                            decoration: InputDecoration(
+                                labelText: tr('Current password')),
                           ),
                           gap,
                           TextField(
                             key: const Key('account-new-password'),
                             controller: _password,
                             obscureText: true,
-                            decoration: const InputDecoration(
-                                labelText: 'New password'),
+                            decoration:
+                                InputDecoration(labelText: tr('New password')),
                           ),
                           gap,
                           TextField(
                             key: const Key('account-confirm-password'),
                             controller: _confirm,
                             obscureText: true,
-                            decoration: const InputDecoration(
-                                labelText: 'Confirm new password'),
+                            decoration: InputDecoration(
+                                labelText: tr('Confirm new password')),
                           ),
                           gap,
                           Align(
@@ -265,17 +268,17 @@ class _AccountScreenState extends State<AccountScreen> {
                             child: FilledButton(
                                 key: const Key('account-change-password'),
                                 onPressed: _busy ? null : _changePassword,
-                                child: const Text('Change password')),
+                                child: Text(tr('Change password'))),
                           ),
                         ]),
                   if (_features['two_factor'] == true)
                     section(
-                        'Two-factor sign-in',
+                        tr('Two-factor sign-in'),
                         key: const Key('account-two-factor'),
                         [
                           if (_setup != null) ...[
-                            const Text(
-                                'Add this key to your authenticator app, then enter the code it shows.'),
+                            Text(tr(
+                                'Add this key to your authenticator app, then enter the code it shows.')),
                             gap,
                             SelectableText('${_setup!['secret']}',
                                 key: const Key('two-factor-secret'),
@@ -286,14 +289,14 @@ class _AccountScreenState extends State<AccountScreen> {
                             Wrap(spacing: 8, children: [
                               TextButton.icon(
                                 icon: const Icon(Icons.copy, size: 16),
-                                label: const Text('Copy key'),
+                                label: Text(tr('Copy key')),
                                 onPressed: () => Clipboard.setData(
                                     ClipboardData(
                                         text: '${_setup!['secret']}')),
                               ),
                               TextButton.icon(
                                 icon: const Icon(Icons.open_in_new, size: 16),
-                                label: const Text('Open in authenticator app'),
+                                label: Text(tr('Open in authenticator app')),
                                 onPressed: () =>
                                     openLink('${_setup!['otpauth_uri']}'),
                               ),
@@ -303,7 +306,7 @@ class _AccountScreenState extends State<AccountScreen> {
                               controller: _code,
                               keyboardType: TextInputType.number,
                               decoration:
-                                  const InputDecoration(labelText: 'Code'),
+                                  InputDecoration(labelText: tr('Code')),
                               onSubmitted: (_) => _confirmTwoFactor(),
                             ),
                             gap,
@@ -311,15 +314,15 @@ class _AccountScreenState extends State<AccountScreen> {
                               FilledButton(
                                   key: const Key('two-factor-confirm'),
                                   onPressed: _busy ? null : _confirmTwoFactor,
-                                  child: const Text('Turn on')),
+                                  child: Text(tr('Turn on'))),
                               const SizedBox(width: 8),
                               TextButton(
                                   onPressed: () =>
                                       setState(() => _setup = null),
-                                  child: const Text('Cancel')),
+                                  child: Text(tr('Cancel'))),
                             ]),
                           ] else if (twoFactorOn) ...[
-                            const Text('Two-factor sign-in is on.'),
+                            Text(tr('Two-factor sign-in is on.')),
                             if (_freshCodes != null) ...[
                               gap,
                               Container(
@@ -333,8 +336,7 @@ class _AccountScreenState extends State<AccountScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
-                                          'Save these recovery codes. Each one signs you in once if you lose your phone. They will not be shown again.',
+                                      Text(tr('Save these recovery codes. Each one signs you in once if you lose your phone. They will not be shown again.'),
                                           style: TextStyle(
                                               fontWeight: FontWeight.w600)),
                                       const SizedBox(height: 8),
@@ -343,7 +345,7 @@ class _AccountScreenState extends State<AccountScreen> {
                                               fontFamily: 'monospace')),
                                       TextButton.icon(
                                         icon: const Icon(Icons.copy, size: 16),
-                                        label: const Text('Copy codes'),
+                                        label: Text(tr('Copy codes')),
                                         onPressed: () => Clipboard.setData(
                                             ClipboardData(
                                                 text: _freshCodes!.join('\n'))),
@@ -354,7 +356,9 @@ class _AccountScreenState extends State<AccountScreen> {
                             if (_features['recovery_codes'] == true) ...[
                               gap,
                               Text(
-                                  'Recovery codes left: ${_account!['recovery_codes_left'] ?? 0}',
+                                  tr('Recovery codes left: {n}', {
+                                    'n': _account!['recovery_codes_left'] ?? 0
+                                  }),
                                   key: const Key('recovery-codes-left')),
                             ],
                             gap,
@@ -363,25 +367,24 @@ class _AccountScreenState extends State<AccountScreen> {
                                 OutlinedButton(
                                     key: const Key('recovery-codes-new'),
                                     onPressed: _busy ? null : _newCodes,
-                                    child:
-                                        const Text('Make new recovery codes')),
+                                    child: Text(tr('Make new recovery codes'))),
                               OutlinedButton(
                                   key: const Key('two-factor-disable'),
                                   style: OutlinedButton.styleFrom(
                                       foregroundColor: theme.colorScheme.error),
                                   onPressed: _busy ? null : _disableTwoFactor,
-                                  child: const Text('Turn off')),
+                                  child: Text(tr('Turn off'))),
                             ]),
                           ] else ...[
-                            const Text(
-                                'Ask for a code from an authenticator app when you sign in.'),
+                            Text(tr(
+                                'Ask for a code from an authenticator app when you sign in.')),
                             gap,
                             Align(
                               alignment: Alignment.centerLeft,
                               child: FilledButton(
                                   key: const Key('two-factor-setup'),
                                   onPressed: _busy ? null : _startTwoFactor,
-                                  child: const Text('Set up')),
+                                  child: Text(tr('Set up'))),
                             ),
                           ],
                         ]),
@@ -391,7 +394,7 @@ class _AccountScreenState extends State<AccountScreen> {
       ]);
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Your account')),
+      appBar: AppBar(title: Text(tr('Your account'))),
       body: body,
     );
   }
@@ -422,17 +425,17 @@ class _PasswordPromptState extends State<_PasswordPrompt> {
           controller: _c,
           obscureText: true,
           autofocus: true,
-          decoration: const InputDecoration(labelText: 'Current password'),
+          decoration: InputDecoration(labelText: tr('Current password')),
           onSubmitted: (v) => Navigator.pop(context, v),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: Text(tr('Cancel'))),
           FilledButton(
               key: const Key('confirm-password-ok'),
               onPressed: () => Navigator.pop(context, _c.text),
-              child: const Text('Continue')),
+              child: Text(tr('Continue'))),
         ],
       );
 }
@@ -458,11 +461,11 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
         await widget.admin.refresh();
         return;
       }
-      _message = 'A new verification link was sent to your email address.';
+      _message = tr('A new verification link was sent to your email address.');
     } on ApiException catch (e) {
       _message = e.message;
     } catch (_) {
-      _message = 'Could not reach the server.';
+      _message = tr('Could not reach the server.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -483,12 +486,12 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Verify your email',
+                    Text(tr('Verify your email'),
                         style: theme.textTheme.titleLarge
                             ?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 12),
-                    const Text(
-                        'Before you continue, open the link we emailed you to verify your address.'),
+                    Text(tr(
+                        'Before you continue, open the link we emailed you to verify your address.')),
                     if (_message != null) ...[
                       const SizedBox(height: 12),
                       Text(_message!,
@@ -499,18 +502,18 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                     FilledButton(
                       key: const Key('verify-continue'),
                       onPressed: _busy ? null : widget.admin.refresh,
-                      child: const Text('I have verified it'),
+                      child: Text(tr('I have verified it')),
                     ),
                     const SizedBox(height: 8),
                     OutlinedButton(
                       key: const Key('verify-resend'),
                       onPressed: _busy ? null : _resend,
-                      child: const Text('Send the link again'),
+                      child: Text(tr('Send the link again')),
                     ),
                     TextButton(
                       key: const Key('verify-logout'),
                       onPressed: widget.admin.logout,
-                      child: const Text('Sign out'),
+                      child: Text(tr('Sign out')),
                     ),
                   ]),
             ),

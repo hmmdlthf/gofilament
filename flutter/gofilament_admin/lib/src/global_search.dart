@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'i18n.dart';
 
 import 'package:flutter/material.dart';
 
@@ -78,7 +79,7 @@ class _GlobalSearchDialogState extends State<GlobalSearchDialog> {
               key: const Key('global-search-input'),
               autofocus: true,
               decoration: InputDecoration(
-                hintText: 'Search everything',
+                hintText: tr('Search everything'),
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _loading
                     ? const Padding(
@@ -97,7 +98,7 @@ class _GlobalSearchDialogState extends State<GlobalSearchDialog> {
             child: _query.isNotEmpty && !_loading && _groups.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text('No results for "$_query".',
+                    child: Text(tr('No results for "{q}".', {'q': _query}),
                         style: TextStyle(
                             color: theme.colorScheme.onSurfaceVariant)),
                   )

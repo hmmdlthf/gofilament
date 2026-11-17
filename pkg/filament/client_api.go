@@ -290,6 +290,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 			"supported_locales": p.locales,
 			"locale_labels":     p.GetLocaleLabels(),
 			"translations":      p.GetTranslations(ctx.Locale()),
+			"ui_translations":   p.GetUITranslations(ctx.Locale()),
 			"version":           p.GetVersion(),
 			"build_id":          p.GetBuildID(),
 		})

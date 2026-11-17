@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'i18n.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -163,7 +164,7 @@ class _FileFieldEditorState extends State<FileFieldEditor> {
               trailing: widget.enabled
                   ? IconButton(
                       key: Key('$name-file-remove-$i'),
-                      tooltip: 'Remove',
+                      tooltip: tr('Remove'),
                       icon: const Icon(Icons.close, size: 18),
                       onPressed: () {
                         setState(() => _files.removeAt(i));
@@ -184,7 +185,7 @@ class _FileFieldEditorState extends State<FileFieldEditor> {
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.upload_file_outlined),
               label: Text(_files.isEmpty || _multiple
-                  ? (image ? 'Choose image' : 'Choose file')
+                  ? (image ? tr('Choose image') : tr('Choose file'))
                   : 'Replace'),
             ),
         ]),

@@ -127,6 +127,7 @@ type Panel struct {
 	webSessions         webSessionStore
 	crossOrigin         *http.CrossOriginProtection
 	crossOriginOnce     sync.Once
+	uiTranslations      map[string]map[string]string
 	roles               *rolesState
 	impersonation       *Impersonation
 	jobs                *jobRunner

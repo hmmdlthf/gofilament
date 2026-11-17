@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'i18n.dart';
 
 import 'api.dart';
 import 'chart.dart';
@@ -47,7 +48,7 @@ class _DashboardPageState extends State<DashboardPage> {
       if (mounted && _widgets == null) setState(() => _error = e.message);
     } catch (_) {
       if (mounted && _widgets == null) {
-        setState(() => _error = 'Could not load the dashboard.');
+        setState(() => _error = tr('Could not load the dashboard.'));
       }
     }
   }
@@ -68,11 +69,14 @@ class _DashboardPageState extends State<DashboardPage> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Text(name.isEmpty ? 'Welcome' : 'Welcome back, $name',
+          Text(
+              name.isEmpty
+                  ? 'Welcome'
+                  : tr('Welcome back, {name}', {'name': name}),
               style: theme.textTheme.headlineSmall
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text('Here is how things stand right now.',
+          Text(tr('Here is how things stand right now.'),
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 20),
@@ -92,7 +96,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Padding(
               padding: const EdgeInsets.only(top: 40),
               child: Center(
-                child: Text('Nothing to show yet.',
+                child: Text(tr('Nothing to show yet.'),
                     style:
                         TextStyle(color: theme.colorScheme.onSurfaceVariant)),
               ),
@@ -205,7 +209,7 @@ class _CustomWidget extends StatelessWidget {
       body = Text('${dto['error']}',
           style: TextStyle(color: theme.colorScheme.error));
     } else if (builder == null) {
-      body = Text('This widget is not available in this app.',
+      body = Text(tr('This widget is not available in this app.'),
           style: TextStyle(color: theme.colorScheme.onSurfaceVariant));
     } else {
       body = builder(context, AdminWidgetContext(admin: admin, widget: dto));
