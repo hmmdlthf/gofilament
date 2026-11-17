@@ -429,10 +429,19 @@ class AdminApi {
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});
 
-  Future<void> updateCell(
-          String slug, String id, String column, dynamic value) =>
-      _send('POST', '/resources/$slug/$id/cell',
-          {'column': column, 'value': value});
+  /// Saves one cell. With [version] (the row's version from row meta) the
+  /// server refuses the change with 409 when the record changed meanwhile.
+  /// Returns the record's new version, when the resource is versioned.
+  Future<String?> updateCell(
+      String slug, String id, String column, dynamic value,
+      {String? version}) async {
+    final data = _map(await _send('POST', '/resources/$slug/$id/cell', {
+      'column': column,
+      'value': value,
+      if (version != null) '_version': version,
+    }));
+    return data['version']?.toString();
+  }
 
   // ---------------------------------------------------------------- actions
 

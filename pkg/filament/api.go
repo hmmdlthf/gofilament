@@ -1683,16 +1683,30 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		if invoker, ok := res.(interface {
 			InvokeCellUpdate(ctx *Context, id, column string, value any) error
 		}); ok {
+			vc, versioned := res.(versionChecker)
+			if versioned {
+				if err := vc.checkCellVersion(ctx, id, data); err != nil {
+					if conflict, ok := err.(*EditConflictError); ok {
+						return c.JSON(http.StatusConflict, conflictJSON(conflict))
+					}
+				}
+			}
 			if err := invoker.InvokeCellUpdate(ctx, id, col, val); err != nil {
 				return p.apiError(c, err)
 			}
-			return c.JSON(http.StatusOK, map[string]any{
+			out := map[string]any{
 				"success": true,
 				"id":      id,
 				"column":  col,
 				"value":   val,
 				"message": "Cell updated successfully",
-			})
+			}
+			if versioned {
+				if v := vc.currentVersion(ctx, id); v != "" {
+					out["version"] = v
+				}
+			}
+			return c.JSON(http.StatusOK, out)
 		}
 
 		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Cell update not implemented"})
@@ -1913,4 +1927,10 @@ func (p *Panel) apiErrorStatus(c *gcontext.Context, err error, fallback int) err
 		body["errors"] = verr.Errors
 	}
 	return c.JSON(status, body)
+}
+
+// versionChecker is implemented by resources with edit-conflict detection.
+type versionChecker interface {
+	checkCellVersion(ctx *Context, id string, data map[string]any) error
+	currentVersion(ctx *Context, id string) string
 }
