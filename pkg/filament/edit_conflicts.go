@@ -129,3 +129,33 @@ func (r *BaseResource[T]) renderConflict(ctx *Context, basePath, id string, data
 		withVersionField(form.Render(ctx.GoContext()), conflict.Current), basePath, html.EscapeString(id))
 	return r.renderPageStatus(ctx, http.StatusConflict, fmt.Sprintf("Edit %s #%s", r.modelName, id), content)
 }
+
+// currentVersion reads a record's version after a save ("" when unknown).
+func (r *BaseResource[T]) currentVersion(ctx *Context, id string) string {
+	if r.versionOf == nil || r.onFind == nil {
+		return ""
+	}
+	rec, err := r.onFind(ctx, id)
+	if err != nil {
+		return ""
+	}
+	return r.versionOf(rec)
+}
+
+// conflictJSON is the 409 body of a refused JSON save.
+func conflictJSON(conflict *EditConflictError) map[string]any {
+	return map[string]any{"error": conflict.Error(), "conflict": true, "version": conflict.Current}
+}
+
+// checkCellVersion is checkVersion for inline edits: edit rights are
+// checked first so a 409 never tells others about a record.
+func (r *BaseResource[T]) checkCellVersion(ctx *Context, id string, data map[string]any) error {
+	if _, sent := data[VersionField]; !sent || r.versionOf == nil {
+		delete(data, VersionField)
+		return nil
+	}
+	if err := r.authorizeRecord(ctx, id, r.canEdit); err != nil {
+		return err
+	}
+	return r.checkVersion(ctx, id, data)
+}
