@@ -1244,12 +1244,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			perPage = max
 		}
 
-		filters := make(map[string]string)
-		for k, v := range ctx.Request.URL.Query() {
-			if strings.HasPrefix(k, "filter_") && len(v) > 0 {
-				filters[strings.TrimPrefix(k, "filter_")] = v[0]
-			}
-		}
+		filters := tables.FilterValues(ctx.Request.URL.Query())
 		if adv := ctx.Query("advanced_search"); adv != "" {
 			filters["_advanced_search"] = adv
 		}
@@ -1309,12 +1304,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 					}
 				}
 			}
-			filters := make(map[string]string)
-			for k, v := range ctx.Request.URL.Query() {
-				if strings.HasPrefix(k, "filter_") && len(v) > 0 {
-					filters[strings.TrimPrefix(k, "filter_")] = v[0]
-				}
-			}
+			filters := tables.FilterValues(ctx.Request.URL.Query())
 			if adv := ctx.Query("advanced_search"); adv != "" {
 				filters["_advanced_search"] = adv
 			}

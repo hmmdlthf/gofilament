@@ -1232,12 +1232,7 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("perPage", "15"))
 
-	filters := make(map[string]string)
-	for k, v := range ctx.Request.URL.Query() {
-		if strings.HasPrefix(k, "filter_") && len(v) > 0 {
-			filters[strings.TrimPrefix(k, "filter_")] = v[0]
-		}
-	}
+	filters := tables.FilterValues(ctx.Request.URL.Query())
 
 	var records []T
 	total := 0
@@ -1734,12 +1729,7 @@ func (r *BaseResource[T]) handleExport(ctx *Context, selectedIDs ...string) erro
 		}
 	}
 
-	filters := make(map[string]string)
-	for k, v := range ctx.Request.URL.Query() {
-		if strings.HasPrefix(k, "filter_") && len(v) > 0 {
-			filters[strings.TrimPrefix(k, "filter_")] = v[0]
-		}
-	}
+	filters := tables.FilterValues(ctx.Request.URL.Query())
 
 	if err := r.InvokeExport(ctx, format, filterIDs, search, sortCol, sortDir, filters); err != nil {
 		return ctx.String(http.StatusInternalServerError, "Export failed: %v", err)
