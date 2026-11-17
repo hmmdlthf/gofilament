@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Security: tenant could be chosen by the request**: without a `TenantLoader`, the tenant named by the `X-Tenant-ID` header, the tenant cookie, the path or the subdomain was trusted as is, so a user could act in another tenant. With a loader that returned no tenants, the raw key was used too, and a tenant guessed before the user was known stayed in place. Now only tenants from `TenantLoader`, or keys allowed by the new `TenantConfig.CanAccessTenant(ctx, key)`, are used. **Upgrade:** panels using tenancy without a `TenantLoader` must set `CanAccessTenant`, otherwise no tenant is selected.
+- **API tenant switch** accepted any tenant key and did not call `OnTenantSwitch`; it now checks membership like the web switch (403 otherwise), calls the hook and sets a Secure cookie on HTTPS.
+
 ## [v1.36.0] - 2026-11-17
 
 ### Added

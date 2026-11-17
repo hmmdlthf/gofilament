@@ -709,8 +709,17 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			}
 
 			if targetKey != "" {
-				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", false, true)
-				ctx.SetTenant(targetKey)
+				t, ok := p.tenantAllowed(ctx, targetKey)
+				if !ok {
+					return c.JSON(http.StatusForbidden, map[string]string{"error": "Unknown tenant"})
+				}
+				c.SetCookie(p.tenantConfig.CookieName, targetKey, 86400*30, "/", "", isSecureRequest(c), true)
+				ctx.setTenantInstance(t)
+				if p.tenantConfig.OnTenantSwitch != nil {
+					if err := p.tenantConfig.OnTenantSwitch(ctx, t); err != nil {
+						return p.apiError(c, err)
+					}
+				}
 			}
 			return c.JSON(http.StatusOK, map[string]any{
 				"success":       true,
