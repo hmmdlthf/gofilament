@@ -127,6 +127,7 @@ type Panel struct {
 	webSessions         webSessionStore
 	crossOrigin         *http.CrossOriginProtection
 	crossOriginOnce     sync.Once
+	impersonation       *Impersonation
 	jobs                *jobRunner
 	viewStore           SavedViewStore
 	canShareViews       func(ctx *Context) bool
@@ -943,6 +944,10 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 		return ctx, denied(c.Redirect(http.StatusSeeOther, p.path+"/email/verify"))
 	}
 
+	if p.blockedWhileImpersonating(ctx) {
+		return ctx, denied(c.String(http.StatusForbidden, "403 Forbidden: return to your own account to change this."))
+	}
+
 	if p.canAccess != nil && !p.canAccess(ctx) {
 		if strings.Contains(reqPath, "/api/") {
 			p.setCorsHeaders(c)
@@ -1307,6 +1312,7 @@ func (p *Panel) Mount(r *router.Router) {
 		// (HttpOnly, SameSite=Lax cookie; see SessionCookieName).
 		r.POST(p.path+"/login", p.handleWebLogin)
 		p.mountAccountRoutes(r)
+		p.mountImpersonationRoutes(r)
 		p.mountRegistrationRoutes(r)
 		logout := func(c *gcontext.Context) error {
 			if !p.checkCrossOrigin(c) {
@@ -1666,7 +1672,8 @@ func (p *Panel) renderTopbarHTML(ctx *Context) string {
 		sb.WriteString(p.renderLocaleSwitcherHTML(ctx))
 	}
 
-	// User menu
+	// User menu (and the "signed in as" banner while impersonating)
+	sb.WriteString(p.impersonationBannerHTML(ctx))
 	sb.WriteString(p.renderUserMenuHTML(ctx))
 	sb.WriteString(`</div>`)
 

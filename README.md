@@ -1203,6 +1203,26 @@ panel.BackgroundJobs(filament.JobsConfig{Disk: "local"}) // storage disk for res
   cache store with several instances), result files in `Dir` on the disk.
   Jobs run in the process that started them (`Concurrency` at once); a restart
   stops running jobs. Delete old files in `Dir` with a scheduled task.
+### 🎭 Impersonation ("sign in as")
+With `panel.Sessions(...)`, an admin can sign in as another user to see the
+panel as they do:
+
+```go
+panel.Impersonation(filament.Impersonation{
+    CanImpersonate: func(ctx *filament.Context, target auth.Authenticatable) bool {
+        return isAdmin(ctx.User()) && !isAdmin(target)
+    },
+    OnImpersonate: func(ctx *filament.Context, admin, target auth.Authenticatable, leaving bool) { /* audit */ },
+})
+// a row action on the users table:
+tables.Action[*User]("impersonate").Label("Sign in as").URL(func(u *User) string { return panel.ImpersonateURL(u.ID) })
+```
+
+A banner on every page shows who you are signed in as, with *Return to my
+account*. While impersonating, the user's profile, password and two-factor
+settings cannot be changed, and you cannot impersonate someone else. Only the
+web engine supports it (no API tokens are issued for other users).
+`filament.ImpersonatorID(ctx)` tells your code who is really signed in.
 
 ### 🔖 Saved views
 Users can name the current state of a list (search, sort, filters, advanced
