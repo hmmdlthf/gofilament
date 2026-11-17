@@ -1582,6 +1582,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 		if len(order) == 0 {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "No order array provided"})
 		}
+		setReorderOffset(ctx, data)
 
 		if invoker, ok := res.(interface {
 			InvokeReorder(ctx *Context, orderedIDs []string) error
