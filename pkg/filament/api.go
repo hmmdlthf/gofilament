@@ -1,6 +1,7 @@
 package filament
 
 import (
+	"bytes"
 	"errors"
 	"encoding/base64"
 	"encoding/json"
@@ -220,6 +221,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		})
 	})
 	p.mountAccountAPIRoutes(r, apiPrefix, corsPreflight)
+	p.mountJobRoutes(r)
 
 	// Panel Auth Logout Endpoint
 	r.POST(apiPrefix+"/logout", func(c *gcontext.Context) error {
@@ -1352,6 +1354,15 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				filters["_advanced_search"] = adv
 			}
 
+			if p.jobs != nil && isDryRun(c, c.Query("background")) {
+				j, err := p.startJob(ctx, "export", "Export of "+res.GetPluralModelName(), func(jctx *Context) (any, error) {
+					return nil, exporter.InvokeExport(jctx, format, filterIDs, search, sortCol, sortDir, filters)
+				})
+				if err != nil {
+					return p.apiError(c, err)
+				}
+				return c.JSON(http.StatusAccepted, j)
+			}
 			return exporter.InvokeExport(ctx, format, filterIDs, search, sortCol, sortDir, filters)
 		}
 
@@ -1399,6 +1410,21 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 					}
 					return c.JSON(http.StatusOK, preview)
 				}
+			}
+			if importer, ok := res.(interface {
+				InvokeImportCSV(ctx *Context, rdr io.Reader, explicitMapping map[string]string) (*ImportResult, error)
+			}); ok && p.jobs != nil && isDryRun(c, c.Request.FormValue("background")) {
+				raw, err := io.ReadAll(io.LimitReader(file, MaxImportBytes+1))
+				if err != nil {
+					return p.apiError(c, err)
+				}
+				j, err := p.startJob(ctx, "import", "Import of "+res.GetPluralModelName(), func(jctx *Context) (any, error) {
+					return importer.InvokeImportCSV(jctx, bytes.NewReader(raw), mapping)
+				})
+				if err != nil {
+					return p.apiError(c, err)
+				}
+				return c.JSON(http.StatusAccepted, j)
 			}
 			if importer, ok := res.(interface {
 				InvokeImportCSV(ctx *Context, rdr io.Reader, explicitMapping map[string]string) (*ImportResult, error)

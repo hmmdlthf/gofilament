@@ -1186,6 +1186,23 @@ goes through the field's validation; each record through `CanEdit` and the
 trashed check, then `OnUpdate` with just that field (or `OnBulkUpdate(fn)`
 once for all). Records that fail are reported, the others are changed. At
 most 1000 records per bulk edit.
+### ⏳ Background jobs (long exports and imports)
+
+```go
+panel.BackgroundJobs(filament.JobsConfig{Disk: "local"}) // storage disk for result files
+```
+
+- Web exports then run as a job: the user goes to a progress page
+  (`/admin/jobs/:id`) and gets a notification with a *Download* link when it
+  is ready. Imports confirmed on the preview page run as jobs too.
+- API: `GET .../export?background=1` and `POST .../import` with
+  `background=1` answer 202 with the job; `GET /admin/api/jobs`,
+  `/jobs/:id` and `/jobs/:id/download` (only the user who started it). The
+  Flutter app's Export uses this when the panel has jobs.
+- Job state is kept in golaravel's cache for `TTL` (7 days; use a shared
+  cache store with several instances), result files in `Dir` on the disk.
+  Jobs run in the process that started them (`Concurrency` at once); a restart
+  stops running jobs. Delete old files in `Dir` with a scheduled task.
 
 ### 🔖 Saved views
 Users can name the current state of a list (search, sort, filters, advanced

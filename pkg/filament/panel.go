@@ -127,6 +127,7 @@ type Panel struct {
 	webSessions         webSessionStore
 	crossOrigin         *http.CrossOriginProtection
 	crossOriginOnce     sync.Once
+	jobs                *jobRunner
 	viewStore           SavedViewStore
 	canShareViews       func(ctx *Context) bool
 	canManageViews      func(ctx *Context) bool
