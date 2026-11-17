@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Widget visibility**: every built-in widget has `VisibleWhen(fn)` (and `CanView`), like `FlutterWidget`.
+
+### Fixed
+- **Hidden widgets leaked data**: the web dashboard ignored a widget's `CanView`, and `/widgets/:id/data` (web and API) served any widget's chart data by id. Hidden widgets are now left out everywhere and their data answers 404.
+- Removed a stray `pkg/filament/api.go.orig` committed by accident.
+
 ## [v1.36.0] - 2026-11-17
 
 ### Added

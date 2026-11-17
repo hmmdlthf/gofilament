@@ -744,7 +744,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		}
 
 		for _, w := range p.widgets {
-			if w.ID() == widgetID {
+			if w.ID() == widgetID && widgetVisible(ctx, w) {
 				if chartWidget, ok := w.(interface {
 					EvaluateChartData(ctx *Context, filter string) any
 				}); ok {
@@ -1190,7 +1190,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 func (p *Panel) EvaluateWidgetDTOs(ctx *Context) []map[string]any {
 	var widgetData []map[string]any
 	for _, w := range p.widgets {
-		if v, ok := w.(interface{ CanView(ctx *Context) bool }); ok && !v.CanView(ctx) {
+		if !widgetVisible(ctx, w) {
 			continue
 		}
 		dto := map[string]any{
