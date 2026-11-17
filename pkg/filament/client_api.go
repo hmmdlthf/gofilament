@@ -507,14 +507,20 @@ func (p *Panel) registerRelationClientRoutes(r *router.Router, res ResourceInter
 			}); ok {
 				_, parentAbilities, _ = guard.RecordAbilities(ctx, parentID)
 			}
-			return c.JSON(http.StatusOK, map[string]any{
+			out := map[string]any{
 				"mode": "edit", "schema": nodes, "state": record, "option_labels": labels,
 				"abilities": map[string]bool{
 					"view":   true,
 					"update": abilities["update"] && parentAbilities["may_edit"],
 					"delete": abilities["delete"] && parentAbilities["may_edit"],
 				},
-			})
+			}
+			if v, ok := rel.(interface{ RecordVersion(record any) string }); ok {
+				if ver := v.RecordVersion(record); ver != "" {
+					out["version"] = ver
+				}
+			}
+			return c.JSON(http.StatusOK, out)
 		})
 
 		// GET .../relations/<rel>/form/options?field=&q=

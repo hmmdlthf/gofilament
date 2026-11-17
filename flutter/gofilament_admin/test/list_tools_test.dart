@@ -303,4 +303,34 @@ void main() {
     expect(find.text('All results'), findsOneWidget);
     expect(find.text('Sum 99', findRichText: true), findsOneWidget);
   });
+
+  testWidgets('an inline toggle sends the row version and reports conflicts',
+      (tester) async {
+    final panel = FakePanel()
+      ..itemVersion = 1
+      ..extraColumns = [
+        {
+          'name': 'featured',
+          'label': 'Featured',
+          'type': 'toggle',
+          'editable': true
+        },
+      ];
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('cell-featured-1')));
+    await tester.pumpAndSettle();
+    expect(panel.cellBodies.last['_version'], '1');
+    // The reply's version is used for the next edit of the row.
+    await tester.tap(find.byKey(const Key('cell-featured-1')));
+    await tester.pumpAndSettle();
+    expect(panel.cellBodies.last['_version'], '2');
+
+    panel.itemVersion = 9; // someone else saved meanwhile
+    await tester.tap(find.byKey(const Key('cell-featured-1')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('changed by someone else'), findsOneWidget);
+    expect(
+        tester.widget<Switch>(find.byKey(const Key('cell-featured-1'))).value,
+        isFalse); // rolled back
+  });
 }

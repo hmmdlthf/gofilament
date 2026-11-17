@@ -1194,6 +1194,10 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 				}
 			}
 			if err := relManager.HandleUpdate(ctx, parentID, childID, data); err != nil {
+				if conflict, ok := err.(*EditConflictError); ok {
+					return ctx.HTML(http.StatusConflict, fmt.Sprintf(`<p>%s</p><p><a href="%s/%s/edit">Reload</a></p>`,
+						html.EscapeString(conflict.Error()), basePath, html.EscapeString(parentID)))
+				}
 				return ctx.String(http.StatusInternalServerError, "Relation update error: %v", err)
 			}
 			return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s/%s/edit", basePath, parentID))
@@ -1233,6 +1237,9 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	}
 	if r.idExtractor != nil {
 		tbl.RecordID(r.idExtractor)
+	}
+	if r.versionOf != nil {
+		tbl.RecordVersion(r.versionOf)
 	}
 	if r.softDeletes {
 		tbl.SoftDeletes(true)
@@ -2331,16 +2338,25 @@ func (r *BaseResource[T]) handleCellUpdate(ctx *Context, basePath, id string) er
 		return ctx.JSON(http.StatusBadRequest, map[string]any{"error": "Column is required"})
 	}
 
+	if err := r.checkCellVersion(ctx, id, data); err != nil {
+		if conflict, ok := err.(*EditConflictError); ok {
+			return ctx.JSON(http.StatusConflict, conflictJSON(conflict))
+		}
+	}
 	if err := r.InvokeCellUpdate(ctx, id, col, val); err != nil {
 		return ctx.JSON(webStatus(err), map[string]any{"error": err.Error()})
 	}
 
-	return ctx.JSON(http.StatusOK, map[string]any{
+	out := map[string]any{
 		"success": true,
 		"id":      id,
 		"column":  col,
 		"value":   val,
-	})
+	}
+	if v := r.currentVersion(ctx, id); v != "" {
+		out["version"] = v
+	}
+	return ctx.JSON(http.StatusOK, out)
 }
 
 // authorizeReorder requires edit rights on every reordered record, since
