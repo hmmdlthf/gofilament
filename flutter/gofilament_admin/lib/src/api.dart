@@ -136,9 +136,14 @@ class AdminApi {
   String get _key =>
       'gofilament:${Uri.parse(baseUrl).host}${Uri.parse(baseUrl).path}';
 
+  /// The language the panel answers in (sent as Accept-Language); null:
+  /// the panel's default.
+  String? locale;
+
   Map<String, String> get _headers => {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        if (locale != null && locale!.isNotEmpty) 'Accept-Language': locale!,
         if (isAuthenticated) 'Authorization': 'Bearer $token',
       };
 

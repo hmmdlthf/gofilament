@@ -161,6 +161,10 @@ class AdminController extends ChangeNotifier {
       final saved = await api.readPreference('theme');
       if (saved == 'dark') themeMode = ThemeMode.dark;
       if (saved == 'light') themeMode = ThemeMode.light;
+      final savedLocale = await api.readPreference('locale');
+      if (savedLocale != null && savedLocale.isNotEmpty) {
+        api.locale = savedLocale;
+      }
 
       final seed = initialSchema;
       var restored = false;
@@ -244,6 +248,35 @@ class AdminController extends ChangeNotifier {
   Future<void> loginTwoFactor(String challenge, String code) async {
     await api.loginTwoFactor(challenge, code);
     await _loadSchema();
+  }
+
+  /// The panel's language and text direction (from the server).
+  String get locale => '${schema['locale'] ?? boot['locale'] ?? 'en'}';
+  bool get isRtl =>
+      '${schema['direction'] ?? boot['direction'] ?? 'ltr'}' == 'rtl';
+
+  /// The languages the panel offers (code -> label); empty when only one.
+  Map<String, String> get languages {
+    final codes = boot['supported_locales'];
+    if (codes is! List || codes.length < 2) return const {};
+    final labels = boot['locale_labels'];
+    return {
+      for (final c in codes)
+        '$c': labels is Map && labels['$c'] != null ? '${labels['$c']}' : '$c',
+    };
+  }
+
+  /// Switches the panel's language (remembered on this device).
+  Future<void> setLanguage(String code) async {
+    api.locale = code;
+    await api.writePreference('locale', code);
+    boot = await api.boot();
+    _applyTheme(boot);
+    if (stage == AdminStage.signedIn) {
+      await _loadSchema();
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Which account screens the server offers (profile, update_profile,
