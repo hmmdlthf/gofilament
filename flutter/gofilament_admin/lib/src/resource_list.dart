@@ -1121,11 +1121,17 @@ class _ResourceListPageState extends State<ResourceListPage> {
   Widget _cards(BuildContext context) {
     final theme = Theme.of(context);
     final columns = _columns;
+    final entries = _tableRows(columns);
     return ListView.separated(
-      itemCount: _rows.length,
-      separatorBuilder: (_, __) => const Divider(),
+      itemCount: entries.length,
+      separatorBuilder: (_, i) => entries[i].row == null &&
+              (i + 1 >= entries.length || entries[i + 1].row == null)
+          ? const SizedBox.shrink()
+          : const Divider(height: 1),
       itemBuilder: (context, i) {
-        final row = _rows[i];
+        final entry = entries[i];
+        if (entry.row == null) return _extraCard(context, entry);
+        final row = entry.row!;
         final title = columns.isEmpty
             ? recordId(row)
             : displayValue(valueAt(row, '${columns.first['name']}'));
@@ -1161,6 +1167,47 @@ class _ResourceListPageState extends State<ResourceListPage> {
           ),
         );
       },
+    );
+  }
+
+  /// A group header or summary block of the card layout.
+  Widget _extraCard(BuildContext context, _TableRow entry) {
+    final theme = Theme.of(context);
+    if (entry.kind == 'group') {
+      return Container(
+        key: Key('group-card-${entry.label}'),
+        color: theme.colorScheme.surfaceContainerHighest,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        child: Text(entry.label,
+            key: Key('group-row-${entry.label}'),
+            style: const TextStyle(fontWeight: FontWeight.w700)),
+      );
+    }
+    final summarized = _summarized;
+    return Container(
+      key: Key('${entry.kind}-card-${entry.pos}'),
+      color: theme.colorScheme.surfaceContainerLow,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(entry.label,
+            style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        Wrap(spacing: 20, runSpacing: 6, children: [
+          for (final e in summarized.entries)
+            if (entry.sums?[e.key] != null)
+              Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_columnLabel(e.key),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                    summaryCell(context, entry.sums![e.key], e.value),
+                  ]),
+        ]),
+      ]),
     );
   }
 

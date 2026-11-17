@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flutter phone layout**: the card list now shows group headers, group subtotals and the "This page" / "All results" summaries, like the table.
+
 ## [v1.34.0] - 2026-11-17
 
 ### Added
