@@ -51,6 +51,11 @@ type TenantConfig struct {
 	RegistrationURL string
 	ProfileURL      string
 	TenantLoader    func(ctx *Context) ([]Tenant, error)
+	// CanAccessTenant decides whether the user may use the tenant named by
+	// the path, cookie, header or subdomain when there is no TenantLoader.
+	// Without either, those keys are ignored: a request cannot pick a
+	// tenant the user does not belong to.
+	CanAccessTenant func(ctx *Context, key string) bool
 	CurrentTenant   func(ctx *Context) (Tenant, error)
 	OnTenantSwitch  func(ctx *Context, newTenant Tenant) error
 }
@@ -162,6 +167,7 @@ func (p *Panel) ResolveTenant(ctx *Context) Tenant {
 	if p.tenantConfig == nil || !p.tenantConfig.Enabled {
 		return nil
 	}
+	ctx.clearTenant() // a guess made before the user was known does not count
 
 	// 1. Explicit resolver callback
 	if p.tenantConfig.CurrentTenant != nil {
@@ -211,7 +217,8 @@ func (p *Panel) ResolveTenant(ctx *Context) Tenant {
 		}
 	}
 
-	// 7. If we have a tenantLoader, validate or select first default tenant
+	// 7. With a TenantLoader only the user's tenants count: the requested
+	// one, else the first.
 	if p.tenantConfig.TenantLoader != nil {
 		tenants, err := p.tenantConfig.TenantLoader(ctx)
 		if err == nil && len(tenants) > 0 {
@@ -223,21 +230,38 @@ func (p *Panel) ResolveTenant(ctx *Context) Tenant {
 					}
 				}
 			}
-			// Default to first tenant
 			first := tenants[0]
 			ctx.setTenantInstance(first)
 			return first
 		}
+		return nil
 	}
 
-	// 8. If tenantKey was identified without a loader, construct standard TenantItem
-	if tenantKey != "" {
+	// 8. Without a loader, a requested key is used only when CanAccessTenant
+	// allows it.
+	if tenantKey != "" && p.tenantConfig.CanAccessTenant != nil && p.tenantConfig.CanAccessTenant(ctx, tenantKey) {
 		item := &TenantItem{Key: tenantKey, Name: tenantKey}
 		ctx.setTenantInstance(item)
 		return item
 	}
-
 	return nil
+}
+
+// tenantAllowed returns the tenant key if the user may switch to it.
+func (p *Panel) tenantAllowed(ctx *Context, key string) (Tenant, bool) {
+	if p.tenantConfig.TenantLoader != nil {
+		tenants, _ := p.tenantConfig.TenantLoader(ctx)
+		for _, t := range tenants {
+			if t.GetTenantKey() == key {
+				return t, true
+			}
+		}
+		return nil, false
+	}
+	if p.tenantConfig.CanAccessTenant != nil && p.tenantConfig.CanAccessTenant(ctx, key) {
+		return &TenantItem{Key: key, Name: key}, true
+	}
+	return nil, false
 }
 
 // renderTenantSwitcherHTML renders the dropdown UI component for the Topbar.

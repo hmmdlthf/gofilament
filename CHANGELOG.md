@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Reordering pages and filtered lists**: only the current page's ids were sent, with nothing telling where the page starts, so saving positions on page 2 collided with page 1. Drag handles also showed while searching, filtering, grouping or sorting by another column, where the visible order is not the real one; they now show only on the plain list (or sorted by the reorder column).
 - **Reorder without a handler** answered success; it is now 404.
+- **Security: tenant could be chosen by the request**: without a `TenantLoader`, the tenant named by the `X-Tenant-ID` header, the tenant cookie, the path or the subdomain was trusted as is, so a user could act in another tenant. With a loader that returned no tenants, the raw key was used too, and a tenant guessed before the user was known stayed in place. Now only tenants from `TenantLoader`, or keys allowed by the new `TenantConfig.CanAccessTenant(ctx, key)`, are used. **Upgrade:** panels using tenancy without a `TenantLoader` must set `CanAccessTenant`, otherwise no tenant is selected.
+- **API tenant switch** accepted any tenant key and did not call `OnTenantSwitch`; it now checks membership like the web switch (403 otherwise), calls the hook and sets a Secure cookie on HTTPS.
+
 
 ## [v1.36.0] - 2026-11-17
 
