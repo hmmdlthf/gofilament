@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **GoLaravel v1.17.1**: panels using `Panel.Sessions(mgr, ...)` no longer build golaravel's default session manager (no "no SecretKey" warning at startup), and the session CSRF check compares tokens in constant time.
+
 ## [v1.39.0] - 2026-11-17
 
 ### Changed
