@@ -9,6 +9,7 @@ import 'icons.dart';
 import 'login.dart';
 import 'notifications.dart';
 import 'roles_screen.dart';
+import 'tenant_switcher.dart';
 import 'resource_list.dart';
 import 'theme.dart';
 
@@ -401,6 +402,7 @@ class _TopBar extends StatelessWidget {
               style: theme.textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.w600)),
         ),
+        if (admin.hasTenancy) TenantSwitcher(admin: admin),
         if (admin.schema['notifications'] == true)
           NotificationBell(api: admin.api),
         if (onSearch != null)

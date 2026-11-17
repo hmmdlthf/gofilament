@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flutter tenant switcher**: panels with tenancy get a tenant menu in the Flutter topbar; the chosen tenant is sent as `X-Tenant-ID` (checked against the user's tenants by the panel) and remembered on the device. `/tenants` now always returns `{key, name, avatar}`, and the schema reports `tenancy` and the current `tenant`.
+
 ## [v1.38.0] - 2026-11-17
 
 ### Added
