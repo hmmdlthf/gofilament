@@ -9,12 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.37.0] - 2026-11-17
+
 ### Added
 - **Reorder in Flutter**: reorderable tables get a Reorder button in the Flutter list (a drag list of the page's rows). `filament.ReorderOffset(ctx)` gives `OnReorder` the position of the first id (web and API send the page's start).
 - **Widget visibility**: every built-in widget has `VisibleWhen(fn)` (and `CanView`), like `FlutterWidget`.
 - **Flutter language and RTL**: the app lays itself out right to left when the panel's language is RTL, sends the chosen language as `Accept-Language`, and offers a language menu (account menu) when the panel has several `Locales`; the choice is remembered on the device.
 - **Accept-Language**: panels with `Locales` pick the first supported language from the `Accept-Language` header when no `?lang` or cookie chooses one (API clients).
 - **Kanban board**: `Resource.Kanban(KanbanConfig{Field, Columns, Title, Description})` shows records as cards in columns (web board page, API `/board` and `/board/move`, Flutter Board view); moving a card is a validated, permission- and conflict-checked edit of that field.
+
 ### Fixed
 - **Reordering pages and filtered lists**: only the current page's ids were sent, with nothing telling where the page starts, so saving positions on page 2 collided with page 1. Drag handles also showed while searching, filtering, grouping or sorting by another column, where the visible order is not the real one; they now show only on the plain list (or sorted by the reorder column).
 - **Reorder without a handler** answered success; it is now 404.
@@ -22,7 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **API tenant switch** accepted any tenant key and did not call `OnTenantSwitch`; it now checks membership like the web switch (403 otherwise), calls the hook and sets a Secure cookie on HTTPS.
 - **Hidden widgets leaked data**: the web dashboard ignored a widget's `CanView`, and `/widgets/:id/data` (web and API) served any widget's chart data by id. Hidden widgets are now left out everywhere and their data answers 404.
 - Removed a stray `pkg/filament/api.go.orig` committed by accident.
-
 
 ## [v1.36.0] - 2026-11-17
 
