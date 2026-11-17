@@ -62,6 +62,32 @@ type Accounts struct {
 	// SaveTwoFactorSecret stores a confirmed secret, or "" to turn it off.
 	// Store it encrypted if you can.
 	SaveTwoFactorSecret func(ctx *Context, user auth.Authenticatable, secret string) error
+
+	// RecoveryCodes returns the hashes of the user's unused recovery codes;
+	// SaveRecoveryCodes replaces them (nil when two-factor is turned off).
+	// Set both to give users single-use codes for when they lose their
+	// authenticator. The panel makes the codes and hashes them
+	// (HashRecoveryCode); store the hashes as they are.
+	RecoveryCodes     func(ctx *Context, user auth.Authenticatable) ([]string, error)
+	SaveRecoveryCodes func(ctx *Context, user auth.Authenticatable, hashes []string) error
+
+	// Register creates a user (Panel.Registration) from the sign-up form;
+	// passwordHash is made with golaravel's hash.Make. Return ErrEmailTaken
+	// for an address in use, or a *forms.ValidationError for other field
+	// problems. The new user is signed in.
+	Register func(ctx *Context, name, email, passwordHash string) (auth.Authenticatable, error)
+
+	// Email verification: EmailVerified reports whether the user's address
+	// is verified, MarkEmailVerified records it, SendVerificationLink mails
+	// the signed link. Needs Profile (for the address). Unverified users can
+	// only reach the "verify your email" page until they open the link.
+	EmailVerified        func(ctx *Context, user auth.Authenticatable) (bool, error)
+	MarkEmailVerified    func(ctx *Context, user auth.Authenticatable) error
+	SendVerificationLink func(ctx *Context, user auth.Authenticatable, email, link string) error
+	// VerificationSecret signs verification links (default: APP_KEY).
+	VerificationSecret string
+	// VerificationTTL is how long a verification link works (default 60 minutes).
+	VerificationTTL time.Duration
 }
 
 // Accounts configures the profile, password and two-factor screens.
@@ -137,6 +163,7 @@ func (p *Panel) mountAccountRoutes(r *router.Router) {
 		r.POST(p.path+"/profile/two-factor/enable", p.handleTwoFactorEnable)
 		r.POST(p.path+"/profile/two-factor/confirm", p.handleTwoFactorConfirm)
 		r.POST(p.path+"/profile/two-factor/disable", p.handleTwoFactorDisable)
+		r.POST(p.path+"/profile/two-factor/recovery-codes", p.handleRecoveryCodesRegenerate)
 	}
 	if p.canResetPassword() {
 		r.GET(p.path+"/forgot-password", func(c *gcontext.Context) error {
@@ -172,6 +199,7 @@ var profileNotices = map[string]string{
 	"password-one": "Your password was changed.",
 	"2fa-on":       "Two-factor sign-in is on.",
 	"2fa-off":      "Two-factor sign-in is off.",
+	"codes":        "New recovery codes were made; the old ones no longer work.",
 }
 
 func (p *Panel) profileUser(c *gcontext.Context) (*Context, auth.Authenticatable, error) {
@@ -326,6 +354,9 @@ func (p *Panel) handleTwoFactorConfirm(c *gcontext.Context) error {
 		return p.renderProfile(ctx, user, http.StatusInternalServerError, "", "Two-factor sign-in could not be turned on.", nil)
 	}
 	sess.Forget(sessTwoFactorSetup)
+	if err := p.issueRecoveryCodes(c, ctx, user); err != nil {
+		return p.renderProfile(ctx, user, http.StatusInternalServerError, "", "Two-factor sign-in is on, but recovery codes could not be made.", nil)
+	}
 	return c.Redirect(http.StatusSeeOther, p.path+"/profile?status=2fa-on")
 }
 
@@ -352,6 +383,9 @@ func (p *Panel) handleTwoFactorDisable(c *gcontext.Context) error {
 	}
 	if err := p.accounts.SaveTwoFactorSecret(ctx, user, ""); err != nil {
 		return p.renderProfile(ctx, user, http.StatusInternalServerError, "", "Two-factor sign-in could not be turned off.", nil)
+	}
+	if p.recoveryCodesAvailable() {
+		_ = p.accounts.SaveRecoveryCodes(ctx, user, nil)
 	}
 	return c.Redirect(http.StatusSeeOther, p.path+"/profile?status=2fa-off")
 }
@@ -421,8 +455,13 @@ func (p *Panel) handleTwoFactorChallenge(c *gcontext.Context) error {
 		return c.Redirect(http.StatusSeeOther, p.path+"/login")
 	}
 	secret := p.userTwoFactorSecret(ctx, user)
-	ok, step := p.totp.VerifyCodeStep(secret, strings.TrimSpace(c.FormValue("code")))
-	if secret == "" || !ok || !p.acceptTOTPStep(uid, secret, step) {
+	code := strings.TrimSpace(c.FormValue("code"))
+	ok, step := p.totp.VerifyCodeStep(secret, code)
+	valid := secret != "" && ok && p.acceptTOTPStep(uid, secret, step)
+	if !valid && secret != "" {
+		valid = p.useRecoveryCode(ctx, user, code)
+	}
+	if !valid {
 		p.loginFailed(c, key)
 		return p.renderTwoFactorChallenge(ctx, http.StatusUnauthorized, "The code is not valid.")
 	}
@@ -452,6 +491,13 @@ func (p *Panel) handleForgotPassword(c *gcontext.Context) error {
 		return p.renderForgotPassword(ctx, statusTooManyRequests, throttleMessage(wait), "")
 	}
 	p.loginFailed(c, key) // every request counts against the limit
+	p.sendResetLink(c, ctx, email)
+	// The same answer whether or not the address has an account.
+	return p.renderForgotPassword(ctx, http.StatusOK, "", "If an account uses that address, we have emailed a link to reset the password.")
+}
+
+// sendResetLink mails a reset link when email has an account.
+func (p *Panel) sendResetLink(c *gcontext.Context, ctx *Context, email string) {
 	if user, err := p.accounts.FindByEmail(ctx, email); err == nil && user != nil {
 		if token, err := p.resetBroker.CreateToken(email); err == nil {
 			q := url.Values{"token": {token}, "email": {email}}
@@ -459,8 +505,6 @@ func (p *Panel) handleForgotPassword(c *gcontext.Context) error {
 			_ = p.accounts.SendResetLink(ctx, user, email, link)
 		}
 	}
-	// The same answer whether or not the address has an account.
-	return p.renderForgotPassword(ctx, http.StatusOK, "", "If an account uses that address, we have emailed a link to reset the password.")
 }
 
 func (p *Panel) absoluteURL(c *gcontext.Context, path string) string {
@@ -581,12 +625,16 @@ func (p *Panel) renderResetPassword(ctx *Context, status int, errMsg, email, tok
 }
 
 func (p *Panel) renderTwoFactorChallenge(ctx *Context, status int, errMsg string) error {
+	attrs, subtitle := `required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" autofocus`, "Enter the 6-digit code from your authenticator app."
+	if p.recoveryCodesAvailable() {
+		attrs, subtitle = `required maxlength="11" autocomplete="one-time-code" autofocus`, "Enter the 6-digit code from your authenticator app, or one of your recovery codes."
+	}
 	body := alertHTML("err", errMsg) + fmt.Sprintf(`<form method="POST" action="%s/two-factor-challenge">%s%s
 <button type="submit" class="btn btn-primary" style="width: 100%%;">Verify</button></form>
 <p style="text-align: center; margin-top: 1rem; font-size: 0.8125rem;"><a href="%s/login">Back to sign in</a></p>`,
 		p.path, p.csrfHiddenInput(ctx.Context, ""),
-		p.field("code", "Authentication code", "text", "", `required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" autofocus`), p.path)
-	return p.renderCardPage(ctx, status, "Two-factor sign-in", "Enter the 6-digit code from your authenticator app.", body, false)
+		p.field("code", "Authentication code", "text", "", attrs), p.path)
+	return p.renderCardPage(ctx, status, "Two-factor sign-in", subtitle, body, false)
 }
 
 func (p *Panel) renderProfile(ctx *Context, user auth.Authenticatable, status int, okMsg, errMsg string, old map[string]string) error {
@@ -633,6 +681,7 @@ func (p *Panel) renderProfile(ctx *Context, user auth.Authenticatable, status in
 		case p.userTwoFactorSecret(ctx, user) != "":
 			fmt.Fprintf(&b, `<p style="font-size: 0.875rem; margin-bottom: 0.75rem;">Two-factor sign-in is <strong>on</strong>.</p>
 <form method="POST" action="%s/profile/two-factor/disable">%s%s<button type="submit" class="btn btn-danger">Turn off</button></form>`, p.path, csrf, pwField)
+			b.WriteString(p.recoveryCodesHTML(ctx, user, csrf, pwField))
 		case pending != "" && session.FromContext(ctx.Context) != nil:
 			uri := p.totp.ProvisioningURI(user.GetAuthIdentifier(), pending)
 			fmt.Fprintf(&b, `<p style="font-size: 0.875rem; margin-bottom: 0.5rem;">Add this key to your authenticator app, then enter the code it shows.</p>

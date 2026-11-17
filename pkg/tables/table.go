@@ -40,6 +40,7 @@ type Table[T any] struct {
 	sortCol                   string
 	sortDir                   string
 	activeFilters             map[string]string
+	versionFunc               func(record T) string
 	idFunc                    func(record T) string
 	toggleable                bool
 	reorderable               bool
@@ -412,6 +413,13 @@ func (t *Table[T]) RecordID(fn func(record T) string) *Table[T] {
 	return t
 }
 
+// RecordVersion sets the closure giving a record's version token. Rows then
+// carry it (data-version) so inline edits can detect conflicting changes.
+func (t *Table[T]) RecordVersion(fn func(record T) string) *Table[T] {
+	t.versionFunc = fn
+	return t
+}
+
 // SetData populates records and pagination state into the table.
 func (t *Table[T]) SetData(records []T, total, page, perPage int, search, sortCol, sortDir string, filters map[string]string) *Table[T] {
 	t.records = records
@@ -645,6 +653,10 @@ func (t *Table[T]) Render(basePath string) string {
 			} else if ha.color == "danger" {
 				btnClass = "btn-danger"
 			}
+			if ha.name == "export" {
+				sb.WriteString(t.exportLinks(basePath, ha.name, ha.label))
+				continue
+			}
 			sb.WriteString(fmt.Sprintf(`<a href="%s/%s" class="btn %s">%s</a>`, basePath, ha.name, btnClass, html.EscapeString(ha.label)))
 		}
 	}
@@ -781,6 +793,9 @@ func (t *Table[T]) Render(basePath string) string {
 				}())
 			}
 
+			if t.versionFunc != nil {
+				trAttrs += fmt.Sprintf(` data-version="%s"`, html.EscapeString(t.versionFunc(rec)))
+			}
 			sb.WriteString(fmt.Sprintf(`<tr %s>`, trAttrs))
 
 			// Reorder handle cell

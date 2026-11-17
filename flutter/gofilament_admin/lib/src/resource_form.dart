@@ -273,8 +273,12 @@ class _ResourceFormState extends State<ResourceForm> {
       }
       if (_isEdit) {
         if (_isRelation) {
-          await widget.admin.api.relationUpdate(widget.slug, widget.parentId!,
-              widget.relation!, widget.id!, data);
+          await widget.admin.api.relationUpdate(
+              widget.slug,
+              widget.parentId!,
+              widget.relation!,
+              widget.id!,
+              {...data, if (_version != null) '_version': _version});
         } else {
           await widget.admin.api.update(widget.slug, widget.id!,
               {...data, if (_version != null) '_version': _version});

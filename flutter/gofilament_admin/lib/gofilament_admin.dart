@@ -8,6 +8,7 @@
 /// ```
 library;
 
+export 'src/account.dart';
 export 'src/api.dart';
 export 'src/cells.dart';
 export 'src/components.dart';

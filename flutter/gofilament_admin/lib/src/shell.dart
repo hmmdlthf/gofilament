@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'account.dart';
 import 'controller.dart';
 import 'global_search.dart';
 import 'dashboard.dart';
@@ -423,6 +424,10 @@ class _TopBar extends StatelessWidget {
           position: PopupMenuPosition.under,
           onSelected: (v) {
             if (v == 'logout') admin.logout();
+            if (v == 'account') {
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => AccountScreen(admin: admin)));
+            }
           },
           itemBuilder: (_) => [
             PopupMenuItem<String>(
@@ -440,6 +445,16 @@ class _TopBar extends StatelessWidget {
                   ]),
             ),
             const PopupMenuDivider(),
+            if (admin.hasAccountScreen)
+              const PopupMenuItem<String>(
+                key: Key('account-menu-profile'),
+                value: 'account',
+                child: Row(children: [
+                  Icon(Icons.manage_accounts_outlined, size: 18),
+                  SizedBox(width: 10),
+                  Text('Your account')
+                ]),
+              ),
             const PopupMenuItem<String>(
               value: 'logout',
               child: Row(children: [
