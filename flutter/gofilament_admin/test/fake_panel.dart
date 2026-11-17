@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool board = false;
 
   /// Boot offers English and Arabic; Accept-Language "ar" answers RTL.
   bool bilingual = false;
@@ -706,6 +707,7 @@ class FakePanel {
           'items': {
             'has_form': true,
             if (bulkEdit.isNotEmpty) 'bulk_edit': bulkEdit,
+            if (board) 'board': {'field': 'status'},
             'abilities': {
               'create': canCreate,
               'delete_any': canDelete,

@@ -1224,6 +1224,23 @@ settings cannot be changed, and you cannot impersonate someone else. Only the
 web engine supports it (no API tokens are issued for other users).
 `filament.ImpersonatorID(ctx)` tells your code who is really signed in.
 
+### 🗂️ Kanban board
+
+```go
+res.Kanban(filament.KanbanConfig[*Task]{
+    Field:   "status", // OnList receives filters["status"] = column value
+    Columns: []filament.KanbanColumn{{Value: "todo", Label: "To do"}, {Value: "doing", Label: "Doing"}, {Value: "done", Label: "Done"}},
+    Title:       func(t *Task) string { return t.Title },
+    Description: func(t *Task) string { return t.Assignee },
+})
+```
+
+A *Board* button on the list (web) and in the Flutter toolbar shows the
+records as cards; dragging a card to another column sets the field. A move is
+an edit of that one field: form validation, `CanEdit`, the trashed check,
+edit conflicts (`Versioned`) and `OnUpdate` (so the audit log records it).
+API: `GET /admin/api/resources/:slug/board`, `POST .../board/move {id, value}`.
+
 ### 🔖 Saved views
 Users can name the current state of a list (search, sort, filters, advanced
 search, visible columns, grouping, page size), come back to it from a *Views*

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Widget visibility**: every built-in widget has `VisibleWhen(fn)` (and `CanView`), like `FlutterWidget`.
 - **Flutter language and RTL**: the app lays itself out right to left when the panel's language is RTL, sends the chosen language as `Accept-Language`, and offers a language menu (account menu) when the panel has several `Locales`; the choice is remembered on the device.
 - **Accept-Language**: panels with `Locales` pick the first supported language from the `Accept-Language` header when no `?lang` or cookie chooses one (API clients).
+- **Kanban board**: `Resource.Kanban(KanbanConfig{Field, Columns, Title, Description})` shows records as cards in columns (web board page, API `/board` and `/board/move`, Flutter Board view); moving a card is a validated, permission- and conflict-checked edit of that field.
 ### Fixed
 - **Reordering pages and filtered lists**: only the current page's ids were sent, with nothing telling where the page starts, so saving positions on page 2 collided with page 1. Drag handles also showed while searching, filtering, grouping or sorting by another column, where the visible order is not the real one; they now show only on the plain list (or sorted by the reorder column).
 - **Reorder without a handler** answered success; it is now 404.

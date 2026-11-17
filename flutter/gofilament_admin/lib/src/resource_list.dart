@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api.dart';
+import 'board.dart';
 import 'bulk_edit.dart';
 import 'cells.dart';
 import 'controller.dart';
@@ -884,6 +885,15 @@ class _ResourceListPageState extends State<ResourceListPage> {
               ),
           ],
         ),
+      if (_hasBoard)
+        IconButton(
+          key: const Key('list-board'),
+          tooltip: _showBoard ? 'Table' : 'Board',
+          icon: Icon(_showBoard
+              ? Icons.table_rows_outlined
+              : Icons.view_kanban_outlined),
+          onPressed: () => setState(() => _showBoard = !_showBoard),
+        ),
       if (_reorderable)
         IconButton(
           key: const Key('list-reorder'),
@@ -1027,6 +1037,10 @@ class _ResourceListPageState extends State<ResourceListPage> {
     );
   }
 
+  /// The kanban board instead of the table (Resource.Kanban).
+  bool _showBoard = false;
+  bool get _hasBoard => _meta['board'] is Map;
+
   bool get _reorderable {
     final t = _meta['table'];
     return t is Map && t['reorderable'] == true;
@@ -1122,6 +1136,14 @@ class _ResourceListPageState extends State<ResourceListPage> {
 
   Widget _content(BuildContext context, bool wide) {
     final theme = Theme.of(context);
+    if (_showBoard) {
+      return KanbanBoardView(
+        api: api,
+        slug: widget.slug,
+        search: _search.text.trim(),
+        onOpen: _hasForm ? (id) => _openForm(id: id) : null,
+      );
+    }
     if (_error != null) {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [

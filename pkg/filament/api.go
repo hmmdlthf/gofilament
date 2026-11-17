@@ -1254,6 +1254,7 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 	r.OPTIONS(resPath+"/:id/cell", corsPreflight)
 	p.mountHistoryAPI(r, res, resPath, corsPreflight)
 	p.mountBulkEditAPI(r, res, resPath, corsPreflight)
+	p.mountKanbanAPI(r, res, resPath, corsPreflight)
 	p.mountSavedViewAPI(r, res, resPath, corsPreflight)
 	r.OPTIONS(resPath+"/export", corsPreflight)
 	r.OPTIONS(resPath+"/import", corsPreflight)

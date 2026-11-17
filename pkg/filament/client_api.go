@@ -134,6 +134,8 @@ type ResourceMeta struct {
 	Abilities   map[string]bool  `json:"abilities"`
 	// BulkEdit lists the fields that can be set on many records at once.
 	BulkEdit []string `json:"bulk_edit,omitempty"`
+	// Board is the kanban board's field and columns (Resource.Kanban).
+	Board map[string]any `json:"board,omitempty"`
 }
 
 // DescribeForm returns the resource form as JSON nodes with dynamic options
@@ -161,6 +163,7 @@ func (r *BaseResource[T]) Meta(ctx *Context) ResourceMeta {
 		SoftDeletes: r.IsSoftDeletesEnabled(),
 		Table:       tables.TableMeta{Actions: []tables.ActionDTO{}, BulkActions: []tables.ActionDTO{}, HeaderActions: []tables.ActionDTO{}},
 		BulkEdit:    r.BulkEditFields(),
+		Board:       r.boardMeta(),
 		Abilities: map[string]bool{
 			"create":     r.onCreate != nil && (r.canCreate == nil || r.canCreate(ctx)),
 			"delete_any": r.onDelete != nil && (r.canDeleteAny == nil || r.canDeleteAny(ctx)),
