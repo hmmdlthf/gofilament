@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.35.0] - 2026-11-17
+
 ### Added
 - **Edit conflicts for inline cells and related records**: rows of a `Versioned` resource carry their version (`data-version` on the web, `row_meta.version` in the API); inline cell saves send it, get 409 when the record changed meanwhile, and return the new version. `RelationManager.Versioned(fn)` checks related-record edits (web modal and API, version in the relation form). The version is only compared after edit rights are checked.
 - **Self-registration and email verification**: `Accounts.Register` turns on `/register` (web) and `POST /api/register` (with `Panel.Registration()`); `Accounts.EmailVerified` / `MarkEmailVerified` / `SendVerificationLink` send a signed verification link and keep unverified users on a "verify your email" page (web) or a 403 `email_unverified` (API). Flutter gets a sign-up screen and a verify-email screen (`AdminStage.verifyEmail`).
@@ -28,7 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Audit log stored secrets**: password values were stored in created / updated entries. Password fields and `*password*` / `*secret*` / `*token*` fields are now hidden.
 - **Web edit form empty for struct records**: the edit page only filled the form when records were maps. Struct records now fill it too (loose name matching); password fields are never filled.
 - **Soft deletes**: the "trashed" filter is now part of the API schema, so the Flutter app can show and restore trashed records. Trashed records can no longer be edited, inline-edited or deleted again (409; the web edit page offers Restore). Restore and force delete fall back to the resource's delete permission (`CanDeleteAny`) when `CanRestore` / `CanForceDelete` are not set, answer 404 on resources without soft deletes or handlers, and report handler errors instead of claiming success (single and bulk).
-
 
 ## [v1.34.0] - 2026-11-17
 
