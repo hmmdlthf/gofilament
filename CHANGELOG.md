@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Account screens in Flutter and the API**: `/account` (profile), `/account/password`, `/account/two-factor/*` (setup, confirm, turn off, new recovery codes) and `/forgot-password` for bearer-token clients; `boot.auth.accounts` lists what is available. The Flutter app adds a *Your account* screen, a *Forgot your password?* dialog and the two-factor code step at sign-in.
 - **Two-factor recovery codes**: with `Accounts.RecoveryCodes` / `SaveRecoveryCodes`, turning two-factor on makes 8 single-use codes (shown once, stored as SHA-256 hashes) that work at the sign-in challenge in place of an authenticator code. The profile shows how many are left and can make a new set; turning two-factor off removes them.
+- **Flutter phone layout**: the card list now shows group headers, group subtotals and the "This page" / "All results" summaries, like the table.
 
 ### Fixed
 - **API sign-in skipped two-factor**: users with two-factor sign-in on could get an API token (and sign in to the Flutter app) with the password alone. `POST /login` now returns a challenge, and the token is only handed out by `POST /login/two-factor` after a valid code.

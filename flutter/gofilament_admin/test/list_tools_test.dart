@@ -268,4 +268,69 @@ void main() {
     final v = _lastListQuery(panel)['filter_created_at']!;
     expect(RegExp(r'^\d{4}-\d{2}-15,$').hasMatch(v), isTrue, reason: v);
   });
+
+  testWidgets('the phone layout shows group headers and summaries',
+      (tester) async {
+    final panel = FakePanel()
+      ..extraColumns = [
+        {
+          'name': 'id',
+          'label': 'Ref',
+          'type': 'text',
+          'summaries': ['sum']
+        },
+      ]
+      ..itemsResourceExtras = {
+        'groups': ['status']
+      }
+      ..listSummaries = {
+        'id': {'sum': 99}
+      };
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('list-group')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('group-status')));
+    await tester.pumpAndSettle();
+
+    tester.view.physicalSize = const Size(420, 1400);
+    await tester.pumpAndSettle();
+    expect(find.byType(DataTable), findsNothing);
+    expect(find.byKey(const Key('list-group')), findsOneWidget);
+    expect(
+        find.byKey(const Key('group-card-Status: draft (1)')), findsOneWidget);
+    expect(find.text('Subtotal'), findsNWidgets(2));
+    expect(find.text('This page'), findsOneWidget);
+    expect(find.text('All results'), findsOneWidget);
+    expect(find.text('Sum 99', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('an inline toggle sends the row version and reports conflicts',
+      (tester) async {
+    final panel = FakePanel()
+      ..itemVersion = 1
+      ..extraColumns = [
+        {
+          'name': 'featured',
+          'label': 'Featured',
+          'type': 'toggle',
+          'editable': true
+        },
+      ];
+    await _open(tester, panel);
+    await tester.tap(find.byKey(const Key('cell-featured-1')));
+    await tester.pumpAndSettle();
+    expect(panel.cellBodies.last['_version'], '1');
+    // The reply's version is used for the next edit of the row.
+    await tester.tap(find.byKey(const Key('cell-featured-1')));
+    await tester.pumpAndSettle();
+    expect(panel.cellBodies.last['_version'], '2');
+
+    panel.itemVersion = 9; // someone else saved meanwhile
+    await tester.tap(find.byKey(const Key('cell-featured-1')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('changed by someone else'), findsOneWidget);
+    expect(
+        tester.widget<Switch>(find.byKey(const Key('cell-featured-1'))).value,
+        isFalse); // rolled back
+  });
 }
