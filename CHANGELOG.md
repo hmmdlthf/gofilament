@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.40.0] - 2026-11-18
+
 ### Added
 - **`Panel.URL(origin)`**: the public address used for links in emails (password reset, email verification). Without it the `APP_URL` environment variable is used.
 
