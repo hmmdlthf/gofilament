@@ -574,6 +574,41 @@ class AdminApi {
       _send(
           'POST', '/resources/$slug/reorder', {'order': ids, 'offset': offset});
 
+  /// Roles (Panel.Roles): {roles: [{name, label, permissions, users}],
+  /// permissions: {name: label}, can_find_users}.
+  Future<Map<String, dynamic>> roles() async => _map(await _get('/roles'));
+
+  /// Creates a role, or updates [original] (renaming it to [name]).
+  Future<Map<String, dynamic>> saveRole(
+          {String? original,
+          required String name,
+          required String label,
+          required List<String> permissions}) async =>
+      _map(await _send(original == null ? 'POST' : 'PUT',
+          original == null ? '/roles' : '/roles/$original', {
+        'name': name,
+        'label': label,
+        'permissions': permissions,
+      }));
+
+  Future<void> deleteRole(String name) => _send('DELETE', '/roles/$name');
+
+  /// Users with their roles: [{id, name, roles}].
+  Future<List<Map<String, dynamic>>> roleUsers(String query) async {
+    final data =
+        _map(await _get('/roles/users', {if (query.isNotEmpty) 'q': query}));
+    final u = data['users'];
+    return u is List
+        ? [
+            for (final x in u)
+              if (x is Map) Map<String, dynamic>.from(x)
+          ]
+        : const [];
+  }
+
+  Future<void> setUserRoles(String userId, List<String> roles) =>
+      _send('PUT', '/roles/users/$userId', {'roles': roles});
+
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});
 

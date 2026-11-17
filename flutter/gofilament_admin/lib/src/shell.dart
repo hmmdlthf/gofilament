@@ -8,6 +8,7 @@ import 'dashboard.dart';
 import 'icons.dart';
 import 'login.dart';
 import 'notifications.dart';
+import 'roles_screen.dart';
 import 'resource_list.dart';
 import 'theme.dart';
 
@@ -428,6 +429,10 @@ class _TopBar extends StatelessWidget {
           onSelected: (v) {
             if (v == 'logout') admin.logout();
             if (v.startsWith('locale:')) admin.setLanguage(v.substring(7));
+            if (v == 'roles') {
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => RolesScreen(api: admin.api)));
+            }
             if (v == 'account') {
               Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (_) => AccountScreen(admin: admin)));
@@ -449,6 +454,16 @@ class _TopBar extends StatelessWidget {
                   ]),
             ),
             const PopupMenuDivider(),
+            if (admin.schema['manage_roles'] == true)
+              const PopupMenuItem<String>(
+                key: Key('account-menu-roles'),
+                value: 'roles',
+                child: Row(children: [
+                  Icon(Icons.admin_panel_settings_outlined, size: 18),
+                  SizedBox(width: 10),
+                  Text('Roles')
+                ]),
+              ),
             if (admin.hasAccountScreen)
               const PopupMenuItem<String>(
                 key: Key('account-menu-profile'),

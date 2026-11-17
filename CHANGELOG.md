@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Roles and permissions**: `Panel.Roles(store, RolesConfig{Permissions, FindUsers, EnforceResources})` with an in-memory store or `sqlstore.Roles()`. A Roles screen (web, API `/roles`, `/roles/users`, Flutter) creates roles, ticks permissions (generated per resource, `roles.manage`, `*`, your own) and assigns them to users; resources without their own `Can*` checks enforce them, and `filament.Permission` reads them. Changes that would remove your own `roles.manage` are refused.
+
 ## [v1.37.0] - 2026-11-17
 
 ### Added

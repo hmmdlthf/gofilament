@@ -11,6 +11,7 @@
 //	activitylog.SetDefaultStore(s.Activities())
 //	gsupport.SetDefaultStore(s.Tickets())
 //	panel.SavedViews(s.Views())
+//	panel.Roles(s.Roles())
 //	panel.WebSessionsUsing(s.WebSessions(), loadUser)
 //
 // Tables are prefixed with "gofilament_" (see Store.Prefix). Times are stored
@@ -95,6 +96,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 			s.table("tickets"), k, k, k, k, k, k, k, k, t, k, k, t),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (id %s PRIMARY KEY, panel %s NOT NULL, resource %s NOT NULL, owner_id %s NOT NULL, shared INTEGER NOT NULL DEFAULT 0, name %s NOT NULL, created_at %s NOT NULL, data %s NOT NULL)`,
 			s.table("saved_views"), k, k, k, k, k, k, t),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (name %s PRIMARY KEY, data %s NOT NULL)`, s.table("roles"), k, t),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (user_id %s NOT NULL, role %s NOT NULL, PRIMARY KEY (user_id, role))`, s.table("user_roles"), k, k),
 	}
 	indexes := [][2]string{
 		{"sessions", "expires_at"},
@@ -104,6 +107,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"activities", "created_at"},
 		{"tickets", "updated_at"},
 		{"saved_views", "panel, resource"},
+		{"user_roles", "role"},
 	}
 	for _, ix := range indexes {
 		name := s.table(ix[0]) + "_" + strings.NewReplacer(", ", "_").Replace(ix[1]) + "_idx"

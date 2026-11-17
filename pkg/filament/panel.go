@@ -127,6 +127,7 @@ type Panel struct {
 	webSessions         webSessionStore
 	crossOrigin         *http.CrossOriginProtection
 	crossOriginOnce     sync.Once
+	roles               *rolesState
 	impersonation       *Impersonation
 	jobs                *jobRunner
 	viewStore           SavedViewStore
@@ -1084,6 +1085,14 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 		}
 	}
 
+	// Roles screen for users who manage roles
+	if p.canManageRoles(ctx) {
+		allItems = append(allItems, &NavigationItem{
+			Label: "Roles", URL: p.path + "/roles", Icon: "heroicon-shield-check", Group: "Settings", Sort: 1000,
+			Active: strings.HasPrefix(currentPath, p.path+"/roles"),
+		})
+	}
+
 	// Group items
 	groupMap := make(map[string][]*NavigationItem)
 	for _, item := range allItems {
@@ -1130,6 +1139,9 @@ func (p *Panel) Mount(r *router.Router) {
 	if err := p.ValidateTranslations(); err != nil {
 		panic(err)
 	}
+
+	// Resources without their own Can* checks use the panel's roles.
+	p.enforceRoles()
 
 	// 0. Panel middleware (must precede every route registration below).
 	p.installMiddleware(r)

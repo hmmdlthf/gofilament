@@ -63,6 +63,7 @@ const Map<String, dynamic> panelSchema = <String, dynamic>{
     'ar': 'العربية',
     'en': 'English',
   },
+  'manage_roles': false,
   'navigation': <dynamic>[
     <String, dynamic>{
       'items': <dynamic>[
