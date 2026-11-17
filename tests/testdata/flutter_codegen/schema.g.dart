@@ -321,6 +321,8 @@ const Map<String, dynamic> panelSchema = <String, dynamic>{
   },
   'supported_locales': <dynamic>[],
   'tabs_enabled': false,
+  'tenancy': false,
+  'tenant': '',
   'theme': <String, dynamic>{
     'colors': <String, dynamic>{
       'danger': <String, dynamic>{

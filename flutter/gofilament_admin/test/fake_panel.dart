@@ -93,6 +93,10 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+
+  /// Tenants offered by /tenants; the active one follows X-Tenant-ID.
+  List<Map<String, String>> tenants = [];
+  String activeTenant = '';
   bool manageRoles = false;
   bool board = false;
 
@@ -223,6 +227,21 @@ class FakePanel {
     }
     if (!authed) return _json({'error': 'Unauthorized'}, 401);
 
+    if (tenants.isNotEmpty) {
+      final h = req.headers['X-Tenant-ID'];
+      activeTenant =
+          tenants.any((t) => t['key'] == h) ? h! : tenants.first['key']!;
+    }
+    if (path == '/tenants') {
+      return _json({'active_tenant': activeTenant, 'tenants': tenants});
+    }
+    if (path == '/tenants/switch') {
+      final key = '${(json.decode(req.body) as Map)['tenant']}';
+      if (!tenants.any((t) => t['key'] == key)) {
+        return _json({'error': 'Unknown tenant'}, 403);
+      }
+      return _json({'success': true, 'active_tenant': key});
+    }
     if (path == '/logout') return _json({'status': 'logged_out'});
     if (path == '/email/verification-notification') {
       verificationMails++;
@@ -625,6 +644,8 @@ class FakePanel {
   Map<String, dynamic> _schema() => {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
+        if (tenants.isNotEmpty) 'tenancy': true,
+        if (tenants.isNotEmpty) 'tenant': activeTenant,
         'manage_roles': manageRoles,
         'notifications': notificationsOn,
         'saved_views': savedViews,
