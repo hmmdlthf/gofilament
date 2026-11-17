@@ -94,8 +94,12 @@ class FakePanel {
 
   bool globalSearch = false;
   bool notificationsOn = false;
+
+  /// Fields sent as resource_meta.bulk_edit.
+  List<String> bulkEdit = [];
   bool history = false;
   bool savedViews = false;
+  bool backgroundJobs = false;
 
   /// Items accept imports; [importRequests] keeps each request's body.
   bool canImport = false;
@@ -611,6 +615,7 @@ class FakePanel {
         'global_search': {'enabled': globalSearch},
         'notifications': notificationsOn,
         'saved_views': savedViews,
+        'background_jobs': backgroundJobs,
         'client_pages': [
           for (final id in clientPages) {'id': id, 'label': id}
         ],
@@ -690,6 +695,7 @@ class FakePanel {
         'resource_meta': {
           'items': {
             'has_form': true,
+            if (bulkEdit.isNotEmpty) 'bulk_edit': bulkEdit,
             'abilities': {
               'create': canCreate,
               'delete_any': canDelete,

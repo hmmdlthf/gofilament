@@ -12,6 +12,7 @@
 /// live schema arrives; the live schema still decides what the user may do.
 const Map<String, dynamic> panelSchema = <String, dynamic>{
   'account_nav_placement': 'header',
+  'background_jobs': false,
   'bottom_nav_show_labels': false,
   'brand': <String, dynamic>{
     'name': 'GoFilament',
