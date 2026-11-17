@@ -94,6 +94,13 @@ class FakePanel {
 
   bool globalSearch = false;
 
+  /// Account features sent in boot (auth.accounts); empty = none.
+  Map<String, dynamic> accountFeatures = {};
+
+  /// When true, signing in needs the code "123456" (two-factor step).
+  bool twoFactorLogin = false;
+  final List<String> resetRequests = [];
+
   /// Versioned items: the form sends 'version' and PUT refuses a stale
   /// '_version' with 409 (edit-conflict tests).
   int? itemVersion;
@@ -127,11 +134,34 @@ class FakePanel {
         'brand': brand,
         'brand_name': brand['name'],
         'theme': {'colors': colors},
-        'auth': {'login': true}
+        'auth': {
+          'login': true,
+          if (accountFeatures.isNotEmpty) 'accounts': accountFeatures,
+        }
       });
     }
-    if (path == '/login') {
-      final body = json.decode(req.body) as Map;
+    if (path == '/forgot-password') {
+      resetRequests.add('${(json.decode(req.body) as Map)['email']}');
+      return _json(
+          {'message': 'If an account uses that address, we sent a link.'});
+    }
+    final loginBody = path == '/login' || path == '/login/two-factor'
+        ? json.decode(req.body) as Map
+        : const {};
+    if (path == '/login' &&
+        twoFactorLogin &&
+        loginBody['username'] == 'owner' &&
+        loginBody['password'] == 'secret-pass') {
+      return _json({'two_factor': true, 'challenge': 'ch-1'});
+    }
+    if (path == '/login/two-factor' &&
+        (loginBody['challenge'] != 'ch-1' || loginBody['code'] != '123456')) {
+      return _json({'error': 'The code is not valid.'}, 401);
+    }
+    if (path == '/login' || path == '/login/two-factor') {
+      final body = path == '/login/two-factor'
+          ? {'username': 'owner', 'password': 'secret-pass'}
+          : loginBody;
       if (body['username'] == 'owner' && body['password'] == 'secret-pass') {
         return _json({
           'token': 'token-1',

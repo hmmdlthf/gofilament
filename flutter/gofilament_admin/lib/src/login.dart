@@ -113,14 +113,58 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _remember = false;
   bool _obscure = true;
+  final _code = TextEditingController();
   bool _busy = false;
   String? _error;
+
+  /// Set after the password step when a two-factor code is needed.
+  String? _challenge;
 
   @override
   void dispose() {
     _username.dispose();
     _password.dispose();
+    _code.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitCode() async {
+    final code = _code.text.trim();
+    if (_busy || code.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.admin.loginTwoFactor(_challenge!, code);
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          // An expired challenge starts over from the password.
+          if (e.message.contains('expired')) _challenge = null;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+            () => _error = 'Could not reach the server. Please try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _forgotPassword() async {
+    final message = await showDialog<String>(
+      context: context,
+      builder: (_) => _ForgotPasswordDialog(
+          admin: widget.admin, email: _username.text.trim()),
+    );
+    if (message != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   Future<void> _submit() async {
@@ -130,8 +174,14 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      await widget.admin
+      final challenge = await widget.admin
           .login(_username.text.trim(), _password.text, remember: _remember);
+      if (challenge != null && mounted) {
+        setState(() {
+          _challenge = challenge;
+          _code.clear();
+        });
+      }
     } on ApiException catch (e) {
       if (mounted) {
         setState(() => _error = e.isUnauthorized
@@ -206,73 +256,119 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                TextFormField(
-                  key: const Key('login-username'),
-                  controller: _username,
-                  autofillHints: const [AutofillHints.username],
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                      labelText: 'Username or email',
-                      prefixIcon: Icon(Icons.person_outline)),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? 'Enter your username or email'
-                      : null,
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  key: const Key('login-password'),
-                  controller: _password,
-                  obscureText: _obscure,
-                  autofillHints: const [AutofillHints.password],
-                  onFieldSubmitted: (_) => _submit(),
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      tooltip: _obscure ? 'Show password' : 'Hide password',
-                      icon: Icon(_obscure
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
+                if (_challenge != null) ...[
+                  Text(
+                      admin.accountFeatures['recovery_codes'] == true
+                          ? 'Enter the 6-digit code from your authenticator app, or one of your recovery codes.'
+                          : 'Enter the 6-digit code from your authenticator app.',
+                      style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    key: const Key('login-code'),
+                    controller: _code,
+                    autofocus: true,
+                    autofillHints: const [AutofillHints.oneTimeCode],
+                    onFieldSubmitted: (_) => _submitCode(),
+                    decoration: const InputDecoration(
+                        labelText: 'Authentication code',
+                        prefixIcon: Icon(Icons.pin_outlined)),
                   ),
-                  validator: (v) =>
-                      (v == null || v.isEmpty) ? 'Enter your password' : null,
-                ),
-                const SizedBox(height: 6),
-                CheckboxListTile(
-                  value: _remember,
-                  onChanged: (v) => setState(() => _remember = v ?? false),
-                  title: const Text('Keep me signed in'),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-                const SizedBox(height: 10),
-                FilledButton(
-                  key: const Key('login-submit'),
-                  onPressed: _busy ? null : _submit,
-                  child: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('Sign in'),
-                ),
-                if (widget.demoLogin?.isAvailable ?? false) ...[
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    key: const Key('demo-login-btn'),
-                    icon: const Icon(Icons.bolt, size: 18),
-                    label: Text(widget.demoLogin!.label),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    key: const Key('login-code-submit'),
+                    onPressed: _busy ? null : _submitCode,
+                    child: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Verify'),
+                  ),
+                  TextButton(
+                    key: const Key('login-code-back'),
                     onPressed: _busy
                         ? null
                         : () => setState(() {
-                              _username.text = widget.demoLogin!.email;
-                              _password.text = widget.demoLogin!.password;
+                              _challenge = null;
                               _error = null;
                             }),
+                    child: const Text('Back to sign in'),
                   ),
+                ] else ...[
+                  TextFormField(
+                    key: const Key('login-username'),
+                    controller: _username,
+                    autofillHints: const [AutofillHints.username],
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                        labelText: 'Username or email',
+                        prefixIcon: Icon(Icons.person_outline)),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Enter your username or email'
+                        : null,
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    key: const Key('login-password'),
+                    controller: _password,
+                    obscureText: _obscure,
+                    autofillHints: const [AutofillHints.password],
+                    onFieldSubmitted: (_) => _submit(),
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        tooltip: _obscure ? 'Show password' : 'Hide password',
+                        icon: Icon(_obscure
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
+                    ),
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Enter your password' : null,
+                  ),
+                  const SizedBox(height: 6),
+                  CheckboxListTile(
+                    value: _remember,
+                    onChanged: (v) => setState(() => _remember = v ?? false),
+                    title: const Text('Keep me signed in'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton(
+                    key: const Key('login-submit'),
+                    onPressed: _busy ? null : _submit,
+                    child: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Sign in'),
+                  ),
+                  if (widget.demoLogin?.isAvailable ?? false) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('demo-login-btn'),
+                      icon: const Icon(Icons.bolt, size: 18),
+                      label: Text(widget.demoLogin!.label),
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() {
+                                _username.text = widget.demoLogin!.email;
+                                _password.text = widget.demoLogin!.password;
+                                _error = null;
+                              }),
+                    ),
+                  ],
+                  if (admin.accountFeatures['password_reset'] == true)
+                    TextButton(
+                      key: const Key('login-forgot'),
+                      onPressed: _busy ? null : _forgotPassword,
+                      child: const Text('Forgot your password?'),
+                    ),
                 ],
               ],
             ),
@@ -316,4 +412,71 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+}
+
+class _ForgotPasswordDialog extends StatefulWidget {
+  const _ForgotPasswordDialog({required this.admin, required this.email});
+  final AdminController admin;
+  final String email;
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  late final _email = TextEditingController(
+      text: widget.email.contains('@') ? widget.email : '');
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    setState(() => _busy = true);
+    try {
+      final msg = await widget.admin.api.forgotPassword(_email.text.trim());
+      if (mounted) Navigator.pop(context, msg);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not reach the server.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Reset your password'),
+        content: SizedBox(
+          width: 360,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text(
+                'Enter your email address and we will send you a link to choose a new password.'),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('forgot-email'),
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                  labelText: 'Email address', errorText: _error),
+              onSubmitted: (_) => _send(),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            key: const Key('forgot-send'),
+            onPressed: _busy ? null : _send,
+            child: const Text('Send link'),
+          ),
+        ],
+      );
 }

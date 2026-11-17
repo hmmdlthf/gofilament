@@ -190,10 +190,31 @@ class AdminApi {
   /// Full panel description for the signed-in user.
   Future<Map<String, dynamic>> schema() async => _map(await _get('/schema'));
 
-  Future<void> login(String username, String password,
+  /// Signs in. Returns null when signed in, or the challenge id when the
+  /// user has two-factor sign-in on: finish with [loginTwoFactor].
+  Future<String?> login(String username, String password,
       {bool remember = false}) async {
     final data = _map(await _send('POST', '/login',
         {'username': username, 'password': password, 'remember': remember}));
+    if (data['two_factor'] == true) {
+      final challenge = '${data['challenge'] ?? ''}';
+      if (challenge.isEmpty) {
+        throw ApiException(500, 'The server did not return a challenge');
+      }
+      return challenge;
+    }
+    await _storeSession(data);
+    return null;
+  }
+
+  /// The second sign-in step: an authenticator or recovery code.
+  Future<void> loginTwoFactor(String challenge, String code) async {
+    final data = _map(await _send(
+        'POST', '/login/two-factor', {'challenge': challenge, 'code': code}));
+    await _storeSession(data);
+  }
+
+  Future<void> _storeSession(Map<String, dynamic> data) async {
     token = data['token'] as String?;
     user = _map(data['user']);
     if (token == null || token!.isEmpty) {
@@ -203,6 +224,47 @@ class AdminApi {
         '$_key:session',
         json.encode(
             {'token': token, 'user': user, 'expires_at': data['expires_at']}));
+  }
+
+  // ---------------------------------------------------------------- account
+
+  /// The signed-in user's account: name, email, features, two-factor state.
+  Future<Map<String, dynamic>> account() async => _map(await _get('/account'));
+
+  Future<Map<String, dynamic>> updateAccount(String name, String email) async =>
+      _map(await _send('PUT', '/account', {'name': name, 'email': email}));
+
+  Future<void> changePassword(
+          String current, String password, String confirmation) =>
+      _send('POST', '/account/password', {
+        'current_password': current,
+        'password': password,
+        'password_confirmation': confirmation,
+      });
+
+  /// Starts two-factor setup: returns {secret, otpauth_uri}.
+  Future<Map<String, dynamic>> twoFactorEnable(String currentPassword) async =>
+      _map(await _send('POST', '/account/two-factor/enable',
+          {'current_password': currentPassword}));
+
+  /// Confirms setup with a code; the reply may hold new recovery_codes.
+  Future<Map<String, dynamic>> twoFactorConfirm(String code) async =>
+      _map(await _send('POST', '/account/two-factor/confirm', {'code': code}));
+
+  Future<Map<String, dynamic>> twoFactorDisable(String currentPassword) async =>
+      _map(await _send('POST', '/account/two-factor/disable',
+          {'current_password': currentPassword}));
+
+  /// Replaces the recovery codes; the reply holds the new recovery_codes.
+  Future<Map<String, dynamic>> newRecoveryCodes(String currentPassword) async =>
+      _map(await _send('POST', '/account/two-factor/recovery-codes',
+          {'current_password': currentPassword}));
+
+  /// Asks for a password reset link; returns the server's message.
+  Future<String> forgotPassword(String email) async {
+    final data =
+        _map(await _send('POST', '/forgot-password', {'email': email}));
+    return '${data['message'] ?? 'Check your email.'}';
   }
 
   /// Restores a stored session. Returns false when there is none or it expired.

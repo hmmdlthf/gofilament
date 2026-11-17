@@ -46,9 +46,15 @@ func newAccountApp(t *testing.T) *accountApp {
 	a.panel = filament.NewPanel("admin").Path("/admin").Login().Profile().PasswordReset().
 		AuthValidator(func(ctx *filament.Context, login, pw string) (auth.Authenticatable, string, error) {
 			if u, ok := a.users[login]; ok && hash.Check(pw, u.pwHash) {
-				return &filament.PanelUser{ID: login, Login: login}, "", nil
+				return &filament.PanelUser{ID: login, Login: login}, "tok-" + login, nil
 			}
 			return nil, "", errors.New("bad credentials")
+		}).
+		TokenValidator(func(ctx *filament.Context, token string) (auth.Authenticatable, error) {
+			if id, ok := strings.CutPrefix(token, "tok-"); ok {
+				return user(id)
+			}
+			return nil, errors.New("bad token")
 		}).
 		Sessions(mgr, func(ctx *filament.Context, id string) (auth.Authenticatable, error) { return user(id) }).
 		Accounts(filament.Accounts{

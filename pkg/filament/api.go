@@ -192,6 +192,25 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			}
 		}
 
+		login := apiLoginChallenge{
+			UserID:    authUser.GetAuthIdentifier(),
+			Token:     tokenStr,
+			User:      userInfo,
+			ExpiresAt: expiresAt.Format(time.RFC3339),
+			ExpiresIn: int(tokenDuration.Seconds()),
+		}
+		challenge, err := p.apiBeginTwoFactor(ctx, authUser, login)
+		if err != nil {
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "Sign-in is unavailable right now."})
+		}
+		if challenge != "" {
+			return c.JSON(http.StatusOK, map[string]any{
+				"status":         "two_factor",
+				"two_factor":     true,
+				"challenge":      challenge,
+				"recovery_codes": p.recoveryCodesAvailable(),
+			})
+		}
 		return c.JSON(http.StatusOK, map[string]any{
 			"status":     "success",
 			"token":      tokenStr,
@@ -200,6 +219,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"expires_in": int(tokenDuration.Seconds()),
 		})
 	})
+	p.mountAccountAPIRoutes(r, apiPrefix, corsPreflight)
 
 	// Panel Auth Logout Endpoint
 	r.POST(apiPrefix+"/logout", func(c *gcontext.Context) error {

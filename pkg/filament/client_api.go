@@ -265,6 +265,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 				"login":          p.hasLogin,
 				"registration":   p.hasRegistration,
 				"password_reset": p.hasPasswordReset,
+				"accounts":       p.apiAccountsFeatures(),
 			},
 			"locale":            ctx.Locale(),
 			"direction":         ctx.Direction(),
