@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api.dart';
+import 'bulk_edit.dart';
 import 'cells.dart';
 import 'controller.dart';
 import 'export.dart';
@@ -18,6 +19,9 @@ import 'theme.dart';
 
 /// Lists the records of a resource: search, sort, filters, paging, inline
 /// toggles, row and bulk actions and client-side export.
+/// How often a running background job is checked (tests shorten it).
+Duration jobPollInterval = const Duration(seconds: 1);
+
 class ResourceListPage extends StatefulWidget {
   const ResourceListPage(
       {super.key, required this.admin, required this.slug, this.openRecord});
@@ -643,9 +647,57 @@ class _ResourceListPageState extends State<ResourceListPage> {
     }
   }
 
+  /// Exports on the server as a background job, then saves the file.
+  Future<void> _exportJob(String format) async {
+    final columns = [
+      for (final c in _columns)
+        if (c['type'] != 'image') '${c['name']}'
+    ];
+    var job = await api.startExportJob(widget.slug, format,
+        search: _search.text.trim(),
+        sort: _sort,
+        descending: _descending,
+        filters: _filters,
+        advancedSearch: _advanced.encode(),
+        ids: _selected.toList(),
+        columns: columns);
+    final id = '${job['id']}';
+    _toast('Preparing the export…');
+    while (job['status'] == 'queued' || job['status'] == 'running') {
+      await Future<void>.delayed(jobPollInterval);
+      if (!mounted) return;
+      job = await api.job(id);
+    }
+    if (job['status'] != 'done') {
+      _toast('The export failed: ${job['message'] ?? ''}', error: true);
+      return;
+    }
+    final bytes = await api.jobFile(id);
+    final name = '${job['file_name'] ?? '${widget.slug}.$format'}';
+    final ok = await saveFile(
+        name,
+        bytes,
+        format == 'xlsx'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'text/csv');
+    _toast(ok
+        ? 'Exported ${job['total'] ?? ''} rows.'
+        : 'Export is not available on this device yet.');
+  }
+
   Future<void> _export(String format) async {
     if (_exporting) return;
     setState(() => _exporting = true);
+    if (admin.schema['background_jobs'] == true) {
+      try {
+        await _exportJob(format);
+      } on ApiException catch (e) {
+        _toast(e.message, error: true);
+      } finally {
+        if (mounted) setState(() => _exporting = false);
+      }
+      return;
+    }
     try {
       final columns = _columns.where((c) => c['type'] != 'image').toList();
       final limits = admin.schema['export'];
@@ -965,6 +1017,28 @@ class _ResourceListPageState extends State<ResourceListPage> {
     );
   }
 
+  List<String> get _bulkEditFields {
+    final f = _meta['bulk_edit'];
+    return f is List ? [for (final x in f) '$x'] : const [];
+  }
+
+  Future<void> _bulkEdit() async {
+    final res = await showBulkEditDialog(context,
+        api: api,
+        slug: widget.slug,
+        ids: _selected.toList(),
+        fields: _bulkEditFields);
+    if (res == null) return;
+    final failed = (res['failed'] as num?)?.toInt() ?? 0;
+    _toast(
+        failed == 0
+            ? '${res['updated']} records changed.'
+            : '${res['updated']} changed, $failed not changed.',
+        error: failed > 0);
+    setState(_selected.clear);
+    _load();
+  }
+
   Widget _selectionBar(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
@@ -981,6 +1055,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
         TextButton(
             onPressed: () => setState(_selected.clear),
             child: const Text('Clear')),
+        if (_bulkEditFields.isNotEmpty)
+          TextButton.icon(
+            key: const Key('bulk-edit'),
+            onPressed: _bulkEdit,
+            icon: const Icon(Icons.edit_note, size: 18),
+            label: const Text('Change'),
+          ),
         if (_canDeleteAny && _bulkActions.contains('delete_bulk'))
           TextButton.icon(
             key: const Key('bulk-delete'),

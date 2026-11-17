@@ -93,8 +93,12 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+
+  /// Fields sent as resource_meta.bulk_edit.
+  List<String> bulkEdit = [];
   bool history = false;
   bool savedViews = false;
+  bool backgroundJobs = false;
 
   /// Items accept imports; [importRequests] keeps each request's body.
   bool canImport = false;
@@ -609,6 +613,7 @@ class FakePanel {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
         'saved_views': savedViews,
+        'background_jobs': backgroundJobs,
         'client_pages': [
           for (final id in clientPages) {'id': id, 'label': id}
         ],
@@ -688,6 +693,7 @@ class FakePanel {
         'resource_meta': {
           'items': {
             'has_form': true,
+            if (bulkEdit.isNotEmpty) 'bulk_edit': bulkEdit,
             'abilities': {
               'create': canCreate,
               'delete_any': canDelete,

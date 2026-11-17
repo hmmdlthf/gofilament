@@ -131,4 +131,8 @@ class TableExport {
 /// Hands a generated file to the user (browser download on web). Returns false
 /// when the platform has no way to save it.
 Future<bool> saveFile(String filename, Uint8List bytes, String mimeType) =>
-    platform.saveFile(filename, bytes, mimeType);
+    adminSaveFile(filename, bytes, mimeType);
+
+/// Saves files for [saveFile]. Replace it in tests or to save elsewhere.
+Future<bool> Function(String filename, Uint8List bytes, String mimeType)
+    adminSaveFile = platform.saveFile;

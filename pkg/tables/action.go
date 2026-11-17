@@ -233,6 +233,11 @@ func DeleteBulkAction() *BulkActionDef {
 	}
 }
 
+// EditBulkAction opens the bulk edit page (Resource.BulkEditable).
+func EditBulkAction() *BulkActionDef {
+	return &BulkActionDef{name: "edit_bulk", label: "Change Selected", color: "secondary"}
+}
+
 func ExportBulkAction() *BulkActionDef {
 	return &BulkActionDef{
 		name:  "export_bulk",

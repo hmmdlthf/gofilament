@@ -10,7 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Bulk edit**: `Resource.BulkEditable(fields...)` and `OnBulkUpdate` set one field on many selected records (web *Change Selected* bulk action, Flutter *Change* button, `POST /resources/:slug/bulk-update`), with field validation and per-record `CanEdit` / trashed checks; failures are reported per record. `tables.EditBulkAction()`.
+- **Background jobs**: `Panel.BackgroundJobs(JobsConfig)` runs exports (web; API with `background=1`) and imports (web preview flow; API with `background=1`) after the request, with progress, a notification and a download link when done. `/admin/jobs/:id` page, API `/jobs`, `/jobs/:id`, `/jobs/:id/download` (owner only). Flutter exports use server jobs when the panel has them; `adminSaveFile` can be replaced.
 - **Impersonation**: `Panel.Impersonation{CanImpersonate, OnImpersonate}` lets allowed users sign in as another user (web, with `Panel.Sessions`) via `ImpersonateURL(id)`, shows a banner with *Return to my account*, blocks account changes and nested impersonation while impersonating; `filament.ImpersonatorID(ctx)`.
+### Fixed
+- **Web bulk actions needed delete rights**: every bulk action (export, restore, ...) was refused without `CanDeleteAny`; only bulk delete (and unknown actions) need it now.
+- **API bulk delete hid errors**: without a bulk delete handler, per-record delete errors were ignored and the request reported success.
+
 
 ## [v1.35.0] - 2026-11-17
 

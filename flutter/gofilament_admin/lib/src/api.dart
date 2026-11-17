@@ -467,6 +467,40 @@ class AdminApi {
     return _map(_decode(await http.Response.fromStream(await _http.send(req))));
   }
 
+  /// Starts a server-side export job (Panel.BackgroundJobs) of the list as
+  /// filtered now. Returns the job ({id, status, progress, ...}).
+  Future<Map<String, dynamic>> startExportJob(String slug, String format,
+      {String search = '',
+      String sort = '',
+      bool descending = false,
+      Map<String, String> filters = const {},
+      String advancedSearch = '',
+      List<String> ids = const [],
+      List<String> columns = const []}) async {
+    return _map(await _get('/resources/$slug/export', {
+      'background': '1',
+      'format': format,
+      if (search.isNotEmpty) 'search': search,
+      if (sort.isNotEmpty) 'sort': sort,
+      if (sort.isNotEmpty) 'direction': descending ? 'desc' : 'asc',
+      for (final f in filters.entries) 'filter_${f.key}': f.value,
+      if (advancedSearch.isNotEmpty) 'advanced_search': advancedSearch,
+      if (ids.isNotEmpty) 'ids': ids.join(','),
+      if (columns.isNotEmpty) 'columns': columns.join(','),
+    }));
+  }
+
+  /// A background job's state.
+  Future<Map<String, dynamic>> job(String id) async =>
+      _map(await _get('/jobs/$id'));
+
+  /// The file a finished job produced.
+  Future<Uint8List> jobFile(String id) async {
+    final res = await _http.get(_uri('/jobs/$id/download'), headers: _headers);
+    if (res.statusCode >= 400) _decode(res); // throws ApiException
+    return res.bodyBytes;
+  }
+
   /// Restores a soft-deleted record.
   Future<void> restoreRecord(String slug, String id) =>
       _send('POST', '/resources/$slug/restore', {'id': id});
@@ -474,6 +508,13 @@ class AdminApi {
   /// Deletes a soft-deleted record for good.
   Future<void> forceDelete(String slug, String id) =>
       _send('POST', '/resources/$slug/force-delete', {'id': id});
+
+  /// Sets [field] to [value] on the records [ids] (Resource.BulkEditable).
+  /// Returns {updated, failed, errors: {id: message}}.
+  Future<Map<String, dynamic>> bulkUpdate(
+          String slug, List<String> ids, String field, dynamic value) async =>
+      _map(await _send('POST', '/resources/$slug/bulk-update',
+          {'ids': ids, 'field': field, 'value': value}));
 
   Future<void> deleteMany(String slug, List<String> ids) => _send('POST',
       '/resources/$slug/bulk', {'bulk_action': 'delete_bulk', 'ids': ids});

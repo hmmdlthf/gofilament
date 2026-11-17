@@ -128,6 +128,7 @@ type Panel struct {
 	crossOrigin         *http.CrossOriginProtection
 	crossOriginOnce     sync.Once
 	impersonation       *Impersonation
+	jobs                *jobRunner
 	viewStore           SavedViewStore
 	canShareViews       func(ctx *Context) bool
 	canManageViews      func(ctx *Context) bool

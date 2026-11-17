@@ -1177,6 +1177,32 @@ table.HeaderActions(
 - **Same rules as the create form**: imported rows go through form validation, `CanCreate` and `OnCreate`. Resources without a form keep the old behaviour (headers are normalized to field names).
 - Excel dates in date / datetime fields are converted from Excel day numbers.
 - API: `POST /admin/api/resources/:slug/import` with a `file` (multipart), `csv` or `file_base64` (JSON); add `dry_run=1` for the preview and `mapping` (`{"File header": "field"}`, `""` skips a column). Results list failed rows with field errors (`rows`).
+### ✏️ Bulk edit
+`res.BulkEditable("status", "owner_id")` lets users set one of those form
+fields to the same value on many selected rows: a *Change Selected* bulk
+action on the web, a *Change* button in the Flutter selection bar, and
+`POST /admin/api/resources/:slug/bulk-update {ids, field, value}`. The value
+goes through the field's validation; each record through `CanEdit` and the
+trashed check, then `OnUpdate` with just that field (or `OnBulkUpdate(fn)`
+once for all). Records that fail are reported, the others are changed. At
+most 1000 records per bulk edit.
+### ⏳ Background jobs (long exports and imports)
+
+```go
+panel.BackgroundJobs(filament.JobsConfig{Disk: "local"}) // storage disk for result files
+```
+
+- Web exports then run as a job: the user goes to a progress page
+  (`/admin/jobs/:id`) and gets a notification with a *Download* link when it
+  is ready. Imports confirmed on the preview page run as jobs too.
+- API: `GET .../export?background=1` and `POST .../import` with
+  `background=1` answer 202 with the job; `GET /admin/api/jobs`,
+  `/jobs/:id` and `/jobs/:id/download` (only the user who started it). The
+  Flutter app's Export uses this when the panel has jobs.
+- Job state is kept in golaravel's cache for `TTL` (7 days; use a shared
+  cache store with several instances), result files in `Dir` on the disk.
+  Jobs run in the process that started them (`Concurrency` at once); a restart
+  stops running jobs. Delete old files in `Dir` with a scheduled task.
 ### 🎭 Impersonation ("sign in as")
 With `panel.Sessions(...)`, an admin can sign in as another user to see the
 panel as they do:
