@@ -418,6 +418,20 @@ class AdminApi {
     return _map(_decode(await http.Response.fromStream(await _http.send(req))));
   }
 
+  /// Saved views of a resource: {views: [{id, name, shared, mine,
+  /// can_delete, state}], can_share}.
+  Future<Map<String, dynamic>> views(String slug) async =>
+      _map(await _get('/resources/$slug/views'));
+
+  Future<Map<String, dynamic>> saveView(
+          String slug, String name, Map<String, dynamic> state,
+          {bool shared = false}) async =>
+      _map(await _send('POST', '/resources/$slug/views',
+          {'name': name, 'shared': shared, 'state': state}));
+
+  Future<void> deleteView(String slug, String id) =>
+      _send('DELETE', '/resources/$slug/views/$id');
+
   /// Sends a CSV, TSV or .xlsx file to a resource's import endpoint. With
   /// [dryRun] the server only previews it: {headers, mapping, fields, rows,
   /// total, valid, invalid, problems}. Otherwise it imports the valid rows:

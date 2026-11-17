@@ -230,6 +230,7 @@ func (p *Panel) decorateSchema(ctx *Context, schema map[string]any) {
 	if p.exportMaxRows != nil {
 		maxRows = p.exportMaxRows(ctx)
 	}
+	schema["saved_views"] = p.viewStore != nil
 	schema["export"] = map[string]any{
 		"enabled":      maxRows > 0,
 		"max_rows":     maxRows,

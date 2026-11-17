@@ -300,6 +300,7 @@ const Map<String, dynamic> panelSchema = <String, dynamic>{
       'tabs_enabled': false,
     },
   ],
+  'saved_views': false,
   'session_duration': 86400,
   'snapshot': true,
   'support': <String, dynamic>{

@@ -1,7 +1,7 @@
 // Package sqlstore keeps GoFilament's runtime state in a SQL database
 // instead of process memory, so it survives restarts and is shared between
-// processes: web-engine sessions, database notifications, the activity log
-// and support tickets.
+// processes: web-engine sessions, database notifications, the activity log,
+// support tickets and saved list views.
 //
 //	db, _ := database.OpenDB(cfg) // or sql.Open
 //	s := sqlstore.New(db, sqlstore.Postgres)
@@ -10,6 +10,7 @@
 //	notifications.SetDefaultStore(s.Notifications())
 //	activitylog.SetDefaultStore(s.Activities())
 //	gsupport.SetDefaultStore(s.Tickets())
+//	panel.SavedViews(s.Views())
 //	panel.WebSessionsUsing(s.WebSessions(), loadUser)
 //
 // Tables are prefixed with "gofilament_" (see Store.Prefix). Times are stored
@@ -92,6 +93,8 @@ func (s *Store) Migrate(ctx context.Context) error {
 			s.table("activities"), k, k, k, k, k, k, k, t, k, t),
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (id %s PRIMARY KEY, tenant_id %s, panel_id %s, category %s, mode %s, status %s, user_key %s, department %s, search %s, created_at %s NOT NULL, updated_at %s NOT NULL, data %s NOT NULL)`,
 			s.table("tickets"), k, k, k, k, k, k, k, k, t, k, k, t),
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (id %s PRIMARY KEY, panel %s NOT NULL, resource %s NOT NULL, owner_id %s NOT NULL, shared INTEGER NOT NULL DEFAULT 0, name %s NOT NULL, created_at %s NOT NULL, data %s NOT NULL)`,
+			s.table("saved_views"), k, k, k, k, k, k, t),
 	}
 	indexes := [][2]string{
 		{"sessions", "expires_at"},
@@ -100,6 +103,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		{"activities", "causer_type, causer_id"},
 		{"activities", "created_at"},
 		{"tickets", "updated_at"},
+		{"saved_views", "panel, resource"},
 	}
 	for _, ix := range indexes {
 		name := s.table(ix[0]) + "_" + strings.NewReplacer(", ", "_").Replace(ix[1]) + "_idx"

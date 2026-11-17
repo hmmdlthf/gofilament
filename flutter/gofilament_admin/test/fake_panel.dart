@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool savedViews = false;
 
   /// Items accept imports; [importRequests] keeps each request's body.
   bool canImport = false;
@@ -606,6 +607,7 @@ class FakePanel {
   Map<String, dynamic> _schema() => {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
+        'saved_views': savedViews,
         'client_pages': [
           for (final id in clientPages) {'id': id, 'label': id}
         ],

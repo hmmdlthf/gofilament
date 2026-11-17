@@ -1160,6 +1160,29 @@ table.HeaderActions(
 - **Same rules as the create form**: imported rows go through form validation, `CanCreate` and `OnCreate`. Resources without a form keep the old behaviour (headers are normalized to field names).
 - Excel dates in date / datetime fields are converted from Excel day numbers.
 - API: `POST /admin/api/resources/:slug/import` with a `file` (multipart), `csv` or `file_base64` (JSON); add `dry_run=1` for the preview and `mapping` (`{"File header": "field"}`, `""` skips a column). Results list failed rows with field errors (`rows`).
+### 🔖 Saved views
+Users can name the current state of a list (search, sort, filters, advanced
+search, visible columns, grouping, page size), come back to it from a *Views*
+menu, and share it with everyone who can see the resource (web and Flutter).
+
+```go
+panel.SavedViews(nil)              // in memory
+panel.SavedViews(sqlStore.Views()) // in the database (pkg/sqlstore)
+panel.SavedViewsShareable(
+    func(ctx *filament.Context) bool { return true },              // who may share
+    func(ctx *filament.Context) bool { return isAdmin(ctx.User()) }, // who may delete others' shared views
+)
+```
+
+API: `GET/POST /admin/api/resources/:slug/views`, `DELETE .../views/:id`.
+On the web, visible columns are chosen in the browser and are not part of a
+saved view.
+
+### 📥 Interactive Column-Mapping Import:
+- Upload CSV or TSV files via web modal (`/admin/{resource}/import`) or REST API.
+- **Smart Auto-Mapping**: Automatically normalizes file headers (e.g., `Customer Name` $\rightarrow$ `customer_name` $\rightarrow$ `name`) to match model fields.
+- **Explicit Mapping**: Override column definitions with custom mapping fields.
+- **Batch Processing & Error Resilience**: Processes rows sequentially with `OnCreate`, collecting failure logs without terminating the batch.
 - **Real-Time Notification**: Dispatches toast and drawer notifications with success counts and warning reports via `notifications.Send(...)`.
 
 ---

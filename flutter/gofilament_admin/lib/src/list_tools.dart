@@ -140,6 +140,31 @@ class AdvancedSearch {
           'rules': [for (final r in _complete) r.toJson()],
         });
 
+  /// Reads [encode]'s JSON back ('' or invalid JSON: an empty search).
+  static AdvancedSearch decode(String raw) {
+    try {
+      final m = json.decode(raw);
+      if (m is! Map) return AdvancedSearch();
+      final rules = m['rules'];
+      return AdvancedSearch(
+        conjunction: '${m['conjunction'] ?? 'AND'}' == 'OR' ? 'OR' : 'AND',
+        rules: [
+          if (rules is List)
+            for (final r in rules)
+              if (r is Map)
+                AdvancedRule(
+                    '${r['field'] ?? ''}',
+                    '${r['operator'] ?? 'contains'}',
+                    r['values'] is List && '${r['value'] ?? ''}'.isEmpty
+                        ? (r['values'] as List).join(', ')
+                        : '${r['value'] ?? ''}'),
+        ],
+      );
+    } catch (_) {
+      return AdvancedSearch();
+    }
+  }
+
   AdvancedSearch copy() => AdvancedSearch(conjunction: conjunction, rules: [
         for (final r in rules) AdvancedRule(r.field, r.operator, r.value)
       ]);
