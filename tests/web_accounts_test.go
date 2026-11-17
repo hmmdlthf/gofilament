@@ -28,6 +28,8 @@ type accountApp struct {
 	mails   []string
 	handler http.Handler
 	panel   *filament.Panel
+	// panelHook configures the panel before it is registered.
+	panelHook func(p *filament.Panel)
 }
 
 func newAccountApp(t *testing.T) *accountApp { return newAccountAppWith(t, nil) }
@@ -84,6 +86,9 @@ func newAccountAppWith(t *testing.T, extra func(a *accountApp, acc *filament.Acc
 		}).
 		Sessions(mgr, func(ctx *filament.Context, id string) (auth.Authenticatable, error) { return user(id) }).
 		Accounts(accounts)
+	if a.panelHook != nil {
+		a.panelHook(a.panel)
+	}
 	if err := a.panel.Register(app); err != nil {
 		t.Fatal(err)
 	}

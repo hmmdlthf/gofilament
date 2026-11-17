@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Impersonation**: `Panel.Impersonation{CanImpersonate, OnImpersonate}` lets allowed users sign in as another user (web, with `Panel.Sessions`) via `ImpersonateURL(id)`, shows a banner with *Return to my account*, blocks account changes and nested impersonation while impersonating; `filament.ImpersonatorID(ctx)`.
+
 ## [v1.35.0] - 2026-11-17
 
 ### Added

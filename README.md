@@ -1177,6 +1177,27 @@ table.HeaderActions(
 - **Same rules as the create form**: imported rows go through form validation, `CanCreate` and `OnCreate`. Resources without a form keep the old behaviour (headers are normalized to field names).
 - Excel dates in date / datetime fields are converted from Excel day numbers.
 - API: `POST /admin/api/resources/:slug/import` with a `file` (multipart), `csv` or `file_base64` (JSON); add `dry_run=1` for the preview and `mapping` (`{"File header": "field"}`, `""` skips a column). Results list failed rows with field errors (`rows`).
+### 🎭 Impersonation ("sign in as")
+With `panel.Sessions(...)`, an admin can sign in as another user to see the
+panel as they do:
+
+```go
+panel.Impersonation(filament.Impersonation{
+    CanImpersonate: func(ctx *filament.Context, target auth.Authenticatable) bool {
+        return isAdmin(ctx.User()) && !isAdmin(target)
+    },
+    OnImpersonate: func(ctx *filament.Context, admin, target auth.Authenticatable, leaving bool) { /* audit */ },
+})
+// a row action on the users table:
+tables.Action[*User]("impersonate").Label("Sign in as").URL(func(u *User) string { return panel.ImpersonateURL(u.ID) })
+```
+
+A banner on every page shows who you are signed in as, with *Return to my
+account*. While impersonating, the user's profile, password and two-factor
+settings cannot be changed, and you cannot impersonate someone else. Only the
+web engine supports it (no API tokens are issued for other users).
+`filament.ImpersonatorID(ctx)` tells your code who is really signed in.
+
 ### 🔖 Saved views
 Users can name the current state of a list (search, sort, filters, advanced
 search, visible columns, grouping, page size), come back to it from a *Views*
