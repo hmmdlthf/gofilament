@@ -20,6 +20,10 @@ class ApiException implements Exception {
   bool get isUnauthorized => status == 401;
   bool get isForbidden => status == 403;
 
+  /// The account must verify its email address first.
+  bool get isEmailUnverified =>
+      status == 403 && body?['email_unverified'] == true;
+
   @override
   String toString() => message;
 }
@@ -259,6 +263,29 @@ class AdminApi {
   Future<Map<String, dynamic>> newRecoveryCodes(String currentPassword) async =>
       _map(await _send('POST', '/account/two-factor/recovery-codes',
           {'current_password': currentPassword}));
+
+  /// Creates an account (Panel.Registration) and signs it in.
+  Future<void> register(
+      String name, String email, String password, String confirmation) async {
+    final data = _map(await _send('POST', '/register', {
+      'name': name,
+      'email': email,
+      'password': password,
+      'password_confirmation': confirmation,
+    }));
+    if (data['token'] == null) {
+      throw ApiException(
+          200, 'Your account was created. Sign in to continue.', data);
+    }
+    await _storeSession(data);
+  }
+
+  /// Sends the email verification link again. Returns true when the
+  /// address is already verified.
+  Future<bool> resendVerification() async {
+    final data = _map(await _send('POST', '/email/verification-notification'));
+    return data['email_verified'] == true;
+  }
 
   /// Asks for a password reset link; returns the server's message.
   Future<String> forgotPassword(String email) async {

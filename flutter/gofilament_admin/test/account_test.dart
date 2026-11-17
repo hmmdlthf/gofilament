@@ -172,4 +172,51 @@ void main() {
     expect(find.byKey(const Key('two-factor-setup')), findsOneWidget);
     expect(find.byKey(const Key('recovery-codes')), findsNothing);
   });
+
+  testWidgets('sign-up creates the account and waits for verification',
+      (tester) async {
+    final panel = FakePanel()
+      ..accountFeatures = Map.of(_features)
+      ..accountFeatures['registration'] = true
+      ..emailUnverified = true;
+    await _boot(tester, panel);
+    await tester.tap(find.byKey(const Key('login-register')));
+    await tester.pumpAndSettle();
+
+    Future<void> fill(String email) async {
+      await tester.enterText(find.byKey(const Key('register-name')), 'Nia');
+      await tester.enterText(find.byKey(const Key('register-email')), email);
+      await tester.enterText(
+          find.byKey(const Key('register-password')), 'long-password');
+      await tester.enterText(
+          find.byKey(const Key('register-confirm')), 'long-password');
+      await tester.tap(find.byKey(const Key('register-submit')));
+      await tester.pumpAndSettle();
+    }
+
+    await fill('o@acme.test');
+    expect(find.text('An account with this email address already exists.'),
+        findsOneWidget);
+
+    await fill('nia@acme.test');
+    expect(panel.registrations.last['email'], 'nia@acme.test');
+    expect(find.byKey(const Key('register-submit')), findsNothing);
+    expect(find.text('Verify your email'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('verify-resend')));
+    await tester.pumpAndSettle();
+    expect(panel.verificationMails, 1);
+    expect(find.byKey(const Key('verify-message')), findsOneWidget);
+
+    panel.emailUnverified = false;
+    await tester.tap(find.byKey(const Key('verify-continue')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('account-menu')), findsOneWidget);
+  });
+
+  testWidgets('no sign-up link without registration', (tester) async {
+    final panel = FakePanel()..accountFeatures = Map.of(_features);
+    await _boot(tester, panel);
+    expect(find.byKey(const Key('login-register')), findsNothing);
+  });
 }

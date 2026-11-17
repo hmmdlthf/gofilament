@@ -436,3 +436,87 @@ class _PasswordPromptState extends State<_PasswordPrompt> {
         ],
       );
 }
+
+/// Shown after sign-in while the account's email address is not verified.
+class VerifyEmailScreen extends StatefulWidget {
+  const VerifyEmailScreen({super.key, required this.admin});
+  final AdminController admin;
+
+  @override
+  State<VerifyEmailScreen> createState() => _VerifyEmailScreenState();
+}
+
+class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
+  bool _busy = false;
+  String? _message;
+
+  Future<void> _resend() async {
+    setState(() => _busy = true);
+    try {
+      final verified = await widget.admin.api.resendVerification();
+      if (verified) {
+        await widget.admin.refresh();
+        return;
+      }
+      _message = 'A new verification link was sent to your email address.';
+    } on ApiException catch (e) {
+      _message = e.message;
+    } catch (_) {
+      _message = 'Could not reach the server.';
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Card(
+            margin: const EdgeInsets.all(20),
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Verify your email',
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 12),
+                    const Text(
+                        'Before you continue, open the link we emailed you to verify your address.'),
+                    if (_message != null) ...[
+                      const SizedBox(height: 12),
+                      Text(_message!,
+                          key: const Key('verify-message'),
+                          style: TextStyle(color: theme.colorScheme.primary)),
+                    ],
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      key: const Key('verify-continue'),
+                      onPressed: _busy ? null : widget.admin.refresh,
+                      child: const Text('I have verified it'),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      key: const Key('verify-resend'),
+                      onPressed: _busy ? null : _resend,
+                      child: const Text('Send the link again'),
+                    ),
+                    TextButton(
+                      key: const Key('verify-logout'),
+                      onPressed: widget.admin.logout,
+                      child: const Text('Sign out'),
+                    ),
+                  ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

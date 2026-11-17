@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Self-registration and email verification**: `Accounts.Register` turns on `/register` (web) and `POST /api/register` (with `Panel.Registration()`); `Accounts.EmailVerified` / `MarkEmailVerified` / `SendVerificationLink` send a signed verification link and keep unverified users on a "verify your email" page (web) or a 403 `email_unverified` (API). Flutter gets a sign-up screen and a verify-email screen (`AdminStage.verifyEmail`).
 - **Account screens in Flutter and the API**: `/account` (profile), `/account/password`, `/account/two-factor/*` (setup, confirm, turn off, new recovery codes) and `/forgot-password` for bearer-token clients; `boot.auth.accounts` lists what is available. The Flutter app adds a *Your account* screen, a *Forgot your password?* dialog and the two-factor code step at sign-in.
 - **Two-factor recovery codes**: with `Accounts.RecoveryCodes` / `SaveRecoveryCodes`, turning two-factor on makes 8 single-use codes (shown once, stored as SHA-256 hashes) that work at the sign-in challenge in place of an authenticator code. The profile shows how many are left and can make a new set; turning two-factor off removes them.
 

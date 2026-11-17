@@ -238,13 +238,17 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		if u == nil {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthenticated"})
 		}
-		if pu, ok := u.(interface{ ToMap() map[string]any }); ok {
-			return c.JSON(http.StatusOK, pu.ToMap())
-		}
-		return c.JSON(http.StatusOK, map[string]any{
+		out := map[string]any{
 			"id":    u.GetAuthIdentifier(),
 			"login": u.GetAuthIdentifier(),
-		})
+		}
+		if pu, ok := u.(interface{ ToMap() map[string]any }); ok {
+			out = pu.ToMap()
+		}
+		if p.verificationAvailable() {
+			out["email_verified"] = !p.emailUnverified(ctx, u)
+		}
+		return c.JSON(http.StatusOK, out)
 	})
 
 	// 1. Panel Schema Endpoint

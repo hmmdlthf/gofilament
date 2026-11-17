@@ -5,7 +5,15 @@ import 'components.dart';
 import 'theme.dart';
 
 /// Where the app is in its start-up sequence.
-enum AdminStage { loading, signedOut, signedIn, failed }
+enum AdminStage {
+  loading,
+  signedOut,
+  signedIn,
+  failed,
+
+  /// Signed in, but the email address must be verified first.
+  verifyEmail,
+}
 
 /// A custom page an application adds to the panel (for example a POS screen).
 class AdminPage {
@@ -194,6 +202,8 @@ class AdminController extends ChangeNotifier {
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
         stage = AdminStage.signedOut;
+      } else if (e.isEmailUnverified) {
+        stage = AdminStage.verifyEmail;
       } else {
         error = e.message;
         stage = AdminStage.failed;
@@ -221,6 +231,13 @@ class AdminController extends ChangeNotifier {
     if (challenge != null) return challenge;
     await _loadSchema();
     return null;
+  }
+
+  /// Creates an account and signs it in.
+  Future<void> register(
+      String name, String email, String password, String confirmation) async {
+    await api.register(name, email, password, confirmation);
+    await _loadSchema();
   }
 
   /// Finishes a two-factor sign-in.
