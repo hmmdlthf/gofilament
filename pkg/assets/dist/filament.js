@@ -165,7 +165,7 @@
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({ order: order })
+        body: JSON.stringify({ order: order, offset: parseInt(tableElement.dataset.reorderOffset || '0', 10) })
       })
       .then(r => {
         if (!r.ok) throw new Error('Reorder failed');

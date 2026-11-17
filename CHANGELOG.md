@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Reorder in Flutter**: reorderable tables get a Reorder button in the Flutter list (a drag list of the page's rows). `filament.ReorderOffset(ctx)` gives `OnReorder` the position of the first id (web and API send the page's start).
+
+### Fixed
+- **Reordering pages and filtered lists**: only the current page's ids were sent, with nothing telling where the page starts, so saving positions on page 2 collided with page 1. Drag handles also showed while searching, filtering, grouping or sorting by another column, where the visible order is not the real one; they now show only on the plain list (or sorted by the reorder column).
+- **Reorder without a handler** answered success; it is now 404.
+
 ## [v1.36.0] - 2026-11-17
 
 ### Added
