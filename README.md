@@ -1177,6 +1177,24 @@ table.HeaderActions(
 - **Same rules as the create form**: imported rows go through form validation, `CanCreate` and `OnCreate`. Resources without a form keep the old behaviour (headers are normalized to field names).
 - Excel dates in date / datetime fields are converted from Excel day numbers.
 - API: `POST /admin/api/resources/:slug/import` with a `file` (multipart), `csv` or `file_base64` (JSON); add `dry_run=1` for the preview and `mapping` (`{"File header": "field"}`, `""` skips a column). Results list failed rows with field errors (`rows`).
+### ⏳ Background jobs (long exports and imports)
+
+```go
+panel.BackgroundJobs(filament.JobsConfig{Disk: "local"}) // storage disk for result files
+```
+
+- Web exports then run as a job: the user goes to a progress page
+  (`/admin/jobs/:id`) and gets a notification with a *Download* link when it
+  is ready. Imports confirmed on the preview page run as jobs too.
+- API: `GET .../export?background=1` and `POST .../import` with
+  `background=1` answer 202 with the job; `GET /admin/api/jobs`,
+  `/jobs/:id` and `/jobs/:id/download` (only the user who started it). The
+  Flutter app's Export uses this when the panel has jobs.
+- Job state is kept in golaravel's cache for `TTL` (7 days; use a shared
+  cache store with several instances), result files in `Dir` on the disk.
+  Jobs run in the process that started them (`Concurrency` at once); a restart
+  stops running jobs. Delete old files in `Dir` with a scheduled task.
+
 ### 🔖 Saved views
 Users can name the current state of a list (search, sort, filters, advanced
 search, visible columns, grouping, page size), come back to it from a *Views*

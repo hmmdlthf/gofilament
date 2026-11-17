@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Background jobs**: `Panel.BackgroundJobs(JobsConfig)` runs exports (web; API with `background=1`) and imports (web preview flow; API with `background=1`) after the request, with progress, a notification and a download link when done. `/admin/jobs/:id` page, API `/jobs`, `/jobs/:id`, `/jobs/:id/download` (owner only). Flutter exports use server jobs when the panel has them; `adminSaveFile` can be replaced.
+
 ## [v1.35.0] - 2026-11-17
 
 ### Added

@@ -382,6 +382,9 @@ func (r *BaseResource[T]) runImport(ctx *Context, rows [][]string, explicit map[
 	preview := &ImportPreview{Headers: headers, Mapping: mapping, Fields: fields, Rows: []ImportPreviewRow{}}
 	result := &ImportResult{}
 	for i, cells := range rows[1:] {
+		if i%50 == 0 {
+			reportProgress(ctx, i, len(rows)-1)
+		}
 		rowNum := i + 2 // the header is row 1
 		if blankRow(cells) {
 			continue

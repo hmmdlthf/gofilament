@@ -1793,6 +1793,20 @@ func (r *BaseResource[T]) handleExport(ctx *Context, selectedIDs ...string) erro
 		filters["_advanced_search"] = adv
 	}
 
+	// With background jobs, exports run as a job unless ?sync=1.
+	if p := ctx.Panel(); p != nil && p.jobs != nil && ctx.Query("sync") == "" {
+		if r.canViewAny != nil && !r.canViewAny(ctx) {
+			return ctx.String(http.StatusForbidden, "403 Forbidden: Access denied")
+		}
+		j, err := p.startJob(ctx, "export", "Export of "+r.pluralModelName, func(jctx *Context) (any, error) {
+			return nil, r.InvokeExport(jctx, format, filterIDs, search, sortCol, sortDir, filters)
+		})
+		if err != nil {
+			return ctx.String(http.StatusServiceUnavailable, "Export failed: %v", err)
+		}
+		return ctx.Redirect(http.StatusSeeOther, p.path+"/jobs/"+j.ID)
+	}
+
 	if err := r.InvokeExport(ctx, format, filterIDs, search, sortCol, sortDir, filters); err != nil {
 		return ctx.String(http.StatusInternalServerError, "Export failed: %v", err)
 	}
@@ -1953,6 +1967,7 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 			flusher.Flush()
 		}
 
+		reportProgress(ctx, min(page*perPage, total), total)
 		if page*perPage >= total || len(records) < perPage {
 			break
 		}
@@ -1992,6 +2007,16 @@ func (r *BaseResource[T]) handleImportSubmit(ctx *Context, basePath string) erro
 		raw, ok := r.stashedImportFile(ctx, token)
 		if !ok {
 			return r.renderImportUpload(ctx, basePath, http.StatusGone, "The preview expired. Upload the file again.")
+		}
+		if p := ctx.Panel(); p != nil && p.jobs != nil {
+			_ = cache.Forget(r.importCacheKey(ctx, token))
+			j, err := p.startJob(ctx, "import", "Import of "+r.pluralModelName, func(jctx *Context) (any, error) {
+				return r.InvokeImportCSV(jctx, bytes.NewReader(raw), mapping)
+			})
+			if err != nil {
+				return r.renderImportUpload(ctx, basePath, http.StatusServiceUnavailable, err.Error())
+			}
+			return ctx.Redirect(http.StatusSeeOther, p.path+"/jobs/"+j.ID)
 		}
 		result, err := r.InvokeImportCSV(ctx, bytes.NewReader(raw), mapping)
 		if err != nil {

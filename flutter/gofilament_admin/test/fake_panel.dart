@@ -95,6 +95,7 @@ class FakePanel {
   bool globalSearch = false;
   bool history = false;
   bool savedViews = false;
+  bool backgroundJobs = false;
 
   /// Items accept imports; [importRequests] keeps each request's body.
   bool canImport = false;
@@ -609,6 +610,7 @@ class FakePanel {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
         'saved_views': savedViews,
+        'background_jobs': backgroundJobs,
         'client_pages': [
           for (final id in clientPages) {'id': id, 'label': id}
         ],
