@@ -246,22 +246,10 @@ func (t *Table[T]) groupSelectHTML() string {
 // pageURL links to another page of the list, keeping the search, sort,
 // page size, filters and group.
 func (t *Table[T]) pageURL(basePath string, page int) string {
-	q := url.Values{}
+	q := t.listQuery()
 	q.Set("page", strconv.Itoa(page))
-	if t.searchQuery != "" {
-		q.Set("search", t.searchQuery)
-	}
-	if t.sortCol != "" {
-		q.Set("sort", t.sortCol)
-		q.Set("direction", t.sortDir)
-	}
 	if t.perPage > 0 {
 		q.Set("perPage", strconv.Itoa(t.perPage))
-	}
-	for k, v := range t.activeFilters {
-		if v != "" && !strings.HasPrefix(k, "_") {
-			q.Set("filter_"+k, v)
-		}
 	}
 	if len(t.groups) > 0 {
 		g := t.activeGroup
@@ -271,4 +259,38 @@ func (t *Table[T]) pageURL(basePath string, page int) string {
 		q.Set("group", g)
 	}
 	return basePath + "?" + q.Encode()
+}
+
+// listQuery is the list's search, sort and filters as query parameters.
+func (t *Table[T]) listQuery() url.Values {
+	q := url.Values{}
+	if t.searchQuery != "" {
+		q.Set("search", t.searchQuery)
+	}
+	if t.sortCol != "" {
+		q.Set("sort", t.sortCol)
+		q.Set("direction", t.sortDir)
+	}
+	for k, v := range t.activeFilters {
+		if v != "" && !strings.HasPrefix(k, "_") {
+			q.Set("filter_"+k, v)
+		}
+	}
+	if adv := t.activeFilters["_advanced_search"]; adv != "" {
+		q.Set("advanced_search", adv)
+	}
+	return q
+}
+
+// exportLinks renders the Export header action: CSV and Excel downloads of
+// the list as filtered and sorted now.
+func (t *Table[T]) exportLinks(basePath, name, label string) string {
+	q := t.listQuery()
+	csvURL := basePath + "/" + name
+	if len(q) > 0 {
+		csvURL += "?" + q.Encode()
+	}
+	q.Set("format", "xlsx")
+	return fmt.Sprintf(`<a href="%s" class="btn btn-secondary" data-export="csv">%s CSV</a><a href="%s" class="btn btn-secondary" data-export="xlsx">Excel</a>`,
+		html.EscapeString(csvURL), html.EscapeString(label), html.EscapeString(basePath+"/"+name+"?"+q.Encode()))
 }

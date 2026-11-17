@@ -10,6 +10,7 @@ import 'controller.dart';
 import 'export.dart';
 import 'format.dart';
 import 'icons.dart';
+import 'import_dialog.dart';
 import 'links.dart';
 import 'list_tools.dart';
 import 'resource_form.dart';
@@ -671,6 +672,19 @@ class _ResourceListPageState extends State<ResourceListPage> {
                 child: Text('${c['label'] ?? humanize('${c['name']}')}'),
               ),
           ],
+        ),
+      if (admin.can(widget.slug, 'import'))
+        IconButton(
+          key: const Key('list-import'),
+          tooltip: 'Import',
+          icon: const Icon(Icons.upload_file_outlined),
+          onPressed: () async {
+            final n = await showImportDialog(context,
+                api: api,
+                slug: widget.slug,
+                title: '${_resource['plural_model_name'] ?? widget.slug}');
+            if (n != null && n > 0) _load();
+          },
         ),
       if (_exportEnabled)
         PopupMenuButton<String>(

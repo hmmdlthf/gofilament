@@ -1359,6 +1359,20 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				}
 			}
 
+			if mj := c.Request.FormValue("mapping"); mj != "" {
+				_ = json.Unmarshal([]byte(mj), &mapping)
+			}
+			if isDryRun(c, c.Request.FormValue("dry_run")) {
+				if pv, ok := res.(interface {
+					PreviewImport(ctx *Context, rdr io.Reader, mapping map[string]string) (*ImportPreview, error)
+				}); ok {
+					preview, err := pv.PreviewImport(ctx, file, mapping)
+					if err != nil {
+						return p.apiError(c, err)
+					}
+					return c.JSON(http.StatusOK, preview)
+				}
+			}
 			if importer, ok := res.(interface {
 				InvokeImportCSV(ctx *Context, rdr io.Reader, explicitMapping map[string]string) (*ImportResult, error)
 			}); ok {
@@ -1373,11 +1387,31 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		// 2. Check JSON payload ({"data": [ {...}, ... ]} or {"csv": "..."})
 		var jsonBody struct {
-			Data []map[string]any  `json:"data"`
-			CSV  string            `json:"csv"`
-			Map  map[string]string `json:"mapping"`
+			Data   []map[string]any  `json:"data"`
+			CSV    string            `json:"csv"`
+			File   string            `json:"file_base64"`
+			Map    map[string]string `json:"mapping"`
+			DryRun bool              `json:"dry_run"`
 		}
 		if err := json.NewDecoder(c.Request.Body).Decode(&jsonBody); err == nil {
+			if jsonBody.File != "" && jsonBody.CSV == "" {
+				raw, err := base64.StdEncoding.DecodeString(jsonBody.File)
+				if err != nil {
+					return c.JSON(http.StatusBadRequest, map[string]string{"error": "file_base64 is not valid base64"})
+				}
+				jsonBody.CSV = string(raw)
+			}
+			if jsonBody.CSV != "" && isDryRun(c, fmt.Sprint(jsonBody.DryRun)) {
+				if pv, ok := res.(interface {
+					PreviewImport(ctx *Context, rdr io.Reader, mapping map[string]string) (*ImportPreview, error)
+				}); ok {
+					preview, err := pv.PreviewImport(ctx, strings.NewReader(jsonBody.CSV), jsonBody.Map)
+					if err != nil {
+						return p.apiError(c, err)
+					}
+					return c.JSON(http.StatusOK, preview)
+				}
+			}
 			if len(jsonBody.Data) > 0 {
 				if importer, ok := res.(interface {
 					InvokeImportRecords(ctx *Context, rows []map[string]any) (*ImportResult, error)
@@ -1889,4 +1923,16 @@ func (p *Panel) apiErrorStatus(c *gcontext.Context, err error, fallback int) err
 		body["errors"] = verr.Errors
 	}
 	return c.JSON(status, body)
+}
+
+// isDryRun reports whether an import request only asks for a preview
+// (?dry_run=1 or a dry_run field).
+func isDryRun(c *gcontext.Context, field string) bool {
+	for _, v := range []string{c.Query("dry_run"), field} {
+		switch strings.ToLower(v) {
+		case "1", "true", "yes":
+			return true
+		}
+	}
+	return false
 }

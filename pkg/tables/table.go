@@ -645,6 +645,10 @@ func (t *Table[T]) Render(basePath string) string {
 			} else if ha.color == "danger" {
 				btnClass = "btn-danger"
 			}
+			if ha.name == "export" {
+				sb.WriteString(t.exportLinks(basePath, ha.name, ha.label))
+				continue
+			}
 			sb.WriteString(fmt.Sprintf(`<a href="%s/%s" class="btn %s">%s</a>`, basePath, ha.name, btnClass, html.EscapeString(ha.label)))
 		}
 	}

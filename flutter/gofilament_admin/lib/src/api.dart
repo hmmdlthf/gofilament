@@ -329,6 +329,28 @@ class AdminApi {
     return _map(_decode(await http.Response.fromStream(await _http.send(req))));
   }
 
+  /// Sends a CSV, TSV or .xlsx file to a resource's import endpoint. With
+  /// [dryRun] the server only previews it: {headers, mapping, fields, rows,
+  /// total, valid, invalid, problems}. Otherwise it imports the valid rows:
+  /// {imported, failed, rows}. [mapping] maps a file header to a field name
+  /// ('' skips the column).
+  Future<Map<String, dynamic>> importFile(
+      String slug, String filename, Uint8List bytes,
+      {Map<String, String>? mapping, bool dryRun = false}) async {
+    final req = http.MultipartRequest('POST', _uri('/resources/$slug/import'))
+      ..headers.addAll({
+        'Accept': 'application/json',
+        if (isAuthenticated) 'Authorization': 'Bearer $token',
+      })
+      ..fields.addAll({
+        if (dryRun) 'dry_run': '1',
+        if (mapping != null) 'mapping': json.encode(mapping),
+      })
+      ..files
+          .add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    return _map(_decode(await http.Response.fromStream(await _http.send(req))));
+  }
+
   /// Restores a soft-deleted record.
   Future<void> restoreRecord(String slug, String id) =>
       _send('POST', '/resources/$slug/restore', {'id': id});

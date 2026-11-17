@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Import preview and Excel**: imports (web, API, new Flutter Import dialog) now preview the file first: columns are matched to form fields (editable), every row is validated, and the problems are listed before the valid rows are imported. `.xlsx` files can be imported; exports gain `format=xlsx` and `columns=`. API: `dry_run`, `mapping`, `file_base64`; results include per-row field errors (`rows`). Resources report an `import` ability to API clients.
+
+### Fixed
+- **Imports skipped form validation**: imported rows went straight to `OnCreate`, without the create form's rules. They are now validated like the create form.
+- **Web Export ignored the list's filters**: the Export header action always exported every record as CSV. It now offers CSV and Excel of the current search, filters, advanced search and sort.
+- **Header actions hidden**: when a resource allowed creating records, the list replaced the table's header actions (Import, Export, custom ones) with the New button.
+
 ## [v1.34.0] - 2026-11-17
 
 ### Added
