@@ -97,6 +97,9 @@ class FakePanel {
   /// Versioned items: the form sends 'version' and PUT refuses a stale
   /// '_version' with 409 (edit-conflict tests).
   int? itemVersion;
+
+  /// Bodies of inline cell saves.
+  final List<Map<String, dynamic>> cellBodies = [];
   final List<Map<String, dynamic>> putBodies = [];
 
   /// Row meta merged into the list's row_meta by record id.
@@ -280,11 +283,24 @@ class FakePanel {
     }
     final cell = RegExp(r'^/resources/items/(\d+)/cell$').firstMatch(path);
     if (cell != null) {
-      final body = json.decode(req.body) as Map;
+      final body = Map<String, dynamic>.from(json.decode(req.body) as Map);
+      cellBodies.add({...body});
+      final sent = body['_version'];
+      if (itemVersion != null && sent != null && sent != '$itemVersion') {
+        return _json({
+          'error': 'This record was changed by someone else.',
+          'conflict': true,
+          'version': '$itemVersion',
+        }, 409);
+      }
       items.firstWhere(
               (i) => '${i['id']}' == cell.group(1))['${body['column']}'] =
           body['value'];
-      return _json({'success': true});
+      if (itemVersion != null) itemVersion = itemVersion! + 1;
+      return _json({
+        'success': true,
+        if (itemVersion != null) 'version': '$itemVersion',
+      });
     }
     final one = RegExp(r'^/resources/items/(\d+)$').firstMatch(path);
     if (one != null) {
@@ -341,6 +357,7 @@ class FakePanel {
           '${r['id']}': {
             'update': r['id'] != 2,
             'delete': r['id'] != 2,
+            if (itemVersion != null) 'version': '$itemVersion',
             ...?extraRowMeta['${r['id']}'],
             'actions': [
               if (r['archived'] != true) 'archive',

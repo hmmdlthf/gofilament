@@ -106,23 +106,31 @@
       if (element) {
         element.style.opacity = '0.6';
       }
+      const row = element && element.closest ? element.closest('tr[data-version]') : null;
+      const payload = { record_id: recordId, column: column, value: value };
+      if (row) payload._version = row.dataset.version;
       fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({
-          record_id: recordId,
-          column: column,
-          value: value
-        })
+        body: JSON.stringify(payload)
       })
       .then(r => {
+        if (r.status === 409) {
+          return r.json().catch(() => ({})).then(body => {
+            const err = new Error('conflict');
+            err.conflict = true;
+            err.body = body;
+            throw err;
+          });
+        }
         if (!r.ok) throw new Error('Save failed');
         return r.json().catch(() => ({ success: true }));
       })
       .then(data => {
+        if (row && data && data.version) row.dataset.version = data.version;
         if (element) {
           element.style.opacity = '1';
           element.classList.add('cell-saved');
@@ -135,6 +143,10 @@
           element.style.opacity = '1';
           element.style.borderColor = '#ef4444';
           setTimeout(() => element.style.borderColor = '', 2000);
+        }
+        if (err.conflict) {
+          this.notify({ type: 'warning', title: 'Not saved', body: 'This record was changed by someone else. Reload the page to see their changes.', duration: 8000 });
+          return;
         }
         this.notify({ type: 'danger', title: 'Error', body: 'Failed to update field', duration: 4000 });
         console.error('Cell update failed:', err);

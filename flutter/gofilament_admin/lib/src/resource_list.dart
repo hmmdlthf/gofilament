@@ -462,11 +462,19 @@ class _ResourceListPageState extends State<ResourceListPage> {
       Map<String, dynamic> row, String column, bool value) async {
     final previous = row[column];
     setState(() => row[column] = value);
+    final id = recordId(row);
+    final meta = _rowMeta[id];
     try {
-      await api.updateCell(widget.slug, recordId(row), column, value);
+      final version = await api.updateCell(widget.slug, id, column, value,
+          version: meta?['version']?.toString());
+      if (version != null && meta != null) meta['version'] = version;
     } on ApiException catch (e) {
       if (mounted) setState(() => row[column] = previous);
-      _toast(e.message, error: true);
+      _toast(
+          e.isConflict
+              ? 'This record was changed by someone else. Reload the list to see their changes.'
+              : e.message,
+          error: true);
     }
   }
 
