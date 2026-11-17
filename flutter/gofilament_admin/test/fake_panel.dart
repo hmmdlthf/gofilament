@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool manageRoles = false;
   bool board = false;
 
   /// Boot offers English and Arabic; Accept-Language "ar" answers RTL.
@@ -624,6 +625,7 @@ class FakePanel {
   Map<String, dynamic> _schema() => {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
+        'manage_roles': manageRoles,
         'notifications': notificationsOn,
         'saved_views': savedViews,
         'background_jobs': backgroundJobs,

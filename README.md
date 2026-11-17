@@ -1241,6 +1241,26 @@ an edit of that one field: form validation, `CanEdit`, the trashed check,
 edit conflicts (`Versioned`) and `OnUpdate` (so the audit log records it).
 API: `GET /admin/api/resources/:slug/board`, `POST .../board/move {id, value}`.
 
+### 🛡️ Roles and permissions
+
+```go
+panel.Roles(sqlStore.Roles(), filament.RolesConfig{    // or nil: in memory
+    Permissions: map[string]string{"reports.export": "Export reports"}, // your own
+    FindUsers: func(ctx *filament.Context, q string) ([]filament.UserRef, error) { ... },
+})
+```
+
+- Admins with the `roles.manage` permission (or a role with `*`) get a
+  *Roles* screen: create roles, tick their permissions, and give roles to
+  users (web, API `/admin/api/roles...`, Flutter account menu → Roles).
+- Every resource gets `<slug>.viewAny`, `.view`, `.create`, `.update`,
+  `.delete`; resources with no `Can*` callback of their own are checked
+  against them (`EnforceResources` turns this off). `filament.Permission("x")`
+  also reads these roles, so your own checks work with them.
+- Nobody can lock themselves out: a change that would take away your own
+  `roles.manage` is refused. Give the first admin a role with `*` when you
+  set up the store (`store.SaveRole` / `store.SetUserRoles`).
+
 ### 🔖 Saved views
 Users can name the current state of a list (search, sort, filters, advanced
 search, visible columns, grouping, page size), come back to it from a *Views*

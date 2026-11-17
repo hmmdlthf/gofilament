@@ -222,6 +222,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 	})
 	p.mountAccountAPIRoutes(r, apiPrefix, corsPreflight)
 	p.mountJobRoutes(r)
+	p.mountRoleRoutes(r)
+	p.mountRoleAPI(r, apiPrefix, corsPreflight)
 
 	// Panel Auth Logout Endpoint
 	r.POST(apiPrefix+"/logout", func(c *gcontext.Context) error {

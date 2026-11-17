@@ -88,6 +88,9 @@ func Permission(perm string) func(ctx *Context) bool {
 		if u == nil {
 			return false
 		}
+		if p := ctx.Panel(); p != nil && p.UserCan(ctx, perm) {
+			return true // a role given in the panel's roles screen
+		}
 		if su, ok := u.(ShieldUser); ok {
 			return su.HasPermission(perm)
 		}
