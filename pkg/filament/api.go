@@ -282,6 +282,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			SelectableColumns        []string            `json:"selectable_columns,omitempty"`
 			AdvancedSearchEnabled    bool                `json:"advanced_search_enabled"`
 			AdvancedSearchColumns    []string            `json:"advanced_search_columns,omitempty"`
+			Groups                   []string            `json:"groups,omitempty"`
+			DefaultGroup             string              `json:"default_group,omitempty"`
 			Tabs                     []*ResourceTab      `json:"tabs,omitempty"`
 			TabsEnabled              bool                `json:"tabs_enabled"`
 			ListMode                 string              `json:"list_mode"`
@@ -327,6 +329,11 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					advSearchEnabled = hasc.IsAdvancedSearchEnabled()
 					advSearchCols = hasc.GetAdvancedSearchableColumns()
 				}
+				var groups []string
+				defaultGroup := ""
+				if g, ok := res.(interface{ GetGroups() ([]string, string) }); ok {
+					groups, defaultGroup = g.GetGroups()
+				}
 				tabsEnabled := p.IsTabsEnabled() || res.IsTabsEnabled()
 				var tabsDTO []*ResourceTab = res.GetTabs()
 				if len(tabsDTO) == 0 && tabsEnabled {
@@ -370,6 +377,8 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					SelectableColumns:        selectableCols,
 					AdvancedSearchEnabled:    advSearchEnabled,
 					AdvancedSearchColumns:    advSearchCols,
+					Groups:                   groups,
+					DefaultGroup:             defaultGroup,
 					Tabs:                     tabsDTO,
 					TabsEnabled:              tabsEnabled,
 					ListMode:                 listMode,
@@ -1262,6 +1271,13 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 				"total":    total,
 				"page":     page,
 				"per_page": perPage,
+			}
+			if lt, ok := res.(interface {
+				ListTotals(ctx *Context, search string, filters map[string]string) tables.Summaries
+			}); ok {
+				if totals := lt.ListTotals(ctx, search, filters); totals != nil {
+					out["summaries"] = totals
+				}
 			}
 			if rm, ok := res.(interface {
 				RowMeta(ctx *Context, records any) map[string]map[string]any

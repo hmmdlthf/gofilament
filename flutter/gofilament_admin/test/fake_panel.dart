@@ -83,6 +83,9 @@ class FakePanel {
   List<Map<String, dynamic>> extraWidgets = [];
   List<Map<String, dynamic>> extraFilters = [];
 
+  /// Sent as the list's "summaries" (totals over all results).
+  Map<String, dynamic>? listSummaries;
+
   /// Extra keys of the items resource schema (advanced search, ...).
   Map<String, dynamic> itemsResourceExtras = {};
 
@@ -317,6 +320,7 @@ class FakePanel {
         ? <Map<String, dynamic>>[]
         : rows.sublist(start, (start + perPage).clamp(0, rows.length));
     return {
+      if (listSummaries != null) 'summaries': listSummaries,
       'row_meta': {
         for (final r in page0)
           '${r['id']}': {

@@ -26,6 +26,7 @@ type BaseColumn[T any] struct {
 	refinedFilter          bool
 	filterOptions          map[string]string
 	valueFunc              func(record T) any
+	summaries              []Summary
 }
 
 func (c *BaseColumn[T]) GetName() string {
@@ -696,6 +697,8 @@ type ColumnDTO struct {
 	// Component / Props: a column drawn by a Flutter cell component (CustomColumn).
 	Component string `json:"component,omitempty"`
 	Props     any    `json:"props,omitempty"`
+	// Summaries are the aggregates shown under the column (sum, avg, ...).
+	Summaries []Summary `json:"summaries,omitempty"`
 }
 
 // ColumnToDTO transforms any ColumnRenderer into a ColumnDTO.
@@ -736,6 +739,9 @@ func ColumnToDTO[T any](col ColumnRenderer[T]) ColumnDTO {
 	}
 	if cd, ok := any(col).(columnDescriber); ok {
 		cd.describeColumn(&dto)
+	}
+	if cd, ok := any(col).(interface{ GetSummaries() []Summary }); ok {
+		dto.Summaries = cd.GetSummaries()
 	}
 
 	return dto

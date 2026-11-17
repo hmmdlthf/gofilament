@@ -90,6 +90,7 @@ type CellUpdateHandlerFunc func(ctx *Context, id, column string, value any) erro
 
 // BaseResource implements ResourceInterface with generic Ent/model type T.
 type BaseResource[T any] struct {
+	summariesUsing func(ctx *Context, search string, filters map[string]string) (tables.Summaries, error)
 	slug            string
 	modelName       string
 	pluralModelName string
@@ -727,6 +728,40 @@ func (r *BaseResource[T]) GetAdvancedSearchableColumns() []string {
 	return tbl.GetAdvancedSearchableColumns()
 }
 
+// SummariesUsing computes the aggregates of summarized columns over all
+// records matching the search and filters (not just the page), shown as
+// "All results" under the table and sent as "summaries" by the API. Without
+// it only the page (and each group) is summarized.
+func (r *BaseResource[T]) SummariesUsing(fn func(ctx *Context, search string, filters map[string]string) (tables.Summaries, error)) *BaseResource[T] {
+	r.summariesUsing = fn
+	return r
+}
+
+func (r *BaseResource[T]) totals(ctx *Context, search string, filters map[string]string) tables.Summaries {
+	if r.summariesUsing == nil {
+		return nil
+	}
+	s, err := r.summariesUsing(ctx, search, filters)
+	if err != nil {
+		return nil
+	}
+	return s
+}
+
+// ListTotals is used by the API.
+func (r *BaseResource[T]) ListTotals(ctx *Context, search string, filters map[string]string) tables.Summaries {
+	return r.totals(ctx, search, filters)
+}
+
+// GetGroups returns the table's group columns and default group.
+func (r *BaseResource[T]) GetGroups() ([]string, string) {
+	if r.tableBuilder == nil {
+		return nil, ""
+	}
+	tbl := r.tableBuilder(tables.New[T]())
+	return tbl.GetGroups(), tbl.GetDefaultGroup()
+}
+
 // IsAdvancedSearchEnabled reports whether advanced search is active on this resource.
 func (r *BaseResource[T]) IsAdvancedSearchEnabled() bool {
 	return len(r.GetAdvancedSearchableColumns()) > 0
@@ -1234,6 +1269,13 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 
 	filters := tables.FilterValues(ctx.Request.URL.Query())
 
+	// While grouped, rows are sorted by the group column so a group is
+	// never split across the page.
+	group := tbl.ResolveGroup(ctx.Query("group"))
+	if group != "" && sortCol != group {
+		sortCol, sortDir = group, "asc"
+	}
+
 	var records []T
 	total := 0
 	if r.onList != nil {
@@ -1245,6 +1287,10 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	}
 
 	tbl.SetData(records, total, page, perPage, search, sortCol, sortDir, filters)
+	tbl.SetGroup(group)
+	if totals := r.totals(ctx, search, filters); totals != nil {
+		tbl.SetTotals(totals)
+	}
 	if r.canCreate == nil || r.canCreate(ctx) {
 		tbl.HeaderActions(tables.Action[T]("create").Label(fmt.Sprintf("New %s", r.modelName)))
 	}

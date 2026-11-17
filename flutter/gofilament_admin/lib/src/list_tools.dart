@@ -449,3 +449,84 @@ String rangeSummary(String label, String value) {
   if (a.isEmpty) return '$label: ≤ $b';
   return '$label: $a – $b';
 }
+
+// ------------------------------------------------------ summaries & groups
+
+const summaryLabels = {
+  'sum': 'Sum',
+  'avg': 'Average',
+  'count': 'Count',
+  'min': 'Min',
+  'max': 'Max',
+};
+
+double? _num(dynamic v) {
+  if (v is num) return v.toDouble();
+  if (v is String) return double.tryParse(v.trim());
+  return null;
+}
+
+/// Computes the aggregates (sum, avg, count, min, max) of [values], like
+/// the server's tables.Compute.
+Map<String, double> computeSummaries(
+    Iterable<dynamic> values, List<String> kinds) {
+  final nums = <double>[];
+  var count = 0;
+  for (final v in values) {
+    if (v == null || v == '') continue;
+    count++;
+    final n = _num(v);
+    if (n != null && !n.isNaN) nums.add(n);
+  }
+  final out = <String, double>{};
+  for (final k in kinds) {
+    switch (k) {
+      case 'count':
+        out[k] = count.toDouble();
+      case 'sum':
+        out[k] = nums.fold(0.0, (a, b) => a + b);
+      case 'avg':
+        if (nums.isNotEmpty) {
+          out[k] = nums.fold(0.0, (a, b) => a + b) / nums.length;
+        }
+      case 'min':
+        if (nums.isNotEmpty) out[k] = nums.reduce((a, b) => a < b ? a : b);
+      case 'max':
+        if (nums.isNotEmpty) out[k] = nums.reduce((a, b) => a > b ? a : b);
+    }
+  }
+  return out;
+}
+
+/// Prints an aggregate with at most two decimals.
+String formatSummary(double v) {
+  if (v == v.roundToDouble() && v.abs() < 1e15) return v.toInt().toString();
+  final s = v.toStringAsFixed(2);
+  return s.endsWith('0') ? s.substring(0, s.length - 1) : s;
+}
+
+/// The summary lines of one column ("Sum 115", "Count 3").
+Widget summaryCell(
+    BuildContext context, Map<String, double>? values, List<String> kinds) {
+  if (values == null) return const SizedBox.shrink();
+  final theme = Theme.of(context);
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final k in kinds)
+        if (values[k] != null)
+          Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                    text: '${summaryLabels[k] ?? k} ',
+                    style:
+                        TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                TextSpan(
+                    text: formatSummary(values[k]!),
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ]),
+              style: const TextStyle(fontSize: 12)),
+    ],
+  );
+}

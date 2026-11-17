@@ -44,6 +44,26 @@ class _ResourceListPageState extends State<ResourceListPage> {
   final Map<String, String> _filters = {};
   AdvancedSearch _advanced = AdvancedSearch();
 
+  /// The column rows are grouped by ("" for none).
+  late String _group;
+  Map<String, Map<String, double>> _totals = const {};
+
+  List<String> get _groups {
+    final g = _resource['groups'];
+    return g is List ? g.map((e) => '$e').toList() : const [];
+  }
+
+  Map<String, List<String>> get _summarized => {
+        for (final c in _allColumns)
+          if (c['summaries'] is List && (c['summaries'] as List).isNotEmpty)
+            '${c['name']}': (c['summaries'] as List).map((e) => '$e').toList(),
+      };
+
+  String _columnLabel(String name) {
+    final c = _allColumns.where((c) => c['name'] == name);
+    return c.isEmpty ? humanize(name) : '${c.first['label'] ?? humanize(name)}';
+  }
+
   /// Column widths the user set by dragging (name -> width).
   final Map<String, double> _widths = {};
   final Set<String> _selected = {};
@@ -269,6 +289,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
   void initState() {
     super.initState();
     _perPage = (_resource['per_page'] as num?)?.toInt() ?? 25;
+    _group = '${_resource['default_group'] ?? ''}';
+    if (!_groups.contains(_group)) _group = '';
     _loadColumnChoice();
     _loadWidths();
     _load();
@@ -303,8 +325,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
           page: _page,
           perPage: _perPage,
           search: _search.text.trim(),
-          sort: _sort,
-          descending: _descending,
+          sort: _group.isNotEmpty ? _group : _sort,
+          descending: _group.isNotEmpty ? false : _descending,
           filters: _filters,
           advancedSearch: _advanced.encode());
       if (!mounted || request != _requestId) return;
@@ -312,6 +334,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
         _rows = page.rows;
         _rowMeta = page.rowMeta;
         _total = page.total;
+        _totals = page.summaries;
         _loading = false;
         _selected.removeWhere((id) => !_rows.any((r) => recordId(r) == id));
       });
@@ -592,6 +615,35 @@ class _ResourceListPageState extends State<ResourceListPage> {
           tooltip: 'Refresh',
           icon: const Icon(Icons.refresh),
           onPressed: _load),
+      if (_groups.isNotEmpty)
+        PopupMenuButton<String>(
+          key: const Key('list-group'),
+          tooltip: 'Group by',
+          icon: Icon(Icons.segment,
+              color: _group.isEmpty
+                  ? null
+                  : Theme.of(context).colorScheme.primary),
+          onSelected: (g) {
+            setState(() {
+              _group = g;
+              _page = 1;
+            });
+            _load();
+          },
+          itemBuilder: (_) => [
+            CheckedPopupMenuItem(
+                key: const Key('group-none'),
+                value: '',
+                checked: _group.isEmpty,
+                child: const Text('No grouping')),
+            for (final g in _groups)
+              CheckedPopupMenuItem(
+                  key: Key('group-$g'),
+                  value: g,
+                  checked: _group == g,
+                  child: Text(_columnLabel(g))),
+          ],
+        ),
       if (_advancedEnabled)
         IconButton(
           key: const Key('list-advanced-search'),
@@ -955,27 +1007,114 @@ class _ResourceListPageState extends State<ResourceListPage> {
                 if (hasRowActions) const DataColumn(label: Text('')),
               ],
               rows: [
-                for (final row in _rows)
-                  DataRow(
-                    key: ValueKey(recordId(row)),
-                    selected: _selected.contains(recordId(row)),
-                    onSelectChanged: _selectable
-                        ? (v) => setState(() => v == true
-                            ? _selected.add(recordId(row))
-                            : _selected.remove(recordId(row)))
-                        : null,
-                    cells: [
-                      for (final c in columns)
-                        DataCell(sizedCell(
-                            _widths['${c['name']}'], _cell(context, c, row))),
-                      if (hasRowActions) DataCell(_rowActions(context, row)),
-                    ],
-                  ),
+                for (final entry in _tableRows(columns))
+                  if (entry.row == null)
+                    _extraRow(context, entry, columns, hasRowActions)
+                  else ...[
+                    for (final row in [entry.row!])
+                      DataRow(
+                        key: ValueKey(recordId(row)),
+                        selected: _selected.contains(recordId(row)),
+                        onSelectChanged: _selectable
+                            ? (v) => setState(() => v == true
+                                ? _selected.add(recordId(row))
+                                : _selected.remove(recordId(row)))
+                            : null,
+                        cells: [
+                          for (final c in columns)
+                            DataCell(sizedCell(_widths['${c['name']}'],
+                                _cell(context, c, row))),
+                          if (hasRowActions)
+                            DataCell(_rowActions(context, row)),
+                        ],
+                      ),
+                  ],
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// The table's rows in order: group headers, records, group subtotals
+  /// and the summary rows at the end.
+  List<_TableRow> _tableRows(List<Map<String, dynamic>> columns) {
+    final out = <_TableRow>[];
+    final summarized = _summarized;
+    Map<String, Map<String, double>> sums(List<Map<String, dynamic>> rows) => {
+          for (final e in summarized.entries)
+            e.key:
+                computeSummaries(rows.map((r) => valueAt(r, e.key)), e.value),
+        };
+    if (_group.isEmpty) {
+      out.addAll(_rows.map((r) => _TableRow(row: r)));
+    } else {
+      String key(Map<String, dynamic> r) => displayValue(valueAt(r, _group));
+      var i = 0;
+      while (i < _rows.length) {
+        final k = key(_rows[i]);
+        final members = <Map<String, dynamic>>[];
+        while (i < _rows.length && key(_rows[i]) == k) {
+          members.add(_rows[i++]);
+        }
+        out.add(_TableRow(
+            label:
+                '${_columnLabel(_group)}: ${k.isEmpty ? '(none)' : k} (${members.length})',
+            kind: 'group'));
+        out.addAll(members.map((r) => _TableRow(row: r)));
+        if (summarized.isNotEmpty) {
+          out.add(_TableRow(
+              label: 'Subtotal', kind: 'subtotal', sums: sums(members)));
+        }
+      }
+    }
+    if (summarized.isNotEmpty && _rows.isNotEmpty) {
+      out.add(
+          _TableRow(label: 'This page', kind: 'summary', sums: sums(_rows)));
+      if (_totals.isNotEmpty) {
+        out.add(
+            _TableRow(label: 'All results', kind: 'summary', sums: _totals));
+      }
+    }
+    for (var i = 0; i < out.length; i++) {
+      out[i].pos = i;
+    }
+    return out;
+  }
+
+  DataRow _extraRow(BuildContext context, _TableRow entry,
+      List<Map<String, dynamic>> columns, bool hasRowActions) {
+    final theme = Theme.of(context);
+    final group = entry.kind == 'group';
+    final summarized = _summarized;
+    return DataRow(
+      key: ValueKey('${entry.kind}-${entry.pos}'),
+      color: WidgetStatePropertyAll(group
+          ? theme.colorScheme.surfaceContainerHighest
+          : theme.colorScheme.surfaceContainerLow),
+      cells: [
+        for (var i = 0; i < columns.length; i++)
+          DataCell(sizedCell(
+            _widths['${columns[i]['name']}'],
+            group
+                ? (i == 0
+                    ? Text(entry.label,
+                        key: Key('group-row-${entry.label}'),
+                        style: const TextStyle(fontWeight: FontWeight.w700))
+                    : const SizedBox.shrink())
+                : summarized.containsKey('${columns[i]['name']}')
+                    ? summaryCell(context, entry.sums?['${columns[i]['name']}'],
+                        summarized['${columns[i]['name']}']!)
+                    : (i == 0
+                        ? Text(entry.label,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.onSurfaceVariant))
+                        : const SizedBox.shrink()),
+          )),
+        if (hasRowActions) const DataCell(SizedBox.shrink()),
+      ],
     );
   }
 
@@ -1166,4 +1305,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
       ]),
     );
   }
+}
+
+class _TableRow {
+  _TableRow({this.row, this.label = '', this.kind = '', this.sums});
+  final Map<String, dynamic>? row;
+  final String label;
+  final String kind;
+  final Map<String, Map<String, double>>? sums;
+  int pos = 0;
 }
