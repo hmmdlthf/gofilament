@@ -473,6 +473,13 @@ func (p *Panel) handleForgotPassword(c *gcontext.Context) error {
 		return p.renderForgotPassword(ctx, statusTooManyRequests, throttleMessage(wait), "")
 	}
 	p.loginFailed(c, key) // every request counts against the limit
+	p.sendResetLink(c, ctx, email)
+	// The same answer whether or not the address has an account.
+	return p.renderForgotPassword(ctx, http.StatusOK, "", "If an account uses that address, we have emailed a link to reset the password.")
+}
+
+// sendResetLink mails a reset link when email has an account.
+func (p *Panel) sendResetLink(c *gcontext.Context, ctx *Context, email string) {
 	if user, err := p.accounts.FindByEmail(ctx, email); err == nil && user != nil {
 		if token, err := p.resetBroker.CreateToken(email); err == nil {
 			q := url.Values{"token": {token}, "email": {email}}
@@ -480,8 +487,6 @@ func (p *Panel) handleForgotPassword(c *gcontext.Context) error {
 			_ = p.accounts.SendResetLink(ctx, user, email, link)
 		}
 	}
-	// The same answer whether or not the address has an account.
-	return p.renderForgotPassword(ctx, http.StatusOK, "", "If an account uses that address, we have emailed a link to reset the password.")
 }
 
 func (p *Panel) absoluteURL(c *gcontext.Context, path string) string {

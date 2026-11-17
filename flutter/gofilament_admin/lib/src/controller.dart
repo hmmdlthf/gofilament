@@ -213,11 +213,35 @@ class AdminController extends ChangeNotifier {
   }
 
   /// Signs in. Throws [ApiException] with a message for the login form.
-  Future<void> login(String username, String password,
+  /// Returns a challenge id when a two-factor code is needed next
+  /// ([loginTwoFactor]).
+  Future<String?> login(String username, String password,
       {bool remember = false}) async {
-    await api.login(username, password, remember: remember);
+    final challenge = await api.login(username, password, remember: remember);
+    if (challenge != null) return challenge;
+    await _loadSchema();
+    return null;
+  }
+
+  /// Finishes a two-factor sign-in.
+  Future<void> loginTwoFactor(String challenge, String code) async {
+    await api.loginTwoFactor(challenge, code);
     await _loadSchema();
   }
+
+  /// Which account screens the server offers (profile, update_profile,
+  /// password, password_reset, two_factor, recovery_codes).
+  Map<String, dynamic> get accountFeatures {
+    final a = boot['auth'];
+    final f = a is Map ? a['accounts'] : null;
+    return f is Map ? Map<String, dynamic>.from(f) : const {};
+  }
+
+  /// Whether the account screen has anything to show.
+  bool get hasAccountScreen =>
+      accountFeatures['profile'] == true ||
+      accountFeatures['password'] == true ||
+      accountFeatures['two_factor'] == true;
 
   Future<void> logout() async {
     await api.logout();

@@ -1055,7 +1055,22 @@ panel.Accounts(filament.Accounts{
 - The topbar now shows the signed-in user's name with the user menu
   (Profile when available, Sign Out, and `panel.UserMenu` items).
 
-Not included yet: self-registration (`Registration()` is still only a flag) and these screens in the Flutter app.
+**Flutter and other API clients** get the same screens over the API (bearer
+token): `GET/PUT /account`, `POST /account/password`,
+`/account/two-factor/{enable,confirm,disable,recovery-codes}` and
+`POST /forgot-password` (the link opens the web reset page). `GET /boot`
+lists the available ones under `auth.accounts`. The Flutter app shows *Your
+account* in the account menu, a *Forgot your password?* link and the code step
+at sign-in.
+
+With two-factor on, `POST /login` answers `{"two_factor": true, "challenge":
+"..."}` instead of a token; `POST /login/two-factor {challenge, code}` returns
+the token once a valid authenticator or recovery code is given. The issued
+token waits in golaravel's cache (use a shared store on several instances);
+without `panel.Sessions` the user is looked up as a `PanelUser` with the login
+id, so `TwoFactorSecret` should find users by `GetAuthIdentifier()`.
+
+Not included yet: self-registration (`Registration()` is still only a flag).
 
 ### 🗄️ Keeping runtime state in your database (`pkg/sqlstore`)
 
