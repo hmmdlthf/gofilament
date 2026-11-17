@@ -99,6 +99,7 @@ const Map<String, dynamic> panelSchema = <String, dynamic>{
       'name': 'Sales',
     },
   ],
+  'notifications': false,
   'path': '/admin',
   'remember_me_duration': 2592000,
   'requires_auth': true,

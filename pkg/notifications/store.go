@@ -2,6 +2,7 @@ package notifications
 
 import (
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
@@ -23,12 +24,15 @@ type NotificationStore interface {
 type MemoryNotificationStore struct {
 	mu            sync.RWMutex
 	notifications map[string][]*Notification
+	// broadcastReads records, per user, which broadcasts ("all") they read.
+	broadcastReads map[string]map[string]bool
 }
 
 // NewMemoryStore creates an initialized in-memory notification store.
 func NewMemoryStore() *MemoryNotificationStore {
 	return &MemoryNotificationStore{
-		notifications: make(map[string][]*Notification),
+		notifications:  make(map[string][]*Notification),
+		broadcastReads: make(map[string]map[string]bool),
 	}
 }
 
@@ -47,40 +51,39 @@ func (s *MemoryNotificationStore) Get(user string, id string) (*Notification, er
 func (s *MemoryNotificationStore) List(user string, limit int) ([]*Notification, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
-	items := s.notifications[user]
-	// Also include broadcast items sent to "all"
-	if user != "all" && len(s.notifications["all"]) > 0 {
-		combined := make([]*Notification, 0, len(items)+len(s.notifications["all"]))
-		combined = append(combined, items...)
-		combined = append(combined, s.notifications["all"]...)
-		items = combined
-	}
-
+	items := s.visible(user)
 	if limit <= 0 || limit > len(items) {
 		limit = len(items)
 	}
+	return items[:limit], nil
+}
 
-	result := make([]*Notification, limit)
-	copy(result, items[:limit])
-	return result, nil
+// visible returns copies of the user's notifications and the broadcasts,
+// newest first, with Read as seen by that user.
+func (s *MemoryNotificationStore) visible(user string) []*Notification {
+	var out []*Notification
+	for _, n := range s.notifications[user] {
+		cp := *n
+		out = append(out, &cp)
+	}
+	if user != "all" {
+		for _, n := range s.notifications["all"] {
+			cp := *n
+			cp.Read = n.Read || s.broadcastReads[user][n.ID]
+			out = append(out, &cp)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
 }
 
 func (s *MemoryNotificationStore) CountUnread(user string) (int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	count := 0
-	for _, n := range s.notifications[user] {
+	for _, n := range s.visible(user) {
 		if !n.Read {
 			count++
-		}
-	}
-	if user != "all" {
-		for _, n := range s.notifications["all"] {
-			if !n.Read {
-				count++
-			}
 		}
 	}
 	return count, nil
@@ -102,7 +105,6 @@ func (s *MemoryNotificationStore) Save(user string, n *Notification) error {
 func (s *MemoryNotificationStore) MarkAsRead(user string, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	for _, n := range s.notifications[user] {
 		if n.ID == id {
 			n.Read = true
@@ -112,7 +114,7 @@ func (s *MemoryNotificationStore) MarkAsRead(user string, id string) error {
 	if user != "all" {
 		for _, n := range s.notifications["all"] {
 			if n.ID == id {
-				n.Read = true
+				s.markBroadcastRead(user, id) // read for this user only
 				return nil
 			}
 		}
@@ -120,16 +122,22 @@ func (s *MemoryNotificationStore) MarkAsRead(user string, id string) error {
 	return errors.New("notification not found")
 }
 
+func (s *MemoryNotificationStore) markBroadcastRead(user, id string) {
+	if s.broadcastReads[user] == nil {
+		s.broadcastReads[user] = map[string]bool{}
+	}
+	s.broadcastReads[user][id] = true
+}
+
 func (s *MemoryNotificationStore) MarkAllAsRead(user string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
 	for _, n := range s.notifications[user] {
 		n.Read = true
 	}
 	if user != "all" {
 		for _, n := range s.notifications["all"] {
-			n.Read = true
+			s.markBroadcastRead(user, n.ID)
 		}
 	}
 	return nil
@@ -139,7 +147,7 @@ func (s *MemoryNotificationStore) Clear(user string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	delete(s.notifications, user)
+	delete(s.notifications, user) // broadcasts stay
 	return nil
 }
 

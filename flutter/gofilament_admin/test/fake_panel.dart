@@ -93,6 +93,7 @@ class FakePanel {
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
   bool globalSearch = false;
+  bool notificationsOn = false;
   bool history = false;
   bool savedViews = false;
 
@@ -608,6 +609,7 @@ class FakePanel {
   Map<String, dynamic> _schema() => {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
+        'notifications': notificationsOn,
         'saved_views': savedViews,
         'client_pages': [
           for (final id in clientPages) {'id': id, 'label': id}

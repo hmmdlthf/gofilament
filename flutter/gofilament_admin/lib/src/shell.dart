@@ -7,6 +7,7 @@ import 'global_search.dart';
 import 'dashboard.dart';
 import 'icons.dart';
 import 'login.dart';
+import 'notifications.dart';
 import 'resource_list.dart';
 import 'theme.dart';
 
@@ -399,6 +400,8 @@ class _TopBar extends StatelessWidget {
               style: theme.textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.w600)),
         ),
+        if (admin.schema['notifications'] == true)
+          NotificationBell(api: admin.api),
         if (onSearch != null)
           IconButton(
             key: const Key('global-search'),

@@ -467,6 +467,28 @@ class AdminApi {
     return _map(_decode(await http.Response.fromStream(await _http.send(req))));
   }
 
+  /// The user's notifications: {unread_count, notifications: [{id, type,
+  /// title, body, created_at, read, action_label, action_url}]}.
+  Future<Map<String, dynamic>> notifications() async =>
+      _map(await _get('/notifications'));
+
+  Future<void> markNotificationRead(String id) =>
+      _send('POST', '/notifications/mark-read', {'id': id});
+
+  Future<void> markAllNotificationsRead() =>
+      _send('POST', '/notifications/mark-all-read');
+
+  Future<void> clearNotifications() => _send('POST', '/notifications/clear');
+
+  /// Downloads a file from an API path; returns its bytes and file name.
+  Future<({Uint8List bytes, String name})> downloadFile(String path) async {
+    final res = await _http.get(_uri(path), headers: _headers);
+    if (res.statusCode >= 400) _decode(res); // throws ApiException
+    final m = RegExp(r'filename="([^"]+)"')
+        .firstMatch(res.headers['content-disposition'] ?? '');
+    return (bytes: res.bodyBytes, name: m?.group(1) ?? 'download');
+  }
+
   /// Restores a soft-deleted record.
   Future<void> restoreRecord(String slug, String id) =>
       _send('POST', '/resources/$slug/restore', {'id': id});

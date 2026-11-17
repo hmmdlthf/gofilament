@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flutter notification bell**: with `Panel.DatabaseNotifications`-style notifications on (`schema.notifications`), the Flutter topbar shows a bell with the unread count (checked every minute) and a list to read, open (action links; background-job downloads go through the API), mark all read and clear.
+
+### Fixed
+- **Broadcast notifications (memory store)**: one user marking a notification sent to everyone as read marked it read for every user; reads are now per user, as in the SQL store. `List` returns copies sorted newest first (the user's own and broadcast notifications were not interleaved by time).
+
 ## [v1.35.0] - 2026-11-17
 
 ### Added
