@@ -1,0 +1,94 @@
+name: Website
+
+# Builds https://gofilament.elridhma.com (landing page, docs for every
+# release, changelog) and deploys it to the goplesk server when a release is
+# published. Pull requests that touch site/ only build it.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  pull_request:
+    paths: ["site/**", ".github/workflows/site.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: false
+
+env:
+  HUGO_VERSION: "0.168.0"
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # every release tag: each one becomes a docs version
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: site/go.mod
+          cache: false
+      - name: Install Hugo
+        run: |
+          base="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}"
+          file="hugo_${HUGO_VERSION}_linux-amd64.tar.gz"
+          curl -fsSLO "$base/$file"
+          curl -fsSLO "$base/hugo_${HUGO_VERSION}_checksums.txt"
+          sha256sum --ignore-missing -c "hugo_${HUGO_VERSION}_checksums.txt"
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$file" -C "$HOME/.local/bin" hugo
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: ./site/build.sh
+      - name: Package
+        run: tar -czf site.tgz -C site/public .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site.tgz
+          retention-days: 7
+
+  deploy:
+    name: Deploy to goplesk
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: website
+      url: https://gofilament.elridhma.com
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+      - name: Upload release to goplesk
+        env:
+          GOPLESK_URL: ${{ secrets.GOPLESK_URL }}
+          GOPLESK_CLUSTER_KEY: ${{ secrets.GOPLESK_CLUSTER_KEY }}
+          GOPLESK_APP: ${{ vars.GOPLESK_APP || 'gofilament-site' }}
+        run: |
+          if [ -z "$GOPLESK_URL" ] || [ -z "$GOPLESK_CLUSTER_KEY" ]; then
+            echo "::error::Add the GOPLESK_URL and GOPLESK_CLUSTER_KEY secrets (see site/README.md)."
+            exit 1
+          fi
+          sum=$(sha256sum site.tgz | cut -d' ' -f1)
+          echo "Uploading site.tgz ($(du -h site.tgz | cut -f1), sha256 $sum) to app $GOPLESK_APP"
+          curl --fail-with-body --silent --show-error --max-time 600 \
+            -H "Authorization: Bearer $GOPLESK_CLUSTER_KEY" \
+            -H "X-Goplesk-Sha256: $sum" \
+            --data-binary @site.tgz \
+            "${GOPLESK_URL%/}/api/v1/apps/${GOPLESK_APP}/release"
+          echo
+      - name: Check the live site
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS -o /dev/null https://gofilament.elridhma.com/docs/latest/; then
+              echo "Live."; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::https://gofilament.elridhma.com/docs/latest/ did not answer after the deploy"
+          exit 1

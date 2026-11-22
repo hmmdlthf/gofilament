@@ -1,0 +1,102 @@
+{{ define "bodyclass" }}home{{ end }}
+{{ define "main" }}
+{{- $l := hugo.Data.landing }}
+{{- $rel := hugo.Data.release }}
+<main id="main">
+  <section class="hero">
+    <div class="hero-grid" aria-hidden="true"></div>
+    <div class="wrap hero-inner">
+      {{- with $rel }}
+      <a class="pill" href="{{ "/changelog/" | relURL }}"><span class="pill-tag">New</span> {{ .tag }} released {{ with .date }}· {{ (time .).Format "Jan 2, 2006" }}{{ end }} <span aria-hidden="true">→</span></a>
+      {{- end }}
+      <h1>{{ $l.hero.title }}</h1>
+      <p class="lead">{{ $l.hero.lead }}</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="{{ $l.hero.primary.url | relURL }}">{{ $l.hero.primary.label }}</a>
+        <a class="btn btn-ghost" href="{{ $l.hero.secondary.url | relURL }}">{{ $l.hero.secondary.label }}</a>
+      </div>
+      <div class="install" data-copy-box>
+        <span class="prompt" aria-hidden="true">$</span>
+        <code>{{ $l.hero.install }}</code>
+        <button class="copy" type="button" data-copy="{{ $l.hero.install }}" aria-label="Copy install command">Copy</button>
+      </div>
+      <p class="eyebrow">{{ $l.hero.eyebrow }}</p>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="features-h">
+    <div class="wrap">
+      <h2 id="features-h" class="section-title">Everything an admin needs, in Go</h2>
+      <div class="features">
+        {{- range $l.features }}
+        <article class="feature">
+          <span class="feature-icon">{{ partial "icon.html" .icon }}</span>
+          <h3>{{ .title }}</h3>
+          <p>{{ .text }}</p>
+        </article>
+        {{- end }}
+      </div>
+    </div>
+  </section>
+
+  {{- with $l.quickstart }}
+  <section class="section section-alt" aria-labelledby="qs-h">
+    <div class="wrap qs">
+      <div class="qs-copy">
+        <h2 id="qs-h" class="section-title">{{ .title }}</h2>
+        <p class="lead">{{ .lead }}</p>
+        <a class="btn btn-primary" href="{{ $l.hero.primary.url | relURL }}">Follow the quickstart</a>
+      </div>
+      <ol class="steps">
+        {{- range $i, $s := .steps }}
+        <li class="step">
+          <h3><span class="step-n">{{ add $i 1 }}</span>{{ $s.title }}</h3>
+          {{ transform.Highlight (strings.TrimRight "\n" $s.code) $s.lang }}
+        </li>
+        {{- end }}
+      </ol>
+    </div>
+  </section>
+  {{- end }}
+
+  {{- with $l.engines }}
+  <section class="section" aria-labelledby="eng-h">
+    <div class="wrap">
+      <h2 id="eng-h" class="section-title">{{ .title }}</h2>
+      <div class="engines">
+        {{- range .items }}
+        <article class="engine"><h3>{{ .title }}</h3><p>{{ .text }}</p></article>
+        {{- end }}
+      </div>
+    </div>
+  </section>
+  {{- end }}
+
+  {{- with $rel }}
+  <section class="section section-alt" aria-labelledby="new-h">
+    <div class="wrap release">
+      <div>
+        <h2 id="new-h" class="section-title">What's new in {{ .tag }}</h2>
+        <ul class="highlights">
+          {{- range .highlights }}<li>{{ . }}</li>{{ end }}
+        </ul>
+      </div>
+      <div class="release-links">
+        <a class="btn btn-ghost" href="{{ "/changelog/" | relURL }}">Full changelog</a>
+        <a class="btn btn-ghost" href="{{ .notes }}">Release notes on GitHub</a>
+      </div>
+    </div>
+  </section>
+  {{- end }}
+
+  <section class="section cta-band">
+    <div class="wrap">
+      <h2 class="section-title">Ship your admin this week.</h2>
+      <div class="cta">
+        <a class="btn btn-primary" href="{{ $l.hero.primary.url | relURL }}">{{ $l.hero.primary.label }}</a>
+        <a class="btn btn-ghost" href="{{ site.Params.repo }}">Star on GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+{{ end }}

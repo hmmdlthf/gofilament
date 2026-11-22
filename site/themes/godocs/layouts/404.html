@@ -1,0 +1,11 @@
+{{ define "bodyclass" }}plain{{ end }}
+{{ define "main" }}
+<main id="main" class="wrap narrow notfound">
+  <h1>Page not found</h1>
+  <p class="lead">This page may have moved, or it doesn't exist in this docs version.</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="{{ "/docs/latest/" | relURL }}">Latest docs</a>
+    <a class="btn btn-ghost" href="{{ "/" | relURL }}">Home</a>
+  </div>
+</main>
+{{ end }}

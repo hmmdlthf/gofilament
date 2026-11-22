@@ -1,0 +1,19 @@
+{
+  "repo_url": "https://github.com/hmmdlthf/gofilament",
+  "min_version": "v1.0.0",
+  "changelog": "CHANGELOG.md",
+  "sections": [
+    {
+      "id": "guide",
+      "title": "Guide",
+      "file": "README.md",
+      "intro": true
+    },
+    {
+      "id": "reference",
+      "title": "Reference",
+      "file": "DOCUMENTATION.md",
+      "drop": ["Table of Contents"]
+    }
+  ]
+}
