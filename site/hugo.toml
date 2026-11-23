@@ -8,6 +8,7 @@ disableKinds = ["taxonomy", "term", "rss"]
 [params]
   description = "Type-safe admin panels for Go: resources, forms, tables and dashboards on Ent ORM, served as server-rendered HTML or a native Flutter app."
   tagline = "Admin panels for Go"
+  license = "MIT" # SPDX id: footer and structured data
   repo = "https://github.com/hmmdlthf/gofilament"
   # Shown in the header and footer next to this project.
   [[params.related]]

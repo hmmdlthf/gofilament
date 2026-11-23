@@ -1,0 +1,17 @@
+{{- /* The 1200x630 image link previews show (og:image): the theme's background
+       with the project's logo (assets/images/logo.png, optional), name,
+       tagline and domain drawn on it. Built once per site build. */ -}}
+{{- $img := resources.Get "images/og-base.png" }}
+{{- $bold := resources.Get "fonts/Go-Bold.ttf" }}
+{{- $regular := resources.Get "fonts/Go-Regular.ttf" }}
+{{- $filters := slice }}
+{{- with resources.Get "images/logo.png" }}
+  {{- $filters = $filters | append (images.Overlay . 80 80) }}
+{{- end }}
+{{- $filters = $filters | append (images.Text site.Title (dict "font" $bold "size" 96 "color" "#f4f6fb" "x" 80 "y" 260)) }}
+{{- with site.Params.tagline }}
+  {{- $filters = $filters | append (images.Text . (dict "font" $regular "size" 50 "color" "#b4bccb" "x" 80 "y" 382 "linespacing" 12)) }}
+{{- end }}
+{{- $filters = $filters | append (images.Text (urls.Parse site.BaseURL).Host (dict "font" $regular "size" 30 "color" "#f59e0b" "x" 80 "y" 530)) }}
+{{- $img = $img | images.Filter $filters }}
+{{- return $img }}
