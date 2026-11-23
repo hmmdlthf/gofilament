@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.40.1] - 2026-11-23
+
+### Added
+- **Project website** at https://gofilament.elridhma.com: a landing page, the documentation for every release (a version switcher, with `/docs/latest/` by default) and this changelog. It is rebuilt from `README.md`, `DOCUMENTATION.md` and `CHANGELOG.md` at each release tag and deployed to goplesk whenever a release is published (`site/`, `.github/workflows/site.yml`). Pages carry search descriptions, link-preview cards and structured data; the sitemap lists only the latest docs.
+
 ## [v1.40.0] - 2026-11-18
 
 ### Added
