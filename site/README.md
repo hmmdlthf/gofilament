@@ -66,13 +66,14 @@ jobs:
 
 ### One-time setup
 
-1. Add to the repository (*Settings → Secrets and variables → Actions*, or as
-   secrets of the `website` environment, which the workflow creates on first run):
+1. Add the cluster key to the repository (*Settings → Secrets and variables →
+   Actions*, or as a secret of the `website` environment, which the workflow
+   creates on first run). The rest have defaults:
 
    | Name | Kind | Value |
    | --- | --- | --- |
-   | `GOPLESK_URL` | secret | control plane URL, e.g. `https://<control-plane>:8443` |
    | `GOPLESK_CLUSTER_KEY` | secret | `control_plane.cluster_key` from `/etc/goplesk/config.yaml` |
+   | `GOPLESK_URL` | variable (optional) | control plane, default `https://server1.goplesk.caaqit.com` |
    | `GOPLESK_APP` | variable (optional) | app name, default `gofilament-site` |
    | `SITE_DOMAIN` | variable (optional) | domain, default `gofilament.elridhma.com` |
 

@@ -36,6 +36,8 @@ env:
   # Repository variables override these (Settings -> Secrets and variables).
   SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'gofilament.elridhma.com' }}
   GOPLESK_APP: ${{ vars.GOPLESK_APP || 'gofilament-site' }}
+  # goplesk control plane; a GOPLESK_URL secret or variable overrides it.
+  GOPLESK_URL: ${{ secrets.GOPLESK_URL || vars.GOPLESK_URL || 'https://server1.goplesk.caaqit.com' }}
 
 jobs:
   build:
@@ -84,12 +86,11 @@ jobs:
       - name: Upload release to goplesk (creating the app the first time)
         shell: bash
         env:
-          GOPLESK_URL: ${{ secrets.GOPLESK_URL }}
           GOPLESK_CLUSTER_KEY: ${{ secrets.GOPLESK_CLUSTER_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "$GOPLESK_URL" ] || [ -z "$GOPLESK_CLUSTER_KEY" ]; then
-            echo "::error::Add the GOPLESK_URL and GOPLESK_CLUSTER_KEY secrets (see site/README.md)."
+          if [ -z "$GOPLESK_CLUSTER_KEY" ]; then
+            echo "::error::Add the GOPLESK_CLUSTER_KEY secret (see site/README.md)."
             exit 1
           fi
           api="${GOPLESK_URL%/}/api/v1"
@@ -99,7 +100,7 @@ jobs:
           post() { curl --silent --show-error --max-time 600 -o resp.txt -w '%{http_code}' -H "$auth" "$@"; }
           ok() { case "$1" in 200|201|202) return 0 ;; *) return 1 ;; esac; }
 
-          echo "Uploading site.tgz ($(du -h site.tgz | cut -f1), sha256 $sum) to app $GOPLESK_APP"
+          echo "Uploading site.tgz to $GOPLESK_URL ($(du -h site.tgz | cut -f1), sha256 $sum), app $GOPLESK_APP"
           code=$(post -H "X-Goplesk-Sha256: $sum" --data-binary @site.tgz "$api/apps/$GOPLESK_APP/release")
           if [ "$code" = 404 ]; then
             # First deploy: store the archive, then create the static app with it.
