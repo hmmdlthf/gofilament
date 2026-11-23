@@ -66,7 +66,15 @@ class _FileFieldEditorState extends State<FileFieldEditor> {
             if (widget.value != null && '${widget.value}'.isNotEmpty)
               widget.value
           ])
-      (value: '$v', name: '$v'.split('/').last, url: null),
+      (
+        value: '$v',
+        name: '$v'.split('/').last,
+        url: ('$v'.startsWith('http://') ||
+                '$v'.startsWith('https://') ||
+                '$v'.startsWith('/'))
+            ? '$v'
+            : null,
+      ),
   ];
   bool _busy = false;
   String? _error;

@@ -10,7 +10,8 @@ import 'resource_form.dart';
 
 /// The relation managers of a record (for example a product's variants and
 /// barcodes), shown under its form. Each is a small table with add, edit and
-/// delete, driven by the relation's server-side description.
+/// delete, driven by the relation's server-side description. A record with
+/// more than one relation shows them as tabs, one table at a time.
 class RelationPanels extends StatefulWidget {
   const RelationPanels({
     super.key,
@@ -29,8 +30,10 @@ class RelationPanels extends StatefulWidget {
   State<RelationPanels> createState() => _RelationPanelsState();
 }
 
-class _RelationPanelsState extends State<RelationPanels> {
+class _RelationPanelsState extends State<RelationPanels>
+    with TickerProviderStateMixin {
   List<Map<String, dynamic>>? _relations;
+  TabController? _tabs;
 
   @override
   void initState() {
@@ -39,32 +42,96 @@ class _RelationPanelsState extends State<RelationPanels> {
     if (declared is List && declared.isNotEmpty) _load();
   }
 
+  @override
+  void dispose() {
+    _tabs?.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     try {
       final r = await widget.admin.api.relations(widget.slug, widget.parentId);
-      if (mounted) setState(() => _relations = r);
+      if (!mounted) return;
+      setState(() {
+        _relations = r;
+        _tabs?.dispose();
+        _tabs = null;
+        if (r.length > 1) {
+          _tabs = TabController(length: r.length, vsync: this)
+            ..addListener(() {
+              if (mounted) setState(() {});
+            });
+        }
+      });
     } catch (_) {
       // the record form stays usable without its relations
     }
   }
 
+  Widget _table(Map<String, dynamic> r) => _RelationTable(
+        admin: widget.admin,
+        slug: widget.slug,
+        parentId: widget.parentId,
+        relation: r,
+        readOnly: widget.readOnly,
+      );
+
   @override
   Widget build(BuildContext context) {
     final relations = _relations;
     if (relations == null || relations.isEmpty) return const SizedBox.shrink();
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      for (final r in relations)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: _RelationTable(
-            admin: widget.admin,
-            slug: widget.slug,
-            parentId: widget.parentId,
-            relation: r,
-            readOnly: widget.readOnly,
+    final tabs = _tabs;
+    if (relations.length == 1 || tabs == null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: _table(relations.first),
+      );
+    }
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TabBar(
+            key: const Key('relation-tabs'),
+            controller: tabs,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            dividerColor: theme.dividerColor,
+            tabs: [
+              for (final r in relations)
+                Tab(
+                  key: Key('rel-tab-${r['relationship']}'),
+                  height: 40,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(
+                        adminIcon(r['icon'] as String?,
+                            fallback: Icons.list_alt_outlined),
+                        size: 16),
+                    const SizedBox(width: 6),
+                    Text('${r['title'] ?? humanize('${r['relationship']}')}'),
+                  ]),
+                ),
+            ],
           ),
         ),
-    ]);
+        const SizedBox(height: 12),
+        // every table stays mounted so switching tabs keeps its rows
+        IndexedStack(
+          index: tabs.index,
+          sizing: StackFit.passthrough,
+          children: [
+            for (var i = 0; i < relations.length; i++)
+              Visibility(
+                visible: i == tabs.index,
+                maintainState: true,
+                child: _table(relations[i]),
+              ),
+          ],
+        ),
+      ]),
+    );
   }
 }
 

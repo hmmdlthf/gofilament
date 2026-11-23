@@ -364,7 +364,7 @@ class FakePanel {
       return _json({'success': true});
     }
     final rel = RegExp(
-            r'^/resources/items/(\d+)/relations(/variants)?(/form)?(/(\d+))?$')
+            r'^/resources/items/(\d+)/relations(/variants|/barcodes)?(/form)?(/(\d+))?$')
         .firstMatch(path);
     if (rel != null) {
       final parent = int.parse(rel.group(1)!);
@@ -382,7 +382,24 @@ class FakePanel {
                 {'name': 'price', 'label': 'Price', 'type': 'money'},
               ],
             },
+            {
+              'relationship': 'barcodes',
+              'title': 'Barcodes',
+              'has_form': false,
+              'abilities': {},
+              'columns': [
+                {'name': 'code', 'label': 'Barcode', 'type': 'text'},
+              ],
+            },
           ],
+        });
+      }
+      if (rel.group(2) == '/barcodes') {
+        return _json({
+          'data': [
+            {'id': 1, 'code': 'BC-$parent'}
+          ],
+          'total': 1
         });
       }
       const schema = [
@@ -676,6 +693,7 @@ class FakePanel {
             'group': 'Catalogue',
             'relations': [
               {'relationship': 'variants', 'title': 'Variants'},
+              {'relationship': 'barcodes', 'title': 'Barcodes'},
             ],
             'per_page': 2,
             'per_page_options': [2, 25, 50],

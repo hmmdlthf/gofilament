@@ -482,6 +482,30 @@ void main() {
       expect(find.text('Variants (1)'), findsOneWidget);
     });
 
+    testWidgets('several relations show as tabs, one table at a time',
+        (tester) async {
+      final panel = FakePanel();
+      await pumpApp(tester, panel);
+      await signIn(tester);
+      await openItems(tester);
+
+      await tester.tap(find.byKey(const Key('row-edit-1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('relation-tabs')), findsOneWidget);
+      expect(find.text('Variants (1)'), findsOneWidget);
+      expect(find.text('BC-1'), findsNothing);
+
+      await tester.ensureVisible(find.byKey(const Key('rel-tab-barcodes')));
+      await tester.tap(find.byKey(const Key('rel-tab-barcodes')));
+      await tester.pumpAndSettle();
+      expect(find.text('BC-1'), findsOneWidget);
+      expect(find.text('Variants (1)'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('rel-tab-variants')));
+      await tester.pumpAndSettle();
+      expect(find.text('RING-S'), findsOneWidget);
+    });
+
     testWidgets('relations are read only in view mode and absent on create',
         (tester) async {
       final panel = FakePanel();
