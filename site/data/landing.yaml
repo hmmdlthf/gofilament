@@ -10,6 +10,7 @@ hero:
   primary: { label: "Get started", url: "/docs/latest/guide/quickstart-building-an-admin-panel/" }
   secondary: { label: "Read the docs", url: "/docs/latest/" }
 
+features_title: "Everything an admin needs, in Go"
 features:
   - icon: "type"
     title: "Typed resources"
@@ -73,3 +74,5 @@ engines:
       text: "Templ compiles the HTML, HTMX swaps just the parts that change, Alpine.js handles client state. Tailwind and icons are embedded in the binary, so there is no Node.js build."
     - title: "Flutter"
       text: "Switch the panel to EngineFlutter and it serves a JSON schema to a generated Flutter client: the same resources, forms and permissions, native on every platform."
+
+closing: "Ship your admin this week."

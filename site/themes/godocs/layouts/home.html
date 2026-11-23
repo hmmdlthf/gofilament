@@ -26,7 +26,7 @@
 
   <section class="section" aria-labelledby="features-h">
     <div class="wrap">
-      <h2 id="features-h" class="section-title">Everything an admin needs, in Go</h2>
+      <h2 id="features-h" class="section-title">{{ $l.features_title | default "Features" }}</h2>
       <div class="features">
         {{- range $l.features }}
         <article class="feature">
@@ -91,7 +91,7 @@
 
   <section class="section cta-band">
     <div class="wrap">
-      <h2 class="section-title">Ship your admin this week.</h2>
+      <h2 class="section-title">{{ $l.closing | default "Get started" }}</h2>
       <div class="cta">
         <a class="btn btn-primary" href="{{ $l.hero.primary.url | relURL }}">{{ $l.hero.primary.label }}</a>
         <a class="btn btn-ghost" href="{{ site.Params.repo }}">Star on GitHub</a>
