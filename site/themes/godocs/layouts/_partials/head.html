@@ -5,22 +5,39 @@
   {{- $title = printf "%s · %s %s docs" .Title site.Title .Params.tag }}
 {{- end }}
 <title>{{ $title }}</title>
-{{- $desc := .Description | default (cond .IsHome site.Params.description (.Summary | plainify | truncate 160)) | default site.Params.description }}
+{{- /* gendocs writes a description for each docs page (its first paragraph). */}}
+{{- $desc := .Description }}
+{{- if not $desc }}
+  {{- if .IsHome }}{{ $desc = site.Params.description }}
+  {{- else if eq .Type "docs" }}{{ $desc = printf "%s: %s" .Title site.Params.description | truncate 160 }}
+  {{- else }}{{ $desc = .Summary | plainify | truncate 160 }}
+  {{- end }}
+{{- end }}
+{{- $desc = $desc | default site.Params.description }}
 <meta name="description" content="{{ $desc }}">
 {{- /* Older docs versions stay reachable but out of search results; the newest
        minor (also served as /docs/latest/) points search engines there. */}}
+{{- $canonical := .Permalink }}
 {{- with .Params.canonical_version }}
-<link rel="canonical" href="{{ replaceRE `/docs/[^/]+/` (printf "/docs/%s/" .) $.Permalink }}">
-{{- else }}
-<link rel="canonical" href="{{ .Permalink }}">
+  {{- $canonical = replaceRE `/docs/[^/]+/` (printf "/docs/%s/" .) $.Permalink }}
 {{- end }}
+<link rel="canonical" href="{{ $canonical }}">
 {{- if and .Params.version (not .Params.latest) }}
 <meta name="robots" content="noindex, follow">
 {{- end }}
+<meta property="og:site_name" content="{{ site.Title }}">
 <meta property="og:title" content="{{ $title }}">
 <meta property="og:description" content="{{ $desc }}">
-<meta property="og:type" content="website">
-<meta property="og:url" content="{{ .Permalink }}">
+<meta property="og:type" content="{{ cond (and (eq .Type "docs") (not .IsSection)) "article" "website" }}">
+<meta property="og:url" content="{{ $canonical }}">
+{{- with partialCached "social-card.html" . }}
+<meta property="og:image" content="{{ .Permalink }}">
+<meta property="og:image:width" content="{{ .Width }}">
+<meta property="og:image:height" content="{{ .Height }}">
+<meta property="og:image:alt" content="{{ site.Title }}: {{ site.Params.tagline }}">
+{{- end }}
+<meta name="twitter:card" content="summary_large_image">
+{{- partial "schema.html" . }}
 <meta name="theme-color" content="#0b0f17" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <link rel="icon" href="{{ "favicon.svg" | relURL }}" type="image/svg+xml">

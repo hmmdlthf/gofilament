@@ -28,6 +28,17 @@ So **writing docs is unchanged**: edit `README.md` / `DOCUMENTATION.md` /
 `CHANGELOG.md` as today; the next release publishes them as a new version.
 Which files are used, and from which version on, is set in `gendocs.json`.
 
+### Search engines and link previews
+
+- `sitemap.xml` lists only the pages meant for search results: the home page,
+  the changelog and `/docs/latest/`. `robots.txt` points to it.
+- Each docs page's description is its first paragraph of prose (written by
+  `gendocs`); pages without one use the site description.
+- Link previews (Slack, X, LinkedIn…) use a 1200×630 card drawn at build time
+  from `assets/images/logo.png`, the site title, tagline and domain.
+- The home page carries JSON-LD for the project (`SoftwareSourceCode`); docs
+  pages carry breadcrumbs (`BreadcrumbList`).
+
 The landing page text is in `data/landing.yaml`; site settings and the menu in
 `hugo.toml`. The theme (`themes/godocs`) has no project-specific content, so
 the golaravel site uses the same one.

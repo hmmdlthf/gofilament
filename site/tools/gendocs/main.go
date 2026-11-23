@@ -202,6 +202,7 @@ func (g *gen) run() error {
 		"layout":   "redirect",
 		"redirect": "/docs/latest/",
 		"build":    map[string]any{"list": "never"},
+		"sitemap":  map[string]any{"disable": true},
 	}), ""); err != nil {
 		return err
 	}
@@ -296,6 +297,11 @@ func (g *gen) writeVersion(id string, v semver, date string, latest bool) error 
 	if id != "latest" && latest {
 		common["canonical_version"] = "latest" // same content as /docs/latest/
 	}
+	if id != "latest" {
+		// Only /docs/latest/ is meant for search results: older versions are
+		// noindex and the newest minor's own URL is canonical to latest.
+		common["sitemap"] = map[string]any{"disable": true}
+	}
 	fm := func(extra map[string]any) string {
 		m := map[string]any{}
 		for k, val := range common {
@@ -319,6 +325,7 @@ func (g *gen) writeVersion(id string, v semver, date string, latest bool) error 
 			}
 			if err := writeFile(filepath.Join(secDir, "_index.md"), fm(map[string]any{
 				"title": s.sec.Title, "weight": (si + 1) * 1000, "source": s.file,
+				"description": describe(body),
 			}), body); err != nil {
 				return err
 			}
@@ -327,6 +334,7 @@ func (g *gen) writeVersion(id string, v semver, date string, latest bool) error 
 			introDone = true
 			if err := writeFile(filepath.Join(dir, "_index.md"), fm(map[string]any{
 				"title": "Introduction", "source": s.file, "version_home": true,
+				"description": describe(s.intro),
 			}), rw.rewrite(s.intro, s.file)); err != nil {
 				return err
 			}
@@ -335,6 +343,7 @@ func (g *gen) writeVersion(id string, v semver, date string, latest bool) error 
 			weight := (si+1)*1000 + pi + 1
 			if err := writeFile(filepath.Join(secDir, p.Slug+".md"), fm(map[string]any{
 				"title": p.Title, "weight": weight, "source": s.file,
+				"description": describe(p.Body),
 			}), rw.rewrite(p.Body, s.file)); err != nil {
 				return err
 			}
@@ -695,7 +704,7 @@ func (g *gen) writeChangelog(rels []semver) error {
 	body := trimRules(strings.Join(out, "\n"))
 	if err := writeFile(filepath.Join(g.out, "content", "changelog.md"), frontMatter(map[string]any{
 		"title":       "Changelog",
-		"description": "Every release, newest first.",
+		"description": "Release notes for every version, newest first, with links to the documentation for each release.",
 		"tag":         latest.Tag,
 	}), body); err != nil {
 		return err
@@ -708,6 +717,91 @@ func (g *gen) writeChangelog(rels []semver) error {
 		"tag": latest.Tag, "date": date, "highlights": highlights,
 		"docs": "/docs/latest/", "notes": fmt.Sprintf("%s/releases/tag/%s", strings.TrimSuffix(g.cfg.RepoURL, "/"), latest.Tag),
 	})
+}
+
+// describe returns a search-result description for a page: the first
+// paragraph of prose (not a heading, code, table, list or image), with the
+// Markdown removed and cut to about 160 characters. "" when there is none;
+// the theme then falls back to the site description.
+func describe(md string) string {
+	var f fence
+	var para []string
+	var first string
+	flush := func() string {
+		t := plainText(strings.Join(para, " "))
+		para = para[:0]
+		if strings.HasSuffix(t, ":") { // a lead-in to a list: still the page's summary
+			t = strings.TrimSuffix(t, ":") + "."
+		}
+		return t
+	}
+	for _, line := range append(strings.Split(md, "\n"), "") {
+		if f.step(line) {
+			para = para[:0]
+			continue
+		}
+		t := strings.TrimSpace(line)
+		t = strings.TrimSpace(strings.TrimLeft(t, ">")) // blockquotes read as prose
+		if t == "" {
+			if len(para) > 0 {
+				if d := flush(); len(d) >= 60 {
+					return truncateWords(d, 160)
+				} else if first == "" {
+					first = d
+				}
+			}
+			continue
+		}
+		if !isProse(line, t) {
+			para = para[:0]
+			continue
+		}
+		para = append(para, t)
+	}
+	return truncateWords(first, 160)
+}
+
+func isProse(raw, t string) bool {
+	if strings.HasPrefix(raw, "    ") || strings.HasPrefix(raw, "\t") {
+		return false // indented code
+	}
+	for _, p := range []string{"#", "|", "- ", "* ", "+ ", "<", "![", "[!", "---", "***", "{", "$ "} {
+		if strings.HasPrefix(t, p) {
+			return false
+		}
+	}
+	return !orderedItem.MatchString(t)
+}
+
+var (
+	orderedItem = regexp.MustCompile(`^\d+[.)]\s`)
+	mdImage     = regexp.MustCompile(`!\[[^\]]*\]\([^)]*\)`)
+	mdLink      = regexp.MustCompile(`\[([^\]]*)\]\([^)]*\)`)
+	htmlTag     = regexp.MustCompile(`<[^>]+>`)
+	spaces      = regexp.MustCompile(`\s+`)
+)
+
+func plainText(s string) string {
+	s = mdImage.ReplaceAllString(s, "")
+	s = mdLink.ReplaceAllString(s, "$1")
+	s = htmlTag.ReplaceAllString(s, "")
+	s = strings.NewReplacer("**", "", "__", "", "`", "", "*", "").Replace(s)
+	s = strings.TrimLeftFunc(s, func(r rune) bool { // leading emoji / symbols
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	return strings.TrimSpace(spaces.ReplaceAllString(s, " "))
+}
+
+func truncateWords(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	s = string(r[:max])
+	if cut := strings.LastIndex(s, " "); cut > len(s)/2 {
+		s = s[:cut]
+	}
+	return strings.TrimRight(s, " ,;:-–—") + "…"
 }
 
 // ---------------------------------------------------------------- output

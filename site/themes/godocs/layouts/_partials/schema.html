@@ -1,0 +1,24 @@
+{{- /* JSON-LD for search engines: the project on the home page, breadcrumbs
+       on docs pages. */ -}}
+{{- $home := site.Home.Permalink }}
+{{- $data := dict }}
+{{- if .IsHome }}
+  {{- $code := dict "@type" "SoftwareSourceCode" "name" site.Title "description" site.Params.description "url" $home "codeRepository" site.Params.repo "programmingLanguage" "Go" }}
+  {{- with site.Params.license }}
+    {{- $code = merge $code (dict "license" (printf "https://spdx.org/licenses/%s.html" .)) }}
+  {{- end }}
+  {{- $site := dict "@type" "WebSite" "name" site.Title "url" $home "description" site.Params.description }}
+  {{- $data = dict "@context" "https://schema.org" "@graph" (slice $site $code) }}
+{{- else if and (eq .Type "docs") .Params.version }}
+  {{- $items := slice }}
+  {{- range .Ancestors.Reverse }}
+    {{- if eq .Layout "redirect" }}{{ continue }}{{ end }}
+    {{- $name := cond .IsHome site.Title (cond (eq .Params.version_home true) (printf "Docs %s" .Params.tag) .Title) }}
+    {{- $items = $items | append (dict "@type" "ListItem" "position" (add (len $items) 1) "name" $name "item" .Permalink) }}
+  {{- end }}
+  {{- $items = $items | append (dict "@type" "ListItem" "position" (add (len $items) 1) "name" (cond (eq .Params.version_home true) (printf "Docs %s" .Params.tag) .Title)) }}
+  {{- $data = dict "@context" "https://schema.org" "@type" "BreadcrumbList" "itemListElement" $items }}
+{{- end }}
+{{- with $data }}
+<script type="application/ld+json">{{ . | jsonify | safeJS }}</script>
+{{- end }}
