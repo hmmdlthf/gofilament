@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.41.0] - 2026-11-23
+
 ### Changed
 - **Flutter: relations as tabs**: a record with more than one relation manager (for example a product's variants and barcodes) shows them as tabs under its form, one table at a time, instead of stacking every table. Each tab keeps its rows when you switch. A record with one relation looks as before.
 
