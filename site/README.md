@@ -48,26 +48,33 @@ Deploys run on **release published** (and by hand from the Actions tab,
 `.tar.gz`, and uploads it with `POST /api/v1/apps/<app>/release`; goplesk
 switches the static site to the new directory atomically.
 
+The first deploy also creates the app: when goplesk answers `404` (no such
+app), the job uploads the archive to `POST /api/v1/artifacts` and creates the
+static app for the domain with `POST /api/v1/apps/deploy`. goplesk then
+requests the TLS certificate, since the domain's DNS points at the server; the
+job waits up to 3 minutes for `https://<domain>/docs/latest/` to answer.
+
+If you ever create releases from another workflow using `GITHUB_TOKEN`, those
+releases don't trigger this one. Call it from that workflow instead:
+
+```yaml
+jobs:
+  website:
+    uses: ./.github/workflows/site.yml
+    secrets: inherit
+```
+
 ### One-time setup
 
-1. Create the static app on goplesk (from a machine that can reach the control
-   plane; `$KEY` is `control_plane.cluster_key` in `/etc/goplesk/config.yaml`):
-
-   ```bash
-   curl -H "Authorization: Bearer $KEY" \
-     -d '{"name":"gofilament-site","domain":"gofilament.elridhma.com","is_static":true}' \
-     https://<control-plane>:8443/api/v1/apps/deploy
-   ```
-
-   goplesk requests the TLS certificate once the domain's DNS points at the server.
-
-2. Add to the repository (*Settings → Secrets and variables → Actions*, or as
+1. Add to the repository (*Settings → Secrets and variables → Actions*, or as
    secrets of the `website` environment, which the workflow creates on first run):
 
    | Name | Kind | Value |
    | --- | --- | --- |
    | `GOPLESK_URL` | secret | control plane URL, e.g. `https://<control-plane>:8443` |
-   | `GOPLESK_CLUSTER_KEY` | secret | `control_plane.cluster_key` |
+   | `GOPLESK_CLUSTER_KEY` | secret | `control_plane.cluster_key` from `/etc/goplesk/config.yaml` |
    | `GOPLESK_APP` | variable (optional) | app name, default `gofilament-site` |
+   | `SITE_DOMAIN` | variable (optional) | domain, default `gofilament.elridhma.com` |
 
-3. Run *Website → Run workflow* once to publish the current release.
+2. Run *Website → Run workflow* once. It creates the app and publishes the
+   current release; later releases deploy by themselves.
