@@ -1,0 +1,10 @@
+{{ define "bodyclass" }}plain{{ end }}
+{{ define "main" }}
+<main id="main" class="wrap narrow">
+  <article class="prose">
+    <h1>{{ .Title }}</h1>
+    {{ with .Description }}<p class="lead">{{ . }}</p>{{ end }}
+    {{ .Content }}
+  </article>
+</main>
+{{ end }}

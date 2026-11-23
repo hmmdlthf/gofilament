@@ -1,0 +1,31 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{{- $title := cond .IsHome (printf "%s — %s" site.Title site.Params.tagline) (printf "%s · %s" .Title site.Title) }}
+{{- if and (eq .Type "docs") .Params.tag (not .IsHome) }}
+  {{- $title = printf "%s · %s %s docs" .Title site.Title .Params.tag }}
+{{- end }}
+<title>{{ $title }}</title>
+{{- $desc := .Description | default (cond .IsHome site.Params.description (.Summary | plainify | truncate 160)) | default site.Params.description }}
+<meta name="description" content="{{ $desc }}">
+{{- /* Older docs versions stay reachable but out of search results; the newest
+       minor (also served as /docs/latest/) points search engines there. */}}
+{{- with .Params.canonical_version }}
+<link rel="canonical" href="{{ replaceRE `/docs/[^/]+/` (printf "/docs/%s/" .) $.Permalink }}">
+{{- else }}
+<link rel="canonical" href="{{ .Permalink }}">
+{{- end }}
+{{- if and .Params.version (not .Params.latest) }}
+<meta name="robots" content="noindex, follow">
+{{- end }}
+<meta property="og:title" content="{{ $title }}">
+<meta property="og:description" content="{{ $desc }}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ .Permalink }}">
+<meta name="theme-color" content="#0b0f17" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<link rel="icon" href="{{ "favicon.svg" | relURL }}" type="image/svg+xml">
+<script>
+  try { var t = localStorage.getItem("theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+{{- $css := slice (resources.Get "css/main.css") (resources.Get "css/syntax.css") | resources.Concat "css/site.css" | minify | fingerprint }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}" integrity="{{ $css.Data.Integrity }}">

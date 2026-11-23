@@ -1,0 +1,75 @@
+# Landing page content (layouts live in themes/godocs).
+hero:
+  eyebrow: "Open source · MIT · Go 1.26"
+  title: "Admin panels for Go, typed end to end."
+  lead: >-
+    GoFilament turns your Ent models into a complete admin: resources, forms,
+    tables, dashboards, roles and tenants. Serve it as fast server-rendered HTML
+    or as a native Flutter app, from one compiled Go binary.
+  install: "go get github.com/golaravel/gofilament"
+  primary: { label: "Get started", url: "/docs/latest/guide/quickstart-building-an-admin-panel/" }
+  secondary: { label: "Read the docs", url: "/docs/latest/" }
+
+features:
+  - icon: "type"
+    title: "Typed resources"
+    text: "Resource[T] binds CRUD, forms, tables and filters to your Ent models at compile time. No reflection, no stringly-typed config."
+  - icon: "form"
+    title: "Forms and tables"
+    text: "Sections, tabs, repeaters and live fields. Sortable, searchable tables with filters, bulk actions, inline edits and CSV import/export."
+  - icon: "link"
+    title: "Relation managers"
+    text: "Edit has-many and many-to-many records in place on the parent page, with their own tables, forms and actions."
+  - icon: "phone"
+    title: "Web and Flutter"
+    text: "The same panel runs as Templ + HTMX + Alpine.js in the browser, or as a generated Flutter app for iOS, Android, desktop and web."
+  - icon: "users"
+    title: "Tenants and roles"
+    text: "Multi-tenancy with a tenant switcher, plus roles and permissions given per panel and per tenant."
+  - icon: "globe"
+    title: "Any language, RTL too"
+    text: "Translate every screen; Arabic, German, Spanish and French ship built in, and right-to-left layouts switch automatically."
+  - icon: "chart"
+    title: "Dashboards"
+    text: "Stats with sparklines, charts with drilldowns, kanban boards and a ⌘K global search across resources."
+  - icon: "clock"
+    title: "Activity log"
+    text: "An audit trail of who changed what, shown as a timeline on any record."
+  - icon: "terminal"
+    title: "Generators"
+    text: "artisan make:filament-resource reads your Ent schema and writes the form, table, filters and relations for you."
+
+quickstart:
+  title: "From model to admin in minutes"
+  lead: "Register a panel on your GoLaravel app, add a resource for an Ent model, and open /admin."
+  steps:
+    - title: "Install"
+      code: |
+        go get github.com/golaravel/gofilament
+      lang: "bash"
+    - title: "Create a panel"
+      lang: "go"
+      code: |
+        app := golaravel.Default()
+
+        panel := filament.NewPanel("admin").
+            Path("/admin").
+            BrandName("Acme Operations").
+            DarkMode(true)
+
+        panel.Resources(resources.NewUserResource())
+        panel.Register(app)
+
+        app.Run(":8080")
+    - title: "Generate a resource from your Ent schema"
+      lang: "bash"
+      code: |
+        artisan make:filament-resource User --generate
+
+engines:
+  title: "One panel, two engines"
+  items:
+    - title: "Server-rendered"
+      text: "Templ compiles the HTML, HTMX swaps just the parts that change, Alpine.js handles client state. Tailwind and icons are embedded in the binary, so there is no Node.js build."
+    - title: "Flutter"
+      text: "Switch the panel to EngineFlutter and it serves a JSON schema to a generated Flutter client: the same resources, forms and permissions, native on every platform."

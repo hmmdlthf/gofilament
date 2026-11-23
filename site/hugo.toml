@@ -1,0 +1,46 @@
+baseURL = "https://gofilament.elridhma.com/"
+locale = "en"
+title = "GoFilament"
+theme = "godocs"
+enableRobotsTXT = true
+disableKinds = ["taxonomy", "term", "rss"]
+
+[params]
+  description = "Type-safe admin panels for Go: resources, forms, tables and dashboards on Ent ORM, served as server-rendered HTML or a native Flutter app."
+  tagline = "Admin panels for Go"
+  repo = "https://github.com/hmmdlthf/gofilament"
+  # Shown in the header and footer next to this project.
+  [[params.related]]
+    name = "GoLaravel"
+    url = "https://golaravel.elridhma.com/"
+    note = "The Go framework GoFilament runs on"
+
+[menus]
+  [[menus.main]]
+    name = "Docs"
+    pageRef = "/docs/latest"
+    weight = 10
+  [[menus.main]]
+    name = "Changelog"
+    pageRef = "/changelog"
+    weight = 20
+  [[menus.main]]
+    name = "GoLaravel"
+    url = "https://golaravel.elridhma.com/"
+    weight = 30
+
+[markup]
+  [markup.goldmark.parser]
+    autoHeadingIDType = "github"
+    [markup.goldmark.parser.attribute]
+      block = true
+  [markup.highlight]
+    noClasses = false
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 3
+
+[outputs]
+  home = ["html"]
+  section = ["html"]
+  page = ["html"]

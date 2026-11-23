@@ -1,0 +1,94 @@
+{{- $root := site.GetPage (printf "/docs/%s" .Params.version) }}
+{{- $versions := hugo.Data.versions }}
+{{- $latest := index $versions 0 }}
+
+{{- /* Reading order: version home, then each section (its own page when it has
+       text) and its pages, by weight. Used for the sidebar and prev/next. */}}
+{{- $order := slice $root }}
+{{- range $root.Sections.ByWeight }}
+  {{- if .Content }}{{ $order = $order | append . }}{{ end }}
+  {{- range .Pages.ByWeight }}{{ $order = $order | append . }}{{ end }}
+{{- end }}
+{{- $idx := -1 }}
+{{- range $i, $p := $order }}{{ if eq $p $ }}{{ $idx = $i }}{{ end }}{{ end }}
+
+<div class="docs-shell">
+  <aside class="sidebar" id="docs-nav" aria-label="Documentation">
+    <div class="sidebar-inner">
+      <label class="version-label" for="version-select">Version</label>
+      <select id="version-select" class="version-select" data-version-switch data-current="{{ .Params.version }}">
+        {{- range $versions }}
+        {{- $sel := or (eq .id $.Params.version) (and .latest $.Params.canonical_version) }}
+        <option value="{{ .id }}"{{ if $sel }} selected{{ end }}>{{ .tag }}{{ if .latest }} (latest){{ end }}</option>
+        {{- end }}
+      </select>
+
+      <nav class="doc-nav">
+        <a href="{{ $root.RelPermalink }}"{{ if eq $root $ }} aria-current="page"{{ end }}>Introduction</a>
+        {{- range $root.Sections.ByWeight }}
+        <p class="nav-heading">
+          {{- if .Content }}<a href="{{ .RelPermalink }}"{{ if eq . $ }} aria-current="page"{{ end }}>{{ .Title }}</a>{{ else }}{{ .Title }}{{ end -}}
+        </p>
+        <ul>
+          {{- range .Pages.ByWeight }}
+          <li><a href="{{ .RelPermalink }}"{{ if eq . $ }} aria-current="page"{{ end }}>{{ .Title }}</a></li>
+          {{- end }}
+        </ul>
+        {{- end }}
+        <p class="nav-heading"><a href="{{ "/changelog/" | relURL }}">Changelog</a></p>
+      </nav>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop" data-nav-close hidden></div>
+
+  <main id="main" class="doc">
+    {{- if not .Params.latest }}
+    <div class="callout callout-warn" role="note">
+      You're reading the docs for <strong>{{ .Params.tag }}</strong>, an older release.
+      <a href="{{ $latest.url | relURL }}" data-latest-link>Go to {{ $latest.tag }} (latest)</a>.
+    </div>
+    {{- end }}
+    <p class="crumbs">
+      <a href="{{ $root.RelPermalink }}">Docs {{ .Params.tag }}</a>
+      {{- if and (ne . $root) (ne .Parent $root) }} <span aria-hidden="true">/</span> <a href="{{ .Parent.RelPermalink }}">{{ .Parent.Title }}</a>{{ end }}
+    </p>
+    <article class="prose">
+      <h1>{{ if eq . $root }}{{ site.Title }} {{ .Params.tag }}{{ else }}{{ .Title }}{{ end }}</h1>
+      {{ .Content }}
+      {{- if and .IsSection (not .Content) (ne . $root) }}
+      <ul class="card-list">
+        {{- range .Pages.ByWeight }}<li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>{{ end }}
+      </ul>
+      {{- end }}
+      {{- if eq . $root }}
+      <h2 id="contents">Contents</h2>
+      {{- range $root.Sections.ByWeight }}
+      <h3>{{ .Title }}</h3>
+      <ul class="card-list">
+        {{- range .Pages.ByWeight }}<li><a href="{{ .RelPermalink }}">{{ .Title }}</a></li>{{ end }}
+      </ul>
+      {{- end }}
+      {{- end }}
+    </article>
+
+    <nav class="pager" aria-label="Previous and next page">
+      {{- if gt $idx 0 }}{{ with index $order (sub $idx 1) }}
+      <a class="pager-prev" href="{{ .RelPermalink }}"><span>Previous</span>{{ if eq . $root }}Introduction{{ else }}{{ .Title }}{{ end }}</a>
+      {{- end }}{{ end }}
+      {{- if and (ge $idx 0) (lt (add $idx 1) (len $order)) }}{{ with index $order (add $idx 1) }}
+      <a class="pager-next" href="{{ .RelPermalink }}"><span>Next</span>{{ .Title }}</a>
+      {{- end }}{{ end }}
+    </nav>
+    <p class="doc-meta muted">
+      {{- with .Params.source }}Generated from <a href="{{ site.Params.repo }}/blob/{{ $.Params.tag }}/{{ . }}">{{ . }} at {{ $.Params.tag }}</a>{{ end }}
+      {{- with .Params.date }} · released {{ (time .).Format "Jan 2, 2006" }}{{ end }}
+    </p>
+  </main>
+
+  {{- if and (ne . $root) (gt (len .Fragments.Headings) 0) }}
+  <aside class="toc" aria-label="On this page">
+    <p class="toc-title">On this page</p>
+    {{ .TableOfContents }}
+  </aside>
+  {{- end }}
+</div>

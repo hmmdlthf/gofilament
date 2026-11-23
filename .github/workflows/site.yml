@@ -1,0 +1,126 @@
+name: Website
+
+# Builds https://gofilament.elridhma.com (landing page, docs for every
+# release, changelog) and deploys it to the goplesk server when a release is
+# published. The first deploy also creates the static app on goplesk.
+# Pull requests that touch site/ only build it.
+#
+# A workflow that creates releases with GITHUB_TOKEN does not trigger the
+# "release" event here; such a workflow should call this one instead:
+#   jobs:
+#     website:
+#       uses: ./.github/workflows/site.yml
+#       secrets: inherit
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      GOPLESK_URL:
+        required: false
+      GOPLESK_CLUSTER_KEY:
+        required: false
+  pull_request:
+    paths: ["site/**", ".github/workflows/site.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: false
+
+env:
+  HUGO_VERSION: "0.168.0"
+  # Repository variables override these (Settings -> Secrets and variables).
+  SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'gofilament.elridhma.com' }}
+  GOPLESK_APP: ${{ vars.GOPLESK_APP || 'gofilament-site' }}
+  # goplesk control plane; a GOPLESK_URL secret or variable overrides it.
+  GOPLESK_URL: ${{ secrets.GOPLESK_URL || vars.GOPLESK_URL || 'https://server1.goplesk.caaqit.com' }}
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # every release tag: each one becomes a docs version
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: site/go.mod
+          cache: false
+      - name: Install Hugo
+        run: |
+          base="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}"
+          file="hugo_${HUGO_VERSION}_linux-amd64.tar.gz"
+          curl -fsSLO "$base/$file"
+          curl -fsSLO "$base/hugo_${HUGO_VERSION}_checksums.txt"
+          sha256sum --ignore-missing -c "hugo_${HUGO_VERSION}_checksums.txt"
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$file" -C "$HOME/.local/bin" hugo
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: ./site/build.sh
+      - name: Package
+        run: tar -czf site.tgz -C site/public .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site.tgz
+          retention-days: 7
+
+  deploy:
+    name: Deploy to goplesk
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: website
+      url: https://${{ vars.SITE_DOMAIN || 'gofilament.elridhma.com' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+      - name: Upload release to goplesk (creating the app the first time)
+        shell: bash
+        env:
+          GOPLESK_CLUSTER_KEY: ${{ secrets.GOPLESK_CLUSTER_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GOPLESK_CLUSTER_KEY" ]; then
+            echo "::error::Add the GOPLESK_CLUSTER_KEY secret (see site/README.md)."
+            exit 1
+          fi
+          api="${GOPLESK_URL%/}/api/v1"
+          auth="Authorization: Bearer $GOPLESK_CLUSTER_KEY"
+          sum=$(sha256sum site.tgz | cut -d' ' -f1)
+          # post: POST with the key; prints the HTTP status, the body goes to resp.txt
+          post() { curl --silent --show-error --max-time 600 -o resp.txt -w '%{http_code}' -H "$auth" "$@"; }
+          ok() { case "$1" in 200|201|202) return 0 ;; *) return 1 ;; esac; }
+
+          echo "Uploading site.tgz to $GOPLESK_URL ($(du -h site.tgz | cut -f1), sha256 $sum), app $GOPLESK_APP"
+          code=$(post -H "X-Goplesk-Sha256: $sum" --data-binary @site.tgz "$api/apps/$GOPLESK_APP/release")
+          if [ "$code" = 404 ]; then
+            # First deploy: store the archive, then create the static app with it.
+            echo "App $GOPLESK_APP does not exist yet; creating it for $SITE_DOMAIN"
+            code=$(post -H "X-Goplesk-Sha256: $sum" --data-binary @site.tgz "$api/artifacts")
+            if ! ok "$code"; then echo "::error::artifact upload: HTTP $code: $(cat resp.txt)"; exit 1; fi
+            body=$(jq -nc --arg n "$GOPLESK_APP" --arg d "$SITE_DOMAIN" --arg r "$sum" \
+              '{name: $n, domain: $d, is_static: true, release: $r}')
+            code=$(post -H "Content-Type: application/json" -d "$body" "$api/apps/deploy")
+          fi
+          if ! ok "$code"; then echo "::error::goplesk answered HTTP $code: $(cat resp.txt)"; exit 1; fi
+          echo "goplesk: HTTP $code $(cat resp.txt)"
+      - name: Check the live site
+        run: |
+          # The first deploy waits for goplesk to get the TLS certificate.
+          for i in $(seq 1 18); do
+            if curl -fsS -o /dev/null "https://$SITE_DOMAIN/docs/latest/"; then
+              echo "Live: https://$SITE_DOMAIN/"; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::https://$SITE_DOMAIN/docs/latest/ did not answer within 3 minutes of the deploy"
+          exit 1
