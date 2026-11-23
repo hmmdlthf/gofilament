@@ -42,6 +42,9 @@ type sectionConfig struct {
 	File string `json:"file"`
 	// Glob (instead of File) makes one page per matching file, e.g. "docs/*.md".
 	Glob string `json:"glob"`
+	// Order (with Glob) is a file whose links set the page order, such as a
+	// docs index; files it does not link to follow in name order.
+	Order string `json:"order"`
 	// Intro puts the text before the first "## " on the version's home page.
 	Intro bool `json:"intro"`
 	// Drop lists "## " sections to leave out (matched on the cleaned title).
@@ -252,6 +255,11 @@ func (g *gen) writeVersion(id string, v semver, date string, latest bool) error 
 					files = append(files, f)
 				}
 			}
+			if sec.Order != "" {
+				if idx, ok := g.show(v.Tag, sec.Order); ok {
+					sortByLinks(files, idx, path.Dir(sec.Order))
+				}
+			}
 		}
 		for _, f := range files {
 			src, ok := g.show(v.Tag, f)
@@ -355,6 +363,32 @@ func (g *gen) writeVersion(id string, v semver, date string, latest bool) error 
 		}), "")
 	}
 	return nil
+}
+
+// sortByLinks orders files by where an index file first links to them (links
+// relative to dir); files it never links to keep their order at the end.
+func sortByLinks(files []string, index, dir string) {
+	rank := map[string]int{}
+	for _, m := range linkRe.FindAllStringSubmatch(index, -1) {
+		target := m[1]
+		if i := strings.IndexAny(target, "#?"); i >= 0 {
+			target = target[:i]
+		}
+		if target == "" || strings.Contains(target, "://") {
+			continue
+		}
+		f := path.Clean(path.Join(dir, target))
+		if _, seen := rank[f]; !seen {
+			rank[f] = len(rank)
+		}
+	}
+	pos := func(f string) int {
+		if r, ok := rank[f]; ok {
+			return r
+		}
+		return len(rank)
+	}
+	sort.SliceStable(files, func(i, j int) bool { return pos(files[i]) < pos(files[j]) })
 }
 
 // ---------------------------------------------------------------- Markdown
@@ -492,6 +526,24 @@ func trimRules(s string) string {
 
 var parenRe = regexp.MustCompile(`\s*\([^)]*\)`)
 
+// isEmoji reports emoji and their joiners/selectors, but not other symbols
+// such as "⌘" or "→" that headings use as text.
+func isEmoji(r rune) bool {
+	switch {
+	case r >= 0x1F000 && r <= 0x1FAFF, // pictographs, emoticons, transport, flags
+		r >= 0x2600 && r <= 0x27BF,                         // misc symbols and dingbats (⚡ ✨ ✅)
+		r >= 0x2B00 && r <= 0x2BFF,                         // ⭐ ⬆
+		r == 0x231A, r == 0x231B, r == 0x2328, r == 0x23CF, // ⌚ ⌛ ⌨ ⏏ (⌘ stays)
+		r >= 0x23E9 && r <= 0x23F3, r >= 0x23F8 && r <= 0x23FA, // ⏩…⏳ ⏸ ⏹ ⏺
+		r == 0xFE0F, r == 0x200D, r == 0x20E3:
+		return true
+	}
+	return false
+}
+
+// prdRef is an internal spec reference in a heading: "(PRD §2.3)".
+var prdRef = regexp.MustCompile(`\s*\(PRD[^)]*\)`)
+
 var numberPrefix = regexp.MustCompile(`^\d+(\.\d+)*\.?\s+`)
 
 // cleanTitle strips leading emoji and section numbers ("## 4. Panel" -> "Panel")
@@ -503,7 +555,15 @@ func cleanTitle(s string) string {
 	})
 	s = numberPrefix.ReplaceAllString(s, "")
 	s = strings.ReplaceAll(s, "`", "")
-	return strings.TrimSpace(s)
+	s = prdRef.ReplaceAllString(s, "")
+	// emoji anywhere in a heading ("Routing ⚡️", "Soft Deletes 🛡️ (...)")
+	s = strings.Map(func(r rune) rune {
+		if isEmoji(r) {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.TrimSpace(spaces.ReplaceAllString(s, " "))
 }
 
 // slugify makes a short URL segment: "Form Builder Components" -> "form-builder-components".

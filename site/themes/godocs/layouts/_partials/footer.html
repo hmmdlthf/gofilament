@@ -2,7 +2,7 @@
   <div class="footer-inner">
     <div>
       <a class="brand" href="{{ "/" | relURL }}"><img src="{{ "favicon.svg" | relURL }}" alt="" width="22" height="22"><span>{{ site.Title }}</span></a>
-      <p class="muted">{{ site.Params.tagline }}. Open source under the {{ site.Params.license | default "MIT" }} License.</p>
+      <p class="muted">{{ site.Params.tagline }}.{{ with site.Params.license }} Open source under the {{ . }} License.{{ end }}</p>
     </div>
     <nav aria-label="Footer">
       <a href="{{ "/docs/latest/" | relURL }}">Documentation</a>
