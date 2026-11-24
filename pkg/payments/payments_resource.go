@@ -118,6 +118,7 @@ func PaymentsResource(m *payment.Manager) *filament.BaseResource[*PaymentRow] {
 			tables.TextColumn[*PaymentRow]("refunded_money").Label("Refunded").ToggledHiddenByDefault(true),
 			tables.TextColumn[*PaymentRow]("id").Label("Payment ID").Copyable().ToggledHiddenByDefault(true),
 			tables.TextColumn[*PaymentRow]("gateway_ref").Label("Gateway ref").Copyable().ToggledHiddenByDefault(true),
+			tables.TextColumn[*PaymentRow]("subscription_id").Label("Subscription").Copyable().ToggledHiddenByDefault(true),
 		).Filters(
 			tables.SelectFilter("status").Label("Status").Options(statusLabels()),
 			tables.SelectFilter("gateway_id").Label("Gateway").Options(gatewayOpts),
@@ -197,6 +198,7 @@ func PaymentsResource(m *payment.Manager) *filament.BaseResource[*PaymentRow] {
 			forms.Section("Reference").Columns(2).Schema(
 				forms.TextInput("id").Label("Payment ID").Disabled(),
 				forms.TextInput("gateway_ref").Label("Gateway reference").Disabled(),
+				forms.TextInput("subscription_id").Label("Subscription").Disabled(),
 				forms.TextInput("mode").Label("Mode").Disabled(),
 				forms.TextInput("description").Label("Description").Disabled(),
 			),
@@ -228,37 +230,7 @@ func PaymentsResource(m *payment.Manager) *filament.BaseResource[*PaymentRow] {
 		)
 	})
 
-	history := filament.NewRelationManager[*LogRow]("history", "History").
-		Icon("heroicon-clock").
-		RecordID(func(l *LogRow) string { return l.ID }).
-		Table(func(t *tables.Table[*LogRow]) *tables.Table[*LogRow] {
-			return t.Columns(
-				tables.TextColumn[*LogRow]("at").Label("When"),
-				tables.TextColumn[*LogRow]("event").Label("Event"),
-				tables.TextColumn[*LogRow]("change").Label("Status"),
-				tables.TextColumn[*LogRow]("message").Label("Details"),
-			)
-		}).
-		OnList(func(ctx *filament.Context, parentID, _, _, _ string, page, perPage int) ([]*LogRow, int, error) {
-			logs, err := m.Logs(ctx.GoContext(), parentID)
-			if err != nil {
-				return nil, 0, err
-			}
-			rows := make([]*LogRow, 0, len(logs))
-			for i := len(logs) - 1; i >= 0; i-- { // newest first
-				l := logs[i]
-				change := ""
-				if l.To != "" {
-					change = l.To.Label()
-					if l.From != "" {
-						change = l.From.Label() + " → " + change
-					}
-				}
-				rows = append(rows, &LogRow{Log: l, Change: change, At: l.CreatedAt.Local().Format("2006-01-02 15:04:05")})
-			}
-			return pageOf(rows, page, perPage), len(rows), nil
-		})
-	res.Relations(history)
+	res.Relations(historyRelation(m))
 
 	res.OnList(func(ctx *filament.Context, search, sortCol, sortDir string, page, perPage int, filters map[string]string) ([]*PaymentRow, int, error) {
 		q := payment.PaymentQuery{Search: search, Status: payment.Status(filters["status"]),

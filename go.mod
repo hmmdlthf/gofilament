@@ -2,7 +2,7 @@ module github.com/golaravel/gofilament
 
 go 1.26.0
 
-replace github.com/golaravel/golaravel => github.com/hmmdlthf/golaravel v1.17.3-0.20261124201850-19111fca466d
+replace github.com/golaravel/golaravel => github.com/hmmdlthf/golaravel v1.17.3-0.20261124204817-200654e4d8ed
 
 require (
 	entgo.io/ent v0.14.3

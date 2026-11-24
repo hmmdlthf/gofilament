@@ -59,6 +59,8 @@ func featureList(d *payment.Driver) string {
 	add(f.Installments, "Pay later")
 	add(f.Refunds, "Refunds")
 	add(f.Capture, "Capture")
+	add(f.Preapproval && f.Charging, "Saved cards")
+	add(f.Subscriptions, "Subscriptions")
 	add(f.StatusLookup, "Status sync")
 	return strings.Join(out, ", ")
 }

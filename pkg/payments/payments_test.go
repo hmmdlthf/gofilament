@@ -172,3 +172,69 @@ func TestPaymentsListViewAndRefund(t *testing.T) {
 		t.Fatalf("history: %d %s", code, raw)
 	}
 }
+
+func TestSubscriptionsAndMethods(t *testing.T) {
+	app, m := newApp(t)
+	ctx := context.Background()
+	if err := m.SaveGateway(ctx, &payment.GatewayConfig{ID: "test", Driver: "test", Name: "Test card", Enabled: true,
+		Settings: map[string]string{"signing_secret": "s"}}); err != nil {
+		t.Fatal(err)
+	}
+	pm, _ := m.SavePaymentMethod(ctx, "test", payment.PreapprovalRequest{CustomerRef: "c-9", Currency: "LKR",
+		Customer: payment.Customer{FirstName: "Sunil", Email: "sunil@example.com"}})
+	if _, err := m.HandleWebhook(ctx, "test", httptest.NewRequest("POST", "/", nil),
+		payment.TestWebhookBody("s", "test_"+pm.ID, "pay")); err != nil {
+		t.Fatal(err)
+	}
+	// .13 is declined by the test gateway: the subscription starts past due
+	sub, err := m.Subscribe(ctx, "", payment.SubscriptionRequest{Reference: "PLAN-GOLD", Amount: 99913,
+		Interval: payment.Month, Cycles: 6, PaymentMethodID: pm.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	code, out := call(t, app, "GET", "payment-methods", nil)
+	raw, _ := json.Marshal(out)
+	if code != 200 || !strings.Contains(string(raw), "Visa •••• 4242") || strings.Contains(string(raw), "tok_") {
+		t.Fatalf("methods list: %d %s", code, raw)
+	}
+	code, out = call(t, app, "GET", "subscriptions?filter[status]=past_due", nil)
+	raw, _ = json.Marshal(out)
+	if code != 200 || !strings.Contains(string(raw), `"schedule":"every month, 6 times"`) || !strings.Contains(string(raw), `"progress":"0 of 6 paid"`) {
+		t.Fatalf("subscriptions list: %d %s", code, raw)
+	}
+	code, out = call(t, app, "GET", "subscriptions/"+sub.ID+"/relations/payments", nil)
+	raw, _ = json.Marshal(out)
+	if code != 200 || !strings.Contains(string(raw), "PLAN-GOLD-1") || !strings.Contains(string(raw), `"status":"failed"`) {
+		t.Fatalf("period payments: %d %s", code, raw)
+	}
+	code, out = call(t, app, "GET", "subscriptions/"+sub.ID+"/relations/history", nil)
+	raw, _ = json.Marshal(out)
+	if code != 200 || !strings.Contains(string(raw), "Active → Past due") {
+		t.Fatalf("subscription history: %d %s", code, raw)
+	}
+
+	// still declined: the retry action reports the subscription as it is
+	if code, out = call(t, app, "POST", "subscriptions/"+sub.ID+"/actions/retry", nil); code != 200 {
+		t.Fatalf("retry: %d %v", code, out)
+	}
+	if code, out = call(t, app, "POST", "subscriptions/"+sub.ID+"/actions/cancel", nil); code != 200 {
+		t.Fatalf("cancel: %d %v", code, out)
+	}
+	if s, _ := m.Subscription(ctx, sub.ID); s.Status != payment.SubCanceled {
+		t.Fatalf("after cancel %s", s.Status)
+	}
+	if code, _ = call(t, app, "POST", "subscriptions/"+sub.ID+"/actions/cancel", nil); code == 200 {
+		t.Fatal("canceled twice")
+	}
+
+	if code, out = call(t, app, "POST", "payment-methods/"+pm.ID+"/actions/revoke", nil); code != 200 {
+		t.Fatalf("revoke: %d %v", code, out)
+	}
+	if got, _ := m.PaymentMethod(ctx, pm.ID); got.Status != payment.MethodRevoked {
+		t.Fatalf("after revoke %s", got.Status)
+	}
+	if code, _ = call(t, app, "POST", "subscriptions", map[string]any{"reference": "x"}); code < 400 {
+		t.Fatalf("subscriptions can be created from the panel: %d", code)
+	}
+}

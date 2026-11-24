@@ -1440,7 +1440,7 @@ func main() {
 
 ## 16. Payment Gateways (`pkg/payments`)
 
-`pkg/payments` puts golaravel's payment gateway layer (`pkg/payment`) in the panel. The built-in drivers are Stripe, PayHere, OnePay, Tabby, Tamara and a test gateway. Any `payment.Driver` plugin you install shows up as well.
+`pkg/payments` puts golaravel's payment gateway layer (`pkg/payment`) in the panel. The built-in drivers are Stripe, PayPal, PayHere, OnePay, Tabby, Tamara and a test gateway. Any `payment.Driver` plugin you install shows up as well.
 
 ```go
 mgr := payment.NewManager(payment.Options{BaseURL: "https://shop.example.com", Store: store, Encrypter: enc})
@@ -1461,6 +1461,15 @@ res.Gateways.AuthorizeWithGate()            // narrow access like any resource
   - Row actions show only where the gateway supports them: **Refund** (full or partial), **Capture** and **Void** for authorized payments, and **Sync with gateway**.
   - The navigation badge counts authorized payments waiting to be captured.
   - Payments can't be created, edited or deleted from the panel.
+- **Subscriptions**:
+  - Gateway-run subscriptions (PayHere Recurring, Stripe Billing, PayPal Billing) and subscriptions billed to a saved card.
+  - Each shows its schedule, how many periods are paid, and when it next bills.
+  - Every subscription has **Payments** and **History** tabs.
+  - Row actions: **Retry payment** (past due or failed), **Sync with gateway**, and **Cancel**.
+  - The navigation badge counts past-due subscriptions.
+- **Saved Payment Methods**:
+  - Cards customers saved through preapproval, shown as "Visa •••• 4242 (12/30)". The gateway token is never shown.
+  - Each has a History tab and a **Revoke** action.
 
 ## Summary Checklist for AI Agents & Developers
 

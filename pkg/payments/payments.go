@@ -10,6 +10,12 @@
 //     history, and Refund / Capture / Void / Sync actions where the gateway
 //     supports them.
 //
+//   - "Subscriptions": gateway-run and saved-card subscriptions with their
+//     period payments and history, and Retry / Sync / Cancel actions.
+//
+//   - "Saved Payment Methods": cards customers saved for later charges,
+//     with Revoke.
+//
 //     payments.Register(panel, mgr)
 //
 // The resources are returned too, so access can be narrowed like any other
@@ -26,13 +32,17 @@ var Group = "Payments"
 
 // Resources are the two payment resources.
 type Resources struct {
-	Gateways *filament.BaseResource[*GatewayRow]
-	Payments *filament.BaseResource[*PaymentRow]
+	Gateways      *filament.BaseResource[*GatewayRow]
+	Payments      *filament.BaseResource[*PaymentRow]
+	Subscriptions *filament.BaseResource[*SubscriptionRow]
+	Methods       *filament.BaseResource[*MethodRow]
 }
 
-// Register adds the gateway and payment resources to a panel.
+// Register adds the gateway, payment, subscription and saved payment
+// method resources to a panel.
 func Register(p *filament.Panel, m *payment.Manager) Resources {
-	r := Resources{Gateways: GatewaysResource(m), Payments: PaymentsResource(m)}
-	p.Resource(r.Gateways).Resource(r.Payments)
+	r := Resources{Gateways: GatewaysResource(m), Payments: PaymentsResource(m),
+		Subscriptions: SubscriptionsResource(m), Methods: MethodsResource(m)}
+	p.Resource(r.Gateways).Resource(r.Payments).Resource(r.Subscriptions).Resource(r.Methods)
 	return r
 }
