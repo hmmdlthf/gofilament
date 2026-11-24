@@ -9,7 +9,10 @@ package main
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // invoiceView is everything the printable invoice shows.
 type invoiceView struct {
@@ -18,7 +21,24 @@ type invoiceView struct {
 	Items    []OrderItem
 }
 
-func usd(f float64) string { return fmt.Sprintf("$%.2f", f) }
+// usd formats an amount as $1,799.00.
+func usd(f float64) string {
+	s := fmt.Sprintf("%.2f", f)
+	whole, cents := s[:len(s)-3], s[len(s)-3:]
+	neg := strings.HasPrefix(whole, "-")
+	whole = strings.TrimPrefix(whole, "-")
+	var b strings.Builder
+	for i, r := range whole {
+		if i > 0 && (len(whole)-i)%3 == 0 {
+			b.WriteByte(',')
+		}
+		b.WriteRune(r)
+	}
+	if neg {
+		return "-$" + b.String() + cents
+	}
+	return "$" + b.String() + cents
+}
 
 // renderTimeMark is replaced with the measured render time after rendering.
 const renderTimeMark = "__RENDER_TIME__"
@@ -49,7 +69,7 @@ func invoicePage(v invoiceView) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(invoiceNumber(v.Order))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 26, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 46, Col: 42}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -62,46 +82,46 @@ func invoicePage(v invoiceView) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(brand)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 26, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 46, Col: 55}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</title><link rel=\"icon\" href=\"/admin/favicon.png\"><style>\n\t\t\t\t:root { --ink: #111827; --muted: #6b7280; --line: #e5e7eb; --accent: #059669; }\n\t\t\t\t* { box-sizing: border-box; }\n\t\t\t\tbody { margin: 0; background: #f3f4f6; color: var(--ink); font: 14px/1.5 system-ui, -apple-system, \"Segoe UI\", sans-serif; }\n\t\t\t\t.bar { max-width: 820px; margin: 24px auto 0; padding: 0 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; color: var(--muted); font-size: 13px; }\n\t\t\t\t.speed { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #ecfdf5; color: #065f46; font-weight: 600; }\n\t\t\t\t.btn { border: 0; border-radius: 8px; padding: 8px 14px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }\n\t\t\t\t.sheet { max-width: 820px; margin: 12px auto 40px; background: #fff; padding: 48px; border-radius: 12px; box-shadow: 0 10px 30px -12px rgba(0,0,0,.2); }\n\t\t\t\theader { display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between; align-items: flex-start; }\n\t\t\t\t.logo { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; }\n\t\t\t\t.mark { width: 36px; height: 36px; border-radius: 9px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 800; }\n\t\t\t\th1 { margin: 0; font-size: 28px; letter-spacing: -.02em; text-align: right; }\n\t\t\t\t.meta { color: var(--muted); text-align: right; }\n\t\t\t\t.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px; margin: 36px 0; }\n\t\t\t\t.label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }\n\t\t\t\ttable { width: 100%; border-collapse: collapse; }\n\t\t\t\tth { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--line); padding: 8px 6px; }\n\t\t\t\ttd { border-bottom: 1px solid var(--line); padding: 10px 6px; vertical-align: top; }\n\t\t\t\t.num { text-align: right; white-space: nowrap; }\n\t\t\t\t.sku { color: var(--muted); font-size: 12px; }\n\t\t\t\t.totals { margin-left: auto; width: min(100%, 300px); margin-top: 16px; }\n\t\t\t\t.totals div { display: flex; justify-content: space-between; padding: 6px 6px; }\n\t\t\t\t.grand { border-top: 2px solid var(--ink); font-size: 18px; font-weight: 700; margin-top: 4px; }\n\t\t\t\t.status { display: inline-block; padding: 2px 10px; border-radius: 999px; background: #f3f4f6; font-weight: 600; font-size: 12px; }\n\t\t\t\tfooter { margin-top: 40px; color: var(--muted); font-size: 12px; }\n\t\t\t\t@media (max-width: 600px) { .sheet { padding: 24px; } h1, .meta { text-align: left; } }\n\t\t\t\t@media print {\n\t\t\t\t\tbody { background: #fff; }\n\t\t\t\t\t.bar { display: none; }\n\t\t\t\t\t.sheet { box-shadow: none; margin: 0; max-width: none; padding: 0; }\n\t\t\t\t}\n\t\t\t</style></head><body><div class=\"bar\"><span class=\"speed\" title=\"Time the Go server took to render this page with Templ\">⚡ Rendered on the server in ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</title><link rel=\"icon\" href=\"/admin/favicon.png\"><style>\n\t\t\t\t:root { --ink: #111827; --muted: #6b7280; --line: #e5e7eb; --accent: #059669; --soft: #ecfdf5; }\n\t\t\t\t* { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }\n\t\t\t\tbody { margin: 0; background: #f3f4f6; color: var(--ink); font: 14px/1.5 system-ui, -apple-system, \"Segoe UI\", Arial, sans-serif; }\n\t\t\t\t.bar { max-width: 820px; margin: 24px auto 0; padding: 0 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; color: var(--muted); font-size: 13px; }\n\t\t\t\t.speed { display: inline-block; padding: 4px 10px; border-radius: 999px; background: var(--soft); color: #065f46; font-weight: 600; }\n\t\t\t\t.btn { border: 0; border-radius: 8px; padding: 8px 14px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }\n\t\t\t\t.sheet { max-width: 820px; margin: 12px auto 40px; background: #fff; padding: 48px; border-radius: 12px; box-shadow: 0 10px 30px -12px rgba(0,0,0,.2); }\n\t\t\t\ttable { width: 100%; border-collapse: collapse; }\n\t\t\t\ttd, th { vertical-align: top; }\n\t\t\t\t/* layout tables: header and parties */\n\t\t\t\ttable.layout td { padding: 0; }\n\t\t\t\ttable.layout td.right { text-align: right; }\n\t\t\t\t.logo { font-size: 20px; font-weight: 700; white-space: nowrap; }\n\t\t\t\t.mark { display: inline-block; width: 34px; height: 34px; line-height: 34px; margin-right: 8px; border-radius: 9px; background: var(--accent); color: #fff; text-align: center; font-weight: 800; vertical-align: middle; }\n\t\t\t\t.from { color: var(--muted); font-size: 12px; margin-top: 8px; }\n\t\t\t\th1 { margin: 0 0 4px; font-size: 28px; letter-spacing: -.02em; }\n\t\t\t\t.meta { color: var(--muted); }\n\t\t\t\ttable.parties { margin: 32px 0; }\n\t\t\t\ttable.parties td { width: 33%; padding-right: 16px; }\n\t\t\t\t.label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding-bottom: 4px; }\n\t\t\t\t.status { display: inline-block; padding: 1px 10px; border-radius: 999px; background: #f3f4f6; border: 1px solid var(--line); font-weight: 600; font-size: 12px; }\n\t\t\t\t/* line items */\n\t\t\t\ttable.items thead th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: #f9fafb; border-top: 1px solid var(--line); border-bottom: 2px solid var(--line); padding: 8px; }\n\t\t\t\ttable.items tbody td { border-bottom: 1px solid var(--line); padding: 10px 8px; }\n\t\t\t\ttable.items .num { text-align: right; white-space: nowrap; width: 1%; }\n\t\t\t\t.sku { color: var(--muted); font-size: 12px; }\n\t\t\t\ttable.items tfoot td { padding: 6px 8px; }\n\t\t\t\ttable.items tfoot tr:first-child td { padding-top: 14px; }\n\t\t\t\ttable.items tfoot .grand td { border-top: 2px solid var(--ink); font-size: 18px; font-weight: 700; padding-top: 10px; }\n\t\t\t\ttable.items tfoot .lbl { text-align: right; color: var(--muted); }\n\t\t\t\ttable.items tfoot .grand .lbl { color: var(--ink); }\n\t\t\t\tfooter { margin-top: 40px; color: var(--muted); font-size: 12px; }\n\t\t\t\t@media screen and (max-width: 600px) {\n\t\t\t\t\t.sheet { padding: 20px; border-radius: 0; }\n\t\t\t\t\ttable.layout td, table.parties td { display: block; width: auto; text-align: left !important; padding: 0 0 16px; }\n\t\t\t\t}\n\t\t\t\t@page { size: A4; margin: 16mm 14mm; }\n\t\t\t\t@media print {\n\t\t\t\t\tbody { background: #fff; font-size: 12px; }\n\t\t\t\t\t.bar { display: none; }\n\t\t\t\t\t.sheet { box-shadow: none; border-radius: 0; margin: 0; max-width: none; padding: 0; }\n\t\t\t\t\tthead { display: table-header-group; } /* repeat the column headings on each page */\n\t\t\t\t\ttfoot { display: table-row-group; }    /* totals only once, at the end */\n\t\t\t\t\ttr, table.parties, table.layout { break-inside: avoid; page-break-inside: avoid; }\n\t\t\t\t}\n\t\t\t</style></head><body><div class=\"bar\"><span class=\"speed\" title=\"Time the Go server took to render this page with Templ\">⚡ Rendered on the server in ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(renderTimeMark)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 63, Col: 133}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 98, Col: 133}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span> <span>Generated by GoLaravel + Templ, no JavaScript framework</span> <button class=\"btn\" type=\"button\" onclick=\"window.print()\">Print or save as PDF</button></div><main class=\"sheet\"><header><div><div class=\"logo\"><span class=\"mark\">A</span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</span> <span>Generated by GoLaravel + Templ, no JavaScript framework</span> <button class=\"btn\" type=\"button\" onclick=\"window.print()\">Print or save as PDF</button></div><main class=\"sheet\"><table class=\"layout\" role=\"presentation\"><tr><td><div class=\"logo\"><span class=\"mark\">A</span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(brand)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 70, Col: 58}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 106, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div><p class=\"sku\">12 Market Street, Lisbon, Portugal<br>billing@apexstore.example · VAT PT 500 000 000</p></div><div><h1>Invoice</h1><div class=\"meta\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "</div><div class=\"from\">12 Market Street, Lisbon, Portugal<br>billing@apexstore.example · VAT PT 500 000 000</div></td><td class=\"right\"><h1>Invoice</h1><div class=\"meta\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(invoiceNumber(v.Order))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 76, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 112, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -114,7 +134,7 @@ func invoicePage(v invoiceView) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(v.Order.Number)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 77, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 113, Col: 30}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -127,20 +147,20 @@ func invoicePage(v invoiceView) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(v.Order.CreatedAt.Format("2 January 2006"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 78, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 114, Col: 52}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></div></header><section class=\"cols\"><div><div class=\"label\">Billed to</div><strong>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></td></tr></table><table class=\"parties\" role=\"presentation\"><tr><td><div class=\"label\">Billed to</div><strong>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(v.Customer.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 85, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 123, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -153,7 +173,7 @@ func invoicePage(v invoiceView) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(v.Customer.Email)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 86, Col: 24}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 124, Col: 25}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 		if templ_7745c5c3_Err != nil {
@@ -166,7 +186,7 @@ func invoicePage(v invoiceView) templ.Component {
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(v.Customer.City)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 87, Col: 23}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 125, Col: 24}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -179,20 +199,20 @@ func invoicePage(v invoiceView) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(v.Customer.Country)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 87, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 125, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</div><div><div class=\"label\">Payment</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</td><td><div class=\"label\">Payment</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(paymentLabel(v.Order.Payment))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 91, Col: 37}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 129, Col: 38}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 		if templ_7745c5c3_Err != nil {
@@ -205,76 +225,85 @@ func invoicePage(v invoiceView) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(orderStatus[v.Order.Status])
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 92, Col: 56}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 130, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</span></td><td>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if v.Order.Tracking != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div><div class=\"label\">Shipment</div>Tracking ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<div class=\"label\">Shipment</div>Tracking ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(v.Order.Tracking)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 97, Col: 34}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 135, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</section><table><thead><tr><th>Item</th><th class=\"num\">Qty</th><th class=\"num\">Unit price</th><th class=\"num\">Amount</th></tr></thead> <tbody>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</td></tr></table><table class=\"items\"><thead><tr><th scope=\"col\">Item</th><th scope=\"col\" class=\"num\">Qty</th><th scope=\"col\" class=\"num\">Unit price</th><th scope=\"col\" class=\"num\">Amount</th></tr></thead> <tbody>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for _, it := range v.Items {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<tr><td>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<tr><td>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(it.Product)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 108, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 147, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"sku\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"sku\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(it.SKU)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 108, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 147, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div></td><td class=\"num\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "</div></td><td class=\"num\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(it.Quantity))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 109, Col: 49}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 148, Col: 49}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</td><td class=\"num\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var19 string
+			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(usd(it.UnitPrice))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 149, Col: 43}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -282,86 +311,73 @@ func invoicePage(v invoiceView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var19 string
-			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(usd(it.UnitPrice))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 110, Col: 43}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</td><td class=\"num\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(usd(it.Total))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 111, Col: 39}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 150, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</td></tr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</td></tr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</tbody></table><div class=\"totals\"><div><span>Subtotal</span><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</tbody><tfoot><tr><td colspan=\"3\" class=\"lbl\">Subtotal</td><td class=\"num\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(usd(v.Order.Subtotal))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 117, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 155, Col: 90}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</span></div><div><span>Shipping</span><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</td></tr><tr><td colspan=\"3\" class=\"lbl\">Shipping</td><td class=\"num\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(usd(v.Order.Shipping))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 118, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 156, Col: 90}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</span></div><div class=\"grand\"><span>Total</span><span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</td></tr><tr class=\"grand\"><td colspan=\"3\" class=\"lbl\">Total</td><td class=\"num\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(usd(v.Order.Total))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 119, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 157, Col: 98}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "</span></div></div><footer>Thank you for shopping with ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</td></tr></tfoot></table><footer>Thank you for shopping with ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(brand)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 122, Col: 40}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `invoice.templ`, Line: 161, Col: 40}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, ". This is a sample invoice from the GoFilament live demo; no payment was taken.</footer></main></body></html>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, ". This is a sample invoice from the GoFilament live demo; no payment was taken.</footer></main></body></html>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

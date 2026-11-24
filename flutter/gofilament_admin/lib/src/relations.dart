@@ -135,6 +135,11 @@ class _RelationPanelsState extends State<RelationPanels>
   }
 }
 
+/// Below this width a relation manager shows its records as cards instead
+/// of a table (the resource list switches at 760 px of screen width; a
+/// relation table goes by its own width, since it often sits in a dialog).
+const relationCardBreakpoint = 600.0;
+
 class _RelationTable extends StatefulWidget {
   const _RelationTable({
     required this.admin,
@@ -301,8 +306,87 @@ class _RelationTableState extends State<_RelationTable> {
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
       );
     } else {
-      body = LayoutBuilder(
-        builder: (context, c) => SingleChildScrollView(
+      Widget cell(Map<String, dynamic> col, Map<String, dynamic> row) =>
+          adminCell(context, col, row,
+              onNotice: _notice,
+              admin: widget.admin,
+              currency: '${widget.admin.schema['currency'] ?? ''}');
+      Widget actions(Map<String, dynamic> row) =>
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            if (canEdit)
+              IconButton(
+                key: Key('rel-$_name-edit-${recordId(row)}'),
+                tooltip: tr('Edit'),
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                onPressed: () => _open(childId: recordId(row)),
+              ),
+            if (canDelete)
+              IconButton(
+                key: Key('rel-$_name-delete-${recordId(row)}'),
+                tooltip: tr('Delete'),
+                visualDensity: VisualDensity.compact,
+                icon: Icon(Icons.delete_outline,
+                    size: 18, color: theme.colorScheme.error),
+                onPressed: () => _delete(row),
+              ),
+          ]);
+      String label(Map<String, dynamic> col) =>
+          '${col['label'] ?? humanize('${col['name']}')}';
+
+      body = LayoutBuilder(builder: (context, c) {
+        // Like the resource list: cards when there is no room for a table
+        // (a phone, or a narrow form dialog).
+        if (c.maxWidth < relationCardBreakpoint) {
+          return Column(
+            key: Key('rel-$_name-cards'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (i, row) in _rows.indexed) ...[
+                if (i > 0) const Divider(height: 1),
+                InkWell(
+                  key: Key('rel-$_name-card-${recordId(row)}'),
+                  onTap: canEdit ? () => _open(childId: recordId(row)) : null,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Expanded(
+                              child: columns.isEmpty
+                                  ? Text(recordId(row))
+                                  : DefaultTextStyle.merge(
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15),
+                                      child: cell(columns.first, row)),
+                            ),
+                            actions(row),
+                          ]),
+                          if (columns.length > 1) ...[
+                            const SizedBox(height: 4),
+                            Wrap(spacing: 16, runSpacing: 6, children: [
+                              for (final col in columns.skip(1))
+                                Row(mainAxisSize: MainAxisSize.min, children: [
+                                  Text('${label(col)}: ',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                              color: theme.colorScheme
+                                                  .onSurfaceVariant)),
+                                  cell(col, row),
+                                ]),
+                            ]),
+                          ],
+                        ]),
+                  ),
+                ),
+              ],
+            ],
+          );
+        }
+        return SingleChildScrollView(
+          key: Key('rel-$_name-table'),
           scrollDirection: Axis.horizontal,
           child: ConstrainedBox(
             constraints: BoxConstraints(minWidth: c.maxWidth),
@@ -315,8 +399,7 @@ class _RelationTableState extends State<_RelationTable> {
               columns: [
                 for (final col in columns)
                   DataColumn(
-                    label: Text('${col['label'] ?? humanize('${col['name']}')}'
-                        .toUpperCase()),
+                    label: Text(label(col).toUpperCase()),
                     numeric: col['type'] == 'money' || col['align'] == 'right',
                   ),
                 if (canEdit || canDelete) const DataColumn(label: Text('')),
@@ -324,38 +407,14 @@ class _RelationTableState extends State<_RelationTable> {
               rows: [
                 for (final row in _rows)
                   DataRow(cells: [
-                    for (final col in columns)
-                      DataCell(adminCell(context, col, row,
-                          onNotice: _notice,
-                          admin: widget.admin,
-                          currency:
-                              '${widget.admin.schema['currency'] ?? ''}')),
-                    if (canEdit || canDelete)
-                      DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
-                        if (canEdit)
-                          IconButton(
-                            key: Key('rel-$_name-edit-${recordId(row)}'),
-                            tooltip: tr('Edit'),
-                            visualDensity: VisualDensity.compact,
-                            icon: const Icon(Icons.edit_outlined, size: 18),
-                            onPressed: () => _open(childId: recordId(row)),
-                          ),
-                        if (canDelete)
-                          IconButton(
-                            key: Key('rel-$_name-delete-${recordId(row)}'),
-                            tooltip: tr('Delete'),
-                            visualDensity: VisualDensity.compact,
-                            icon: Icon(Icons.delete_outline,
-                                size: 18, color: theme.colorScheme.error),
-                            onPressed: () => _delete(row),
-                          ),
-                      ])),
+                    for (final col in columns) DataCell(cell(col, row)),
+                    if (canEdit || canDelete) DataCell(actions(row)),
                   ]),
               ],
             ),
           ),
-        ),
-      );
+        );
+      });
     }
 
     return Container(

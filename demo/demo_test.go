@@ -280,3 +280,11 @@ func TestInvoiceLinksAreSignedAndRenderFast(t *testing.T) {
 		}
 	}
 }
+
+func TestUSD(t *testing.T) {
+	for in, want := range map[float64]string{0: "$0.00", 9.9: "$9.90", 1799: "$1,799.00", 1234567.891: "$1,234,567.89", -1500: "-$1,500.00"} {
+		if got := usd(in); got != want {
+			t.Errorf("usd(%v) = %s, want %s", in, got, want)
+		}
+	}
+}
