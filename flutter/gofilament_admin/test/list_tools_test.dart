@@ -25,6 +25,57 @@ Map<String, String> _lastListQuery(FakePanel panel) => panel.requests
     .queryParameters;
 
 void main() {
+  testWidgets('refined filters show live counts and values found in the data',
+      (tester) async {
+    final panel = FakePanel()
+      ..extraFilters = [
+        {
+          'name': 'city',
+          'label': 'City',
+          'type': 'refined',
+          'column': 'city',
+          'multiple': true,
+          'options': [
+            {'value': 'colombo', 'label': 'Colombo', 'count': 99},
+            {'value': 'kandy', 'label': 'Kandy'},
+          ],
+        }
+      ]
+      ..listFacets = {
+        'city': {'colombo': 3, 'galle': 5}
+      };
+    await _open(tester, panel);
+
+    await tester.tap(find.byKey(const Key('filter-city')));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<Text>(find.byKey(const Key('refined-count-colombo')))
+            .data,
+        '3'); // the live count replaces the static one
+    expect(
+        tester.widget<Text>(find.byKey(const Key('refined-count-kandy'))).data,
+        '0');
+    // a value the filter does not list, taken from the data
+    expect(find.byKey(const Key('refined-option-galle')), findsOneWidget);
+    expect(
+        tester.widget<Text>(find.byKey(const Key('refined-count-galle'))).data,
+        '5');
+  });
+
+  test('refinedOptions merges facets', () {
+    final opts = refinedOptions([
+      {'value': 'a', 'label': 'A'}
+    ], facets: {
+      'b': 1,
+      'c': 4,
+      'a': 2
+    });
+    expect(opts.map((o) => '${o['value']}=${o['count']}').toList(),
+        ['a=2', 'c=4', 'b=1']);
+    expect(refinedOptions(null), isEmpty);
+  });
+
   testWidgets('a refined filter sends the checked values', (tester) async {
     final panel = FakePanel()
       ..extraFilters = [

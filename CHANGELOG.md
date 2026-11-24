@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Live facet counts for refined filters**: list responses now include `facets` (`{column: {value: count}}`) for every `tables.RefinedFilter`. Each column's counts apply the search and the other filters but not its own, and the Flutter filter dialog shows them. A refined filter without `Options` offers the values found in the data, and listed options are sorted by label. Counts are read through `OnList`, up to `filament.MaxFacetScan` records; for large tables, `Resource.FacetCounts(fn)` counts in the database instead.
+- **Collapsible desktop sidebar in the Flutter admin**: a top-bar button switches the sidebar between full width, an icon rail (labels as tooltips) and hidden, and each device remembers the choice. `Panel.SidebarCollapseModes(filament.SidebarIcons, filament.SidebarHidden)` picks which collapsed forms are offered (both by default), `Panel.SidebarDefaultMode(...)` sets the starting one, and `SidebarCollapsibleOnDesktop(false)` turns it off. The schema carries `sidebar: {collapsible, modes, default}`.
+- **Demo**: refined filters on product brand and category, order status and channel, and customer country, plus the collapsible sidebar.
+
+### Fixed
+- **Refined filter options came in random order**: they were built from a Go map.
+
+### Added
 - **Live demo** (`demo/`, deployed to https://demo.gofilament.elridhma.com by `.github/workflows/demo.yml`): Apex Store, a shop back office in the Flutter admin app, served with its panel API from one Go binary. It has products with variant and barcode tabs, orders with an audit trail, customers, dashboard charts, admin and warehouse roles with one-click demo sign-in, and sample data that resets every hour. The website's landing page links to it, with a screenshot.
 - **Flutter: several demo accounts**: `GoFilamentAdmin(demoLogins: [...])` shows one button per account, and `DemoLogin(submit: true)` signs in with a single tap.
 

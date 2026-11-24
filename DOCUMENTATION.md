@@ -171,6 +171,10 @@ func main() {
         HomeURL("/admin").
         DarkMode(true).
         SidebarCollapsibleOnDesktop().
+        // Desktop sidebar: full, an icon rail with tooltips, or hidden.
+        // A top-bar button switches between them; each device remembers it.
+        SidebarCollapseModes(filament.SidebarIcons, filament.SidebarHidden).
+        SidebarDefaultMode(filament.SidebarExpanded).
         MaxContentWidth(filament.Width7xl).
         Colors(map[string]any{
             colors.RolePrimary: colors.Amber,
@@ -760,8 +764,23 @@ table.Filters(
 )
 ```
 
-#### Refined Search Engine with Dynamic Facet Counts
-Columns marked with `.RefinedFilter()` automatically expose dynamic facet count chips: e.g. `[x] Electronics (42)`, `[ ] Apparel (18)`.
+#### Refined Filters with Live Facet Counts
+`tables.RefinedFilter(column)` is a multi-select filter. The chosen values reach `OnList` comma-separated (`filters["status"] == "paid,shipped"`), so match any of them.
+
+Every list response carries live counts for each refined filter: `"facets": {"status": {"paid": 21, "shipped": 38}}`. The Flutter client shows them next to each option. A column's counts apply the search and every other filter, but not the column's own filter, so the other options still show what choosing them would add. A refined filter without `Options` offers the values found in the data, ordered by count; listed options appear in label order.
+
+```go
+tables.RefinedFilter("status").Label("Status").Options(orderStatus), // listed values
+tables.RefinedFilter("brand").Label("Brand"),                       // values from the data
+```
+
+The counts are read through `OnList`, up to `filament.MaxFacetScan` (5,000) matching records per filter; above that the counts are left out. For large tables, count in the database instead:
+
+```go
+res.FacetCounts(func(ctx *filament.Context, column, search string, filters map[string]string) (map[string]int, error) {
+    return db.CountBy(column, search, filters) // e.g. SELECT column, COUNT(*) ... GROUP BY column
+})
+```
 
 ### Table Actions & Bulk Operations
 

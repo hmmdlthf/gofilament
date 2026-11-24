@@ -80,7 +80,8 @@ func productResource() *filament.BaseResource[*Product] {
 			).
 			Filters(
 				tables.SelectFilter("status").Label("Status").Options(productStatus),
-				tables.SelectFilter("category").Label("Category").Options(categories),
+				tables.RefinedFilter("category").Label("Category").Options(categories),
+				tables.RefinedFilter("brand").Label("Brand"), // options come from the data
 				tables.TernaryFilter("featured").Label("Featured").TrueLabel("Featured only").FalseLabel("Not featured"),
 				tables.TrashedFilter(),
 			).
@@ -414,9 +415,9 @@ func orderResource() *filament.BaseResource[*Order] {
 				tables.TextColumn[*Order]("created_at").Label("Placed").DateTime("Jan 2, 15:04").Sortable(),
 			).
 			Filters(
-				tables.SelectFilter("status").Label("Status").Options(orderStatus),
+				tables.RefinedFilter("status").Label("Status").Options(orderStatus),
+				tables.RefinedFilter("channel").Label("Channel").Options(channels),
 				tables.SelectFilter("payment").Label("Payment").Options(payments),
-				tables.SelectFilter("channel").Label("Channel").Options(channels),
 			).
 			HeaderActions(tables.ExportAction[*Order]()).
 			Actions(
@@ -552,7 +553,7 @@ func customerResource() *filament.BaseResource[*Customer] {
 			).
 			Filters(
 				tables.TernaryFilter("vip").Label("VIP").TrueLabel("VIP only").FalseLabel("Regular"),
-				tables.SelectFilter("country").Label("Country").Options(countries()),
+				tables.RefinedFilter("country").Label("Country"),
 				tables.TrashedFilter(),
 			).
 			HeaderActions(tables.ImportAction[*Customer](), tables.ExportAction[*Customer]()).
@@ -631,12 +632,4 @@ func customerResource() *filament.BaseResource[*Customer] {
 		return nil
 	})
 	return res
-}
-
-func countries() map[string]string {
-	m := map[string]string{}
-	for _, p := range places {
-		m[p[1]] = p[1]
-	}
-	return m
 }

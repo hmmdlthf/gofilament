@@ -3,6 +3,7 @@ package tables
 import (
 	"fmt"
 	"html"
+	"sort"
 	"strings"
 )
 
@@ -280,12 +281,21 @@ func (f *RefinedFilterDef) Multiple(m ...bool) *RefinedFilterDef {
 	return f
 }
 
+// Options lists the choices (value -> label), shown in label order. Without
+// options, the client offers the values found in the data (live facets).
 func (f *RefinedFilterDef) Options(opts map[string]string) *RefinedFilterDef {
 	f.options = opts
 	f.order = make([]string, 0, len(opts))
 	for k := range opts {
 		f.order = append(f.order, k)
 	}
+	sort.SliceStable(f.order, func(i, j int) bool {
+		a, b := strings.ToLower(opts[f.order[i]]), strings.ToLower(opts[f.order[j]])
+		if a == b {
+			return f.order[i] < f.order[j]
+		}
+		return a < b
+	})
 	return f
 }
 

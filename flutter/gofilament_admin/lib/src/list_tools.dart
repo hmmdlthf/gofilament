@@ -34,10 +34,16 @@ Future<Set<String>?> showRefinedFilterDialog(
                       controlAffinity: ListTileControlAffinity.leading,
                       value: chosen.contains('${o['value']}'),
                       title: Text('${o['label'] ?? o['value']}'),
-                      secondary: (o['count'] as num?) != null &&
-                              (o['count'] as num) > 0
+                      secondary: (o['count'] as num?) != null
                           ? Text('${o['count']}',
-                              style: Theme.of(context).textTheme.bodySmall)
+                              key: Key('refined-count-${o['value']}'),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                      color: (o['count'] as num) > 0
+                                          ? null
+                                          : Theme.of(context).disabledColor))
                           : null,
                       onChanged: (v) => setState(() {
                         final value = '${o['value']}';
@@ -65,15 +71,34 @@ Future<Set<String>?> showRefinedFilterDialog(
   );
 }
 
-/// Parses a refined filter's options ({value, label, count}).
-List<Map<String, dynamic>> refinedOptions(dynamic raw) {
-  if (raw is! List) return const [];
+/// Parses a refined filter's options ({value, label, count}). With [facets]
+/// (the list's live counts for this column), counts come from them, and
+/// values the filter does not list are added in count order. Chosen values
+/// with no records left keep their entry, with a count of 0.
+List<Map<String, dynamic>> refinedOptions(dynamic raw,
+    {Map<String, int>? facets}) {
+  final options = <Map<String, dynamic>>[
+    if (raw is List)
+      for (final o in raw)
+        if (o is Map)
+          Map<String, dynamic>.from(o)
+        else if (o != null)
+          {'value': '$o', 'label': '$o'}
+  ];
+  if (facets == null) return options;
+  final listed = <String>{};
+  for (final o in options) {
+    final value = '${o['value']}';
+    listed.add(value);
+    o['count'] = facets[value] ?? 0;
+  }
+  final extra = facets.entries.where((e) => !listed.contains(e.key)).toList()
+    ..sort((a, b) => b.value != a.value
+        ? b.value.compareTo(a.value)
+        : a.key.toLowerCase().compareTo(b.key.toLowerCase()));
   return [
-    for (final o in raw)
-      if (o is Map)
-        Map<String, dynamic>.from(o)
-      else if (o != null)
-        {'value': '$o', 'label': '$o'}
+    ...options,
+    for (final e in extra) {'value': e.key, 'label': e.key, 'count': e.value},
   ];
 }
 

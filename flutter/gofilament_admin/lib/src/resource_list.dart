@@ -55,6 +55,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
   /// The column rows are grouped by ("" for none).
   late String _group;
   Map<String, Map<String, double>> _totals = const {};
+  Map<String, Map<String, int>> _facets = const {};
 
   List<String> get _groups {
     final g = _resource['groups'];
@@ -493,6 +494,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
         _rowMeta = page.rowMeta;
         _total = page.total;
         _totals = page.summaries;
+        _facets = page.facets;
         _loading = false;
         _selected.removeWhere((id) => !_rows.any((r) => recordId(r) == id));
       });
@@ -1182,7 +1184,7 @@ class _ResourceListPageState extends State<ResourceListPage> {
     final theme = Theme.of(context);
     final column = '${filter['column'] ?? filter['name']}';
     final label = '${filter['label'] ?? humanize(column)}';
-    final options = refinedOptions(filter['options']);
+    final options = refinedOptions(filter['options'], facets: _facets[column]);
     final current =
         (_filters[column] ?? '').split(',').where((v) => v.isNotEmpty).toSet();
     final labels = [
