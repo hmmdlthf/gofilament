@@ -40,7 +40,7 @@ func (f *FieldsetComponent) GetSchema() []Component {
 func (f *FieldsetComponent) Render(ctx context.Context, state map[string]any, errors map[string]string) string {
 	var body strings.Builder
 	for _, comp := range f.schema {
-		body.WriteString(comp.Render(ctx, state, errors))
+		body.WriteString(renderChild(ctx, comp, state, errors))
 	}
 	return fmt.Sprintf(`
 <fieldset style="border: 1px solid var(--gray-200); border-radius: 0.5rem; padding: 1.25rem; margin-bottom: 1.25rem;">

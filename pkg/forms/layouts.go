@@ -15,6 +15,7 @@ type SectionComponent struct {
 	columns     int
 	collapsible bool
 	schema      []Component
+	visibleWhen *Condition
 }
 
 func Section(heading string) *SectionComponent {
@@ -58,7 +59,7 @@ func (s *SectionComponent) Render(ctx context.Context, state map[string]any, err
 	colClass := fmt.Sprintf("grid-cols-%d", s.columns)
 	body.WriteString(fmt.Sprintf(`<div class="grid %s">`, colClass))
 	for _, comp := range s.schema {
-		body.WriteString(comp.Render(ctx, state, errors))
+		body.WriteString(renderChild(ctx, comp, state, errors))
 	}
 	body.WriteString(`</div>`)
 
@@ -86,8 +87,9 @@ func (s *SectionComponent) Render(ctx context.Context, state map[string]any, err
 // ----------------------------------------------------
 
 type GridComponent struct {
-	columns int
-	schema  []Component
+	columns     int
+	schema      []Component
+	visibleWhen *Condition
 }
 
 func Grid(columns int) *GridComponent {
@@ -115,7 +117,7 @@ func (g *GridComponent) Render(ctx context.Context, state map[string]any, errors
 	colClass := fmt.Sprintf("grid-cols-%d", g.columns)
 	body.WriteString(fmt.Sprintf(`<div class="grid %s">`, colClass))
 	for _, comp := range g.schema {
-		body.WriteString(comp.Render(ctx, state, errors))
+		body.WriteString(renderChild(ctx, comp, state, errors))
 	}
 	body.WriteString(`</div>`)
 	return body.String()

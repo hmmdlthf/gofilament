@@ -409,6 +409,50 @@
     }
   });
 
+  // Conditional form components (forms.VisibleWhen): show a wrapper while
+  // the named field holds one of its values; hidden inputs are disabled so
+  // they are neither required nor submitted.
+  Filament.conditions = {
+    valueOf: function(form, name) {
+      var els = form.querySelectorAll('[name="' + name + '"], [name="' + name + '[]"]');
+      var out = [];
+      els.forEach(function(el) {
+        if (el.disabled) return;
+        if (el.type === 'checkbox' || el.type === 'radio') {
+          if (el.type === 'checkbox' && els.length === 1) { out.push(el.checked ? 'true' : 'false'); return; }
+          if (el.checked) out.push(el.value);
+        } else if (el.tagName === 'SELECT' && el.multiple) {
+          Array.prototype.forEach.call(el.selectedOptions, function(o) { out.push(o.value); });
+        } else {
+          out.push(el.value);
+        }
+      });
+      return out;
+    },
+    apply: function(root) {
+      (root || document).querySelectorAll('form').forEach(function(form) {
+        form.querySelectorAll('[data-visible-when]').forEach(function(box) {
+          var want = (box.getAttribute('data-visible-values') || '').split('\x1f');
+          var have = Filament.conditions.valueOf(form, box.getAttribute('data-visible-when'));
+          var show = have.some(function(v) { return want.indexOf(v) >= 0; });
+          box.style.display = show ? '' : 'none';
+          box.querySelectorAll('input, select, textarea').forEach(function(el) {
+            if (!show) {
+              if (!el.disabled) { el.disabled = true; el.setAttribute('data-cond-disabled', '1'); }
+            } else if (el.getAttribute('data-cond-disabled')) {
+              el.disabled = false; el.removeAttribute('data-cond-disabled');
+            }
+          });
+        });
+      });
+    }
+  };
+  document.addEventListener('change', function() { Filament.conditions.apply(); });
+  document.addEventListener('input', function(e) {
+    if (e.target && e.target.form && e.target.form.querySelector('[data-visible-when]')) Filament.conditions.apply();
+  });
+  document.addEventListener('DOMContentLoaded', function() { Filament.conditions.apply(); });
+
   // Initialize theme on load
   document.addEventListener('DOMContentLoaded', () => {
     window.Filament.theme.init();

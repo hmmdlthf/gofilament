@@ -197,13 +197,13 @@ class _ResourceFormState extends State<ResourceForm> {
       final payload = _isCreateOption
           ? await api.createOptionForm(widget.slug, widget.createOptionField!)
           : _isAction
-          ? await api.actionForm(
-              widget.slug, widget.id!, '${widget.action!['name']}')
-          : _isRelation
-              ? await api.relationForm(
-                  widget.slug, widget.parentId!, widget.relation!,
-                  childId: widget.id)
-              : await api.form(widget.slug, id: widget.id);
+              ? await api.actionForm(
+                  widget.slug, widget.id!, '${widget.action!['name']}')
+              : _isRelation
+                  ? await api.relationForm(
+                      widget.slug, widget.parentId!, widget.relation!,
+                      childId: widget.id)
+                  : await api.form(widget.slug, id: widget.id);
       _collectFields(payload.schema);
       for (final f in _fields) {
         final name = '${f['name']}';
@@ -277,9 +277,12 @@ class _ResourceFormState extends State<ResourceForm> {
 
   Map<String, dynamic> _collect() {
     final data = <String, dynamic>{};
+    final hidden =
+        _payload == null ? const <String>{} : _hiddenFields(_payload!.schema);
     for (final f in _fields) {
       final name = '${f['name']}';
       final type = '${f['type']}';
+      if (hidden.contains(name)) continue;
       if (f['disabled'] == true ||
           ((_isRelation || _isAction) &&
               const {'file', 'image'}.contains(type))) {
@@ -381,12 +384,12 @@ class _ResourceFormState extends State<ResourceForm> {
     final title = _isCreateOption
         ? (widget.title ?? tr('Create'))
         : _isAction
-        ? '${widget.action!['modal_heading'] ?? widget.action!['label'] ?? ''}'
-        : (widget.readOnly
-            ? model
-            : (_isEdit
-                ? tr('Edit {name}', {'name': model})
-                : tr('New {name}', {'name': model})));
+            ? '${widget.action!['modal_heading'] ?? widget.action!['label'] ?? ''}'
+            : (widget.readOnly
+                ? model
+                : (_isEdit
+                    ? tr('Edit {name}', {'name': model})
+                    : tr('New {name}', {'name': model})));
 
     Widget body;
     if (_loadError != null) {
@@ -526,11 +529,41 @@ class _ResourceFormState extends State<ResourceForm> {
     );
   }
 
+  /// Whether a node's `visible_when` condition (forms.VisibleWhen) holds for
+  /// the values being edited.
+  bool _visible(Map<String, dynamic> node) {
+    final cond = node['visible_when'];
+    if (cond is! Map) return true;
+    final field = '${cond['field']}';
+    final want = (cond['values'] as List? ?? const []).map((v) => '$v').toSet();
+    final value =
+        _values.containsKey(field) ? _values[field] : _text[field]?.text;
+    final have = value is List ? value.map((v) => '$v') : ['${value ?? ''}'];
+    return have.any(want.contains);
+  }
+
+  /// Names of the fields under hidden `visible_when` nodes, left out of saves.
+  Set<String> _hiddenFields(List<dynamic> nodes, [bool hidden = false]) {
+    final out = <String>{};
+    for (final raw in nodes.whereType<Map>()) {
+      final node = Map<String, dynamic>.from(raw);
+      final h = hidden || !_visible(node);
+      if (h && node['kind'] == 'field' && node['name'] != null) {
+        out.add('${node['name']}');
+      }
+      if (node['children'] is List) {
+        out.addAll(_hiddenFields(node['children'] as List, h));
+      }
+    }
+    return out;
+  }
+
   /// Lays [nodes] out in a grid of [columns] columns (one column on narrow screens).
   List<Widget> _nodes(BuildContext context, List<dynamic> nodes, int columns) {
     final items = <(int, Widget)>[];
     for (final raw in nodes.whereType<Map>()) {
       final node = Map<String, dynamic>.from(raw);
+      if (!_visible(node)) continue;
       final widget = _node(context, node);
       if (widget == null) continue;
       final span = (node['column_span'] as num?)?.toInt() ?? 1;

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Payment gateway admin (`pkg/payments`)**: `payments.Register(panel, mgr)` adds four resources on top of golaravel's `pkg/payment`. **Payment Gateways** lets you configure Stripe, PayPal, PayHere, OnePay, Tabby, Tamara, the test gateway or any driver plugin: the form shows only the chosen driver's settings, secrets are write-only and encrypted, and each gateway has its webhook URL and a connection test. **Payments** has filters, search, a read-only record view with a History tab, and Refund, Capture, Void and Sync actions where the gateway supports them. **Subscriptions** shows the schedule, periods paid and next billing date, with Payments and History tabs and Retry, Sync and Cancel actions. **Saved Payment Methods** lists saved cards, with Revoke. 
+- **Conditional form components (`VisibleWhen`)**: `Section`, `Grid` and fields can be shown only while another field holds given values. The web panel and the Flutter admin evaluate it as the user edits, and `forms.Validate` drops hidden values and skips their rules. It's described as `visible_when` in the form JSON.
+
+### Changed
+- **golaravel v1.18.0** (payment gateways, saved cards and subscriptions).
+
 ## [v1.42.0] - 2026-11-24
 
 ### Added

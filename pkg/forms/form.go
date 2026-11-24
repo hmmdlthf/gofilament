@@ -212,7 +212,7 @@ func (f *Form) Render(ctx context.Context) string {
 	sb.WriteString(fmt.Sprintf(`<form id="filament-form" method="%s" action="%s"%s>`, f.method, f.action, enctypeAttr))
 
 	for _, comp := range f.schema {
-		sb.WriteString(comp.Render(ctx, f.state, f.errors))
+		sb.WriteString(renderChild(ctx, comp, f.state, f.errors))
 	}
 
 	sb.WriteString(`</form>`)

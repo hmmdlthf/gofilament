@@ -23,6 +23,7 @@ type BaseField struct {
 	liveDebounce     int // in ms
 	afterUpdated     func(state any, form *Form)
 	visibleFunc      func(get Get) bool
+	visibleWhen      *Condition
 	dehydrateFunc    func(state any) bool
 }
 
