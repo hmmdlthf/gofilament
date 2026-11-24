@@ -80,6 +80,8 @@ type Panel struct {
 	renderHooks         map[string][]func(ctx *Context) string
 	darkMode            bool
 	sidebarCollapsible  bool
+	sidebarModes        []SidebarMode
+	sidebarDefault      SidebarMode
 	topNavigation       bool
 	maxContentWidth     ContentWidth
 	navigationGroups    []string
@@ -520,7 +522,8 @@ func (p *Panel) IsDarkMode() bool {
 	return p.darkMode
 }
 
-// SidebarCollapsibleOnDesktop configures if desktop sidebar can collapse to mini icon mode.
+// SidebarCollapsibleOnDesktop configures if the desktop sidebar can collapse
+// (to an icon rail or fully; see SidebarCollapseModes). On by default.
 func (p *Panel) SidebarCollapsibleOnDesktop(enabled ...bool) *Panel {
 	if len(enabled) > 0 {
 		p.sidebarCollapsible = enabled[0]

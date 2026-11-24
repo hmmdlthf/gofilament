@@ -46,6 +46,10 @@ class ListPage {
   /// Aggregates over all matching records (resource SummariesUsing):
   /// `{column: {sum: 1.5, count: 3}}`.
   Map<String, Map<String, double>> summaries = const {};
+
+  /// Live counts of the refined filters' values, ignoring each column's own
+  /// filter: `{column: {value: count}}`.
+  Map<String, Map<String, int>> facets = const {};
   final int page;
   final int perPage;
 }
@@ -374,7 +378,9 @@ class AdminApi {
     )
       ..rowMeta = meta.map((k, v) => MapEntry(k, _map(v)))
       ..summaries = _map(data['summaries']).map((col, v) => MapEntry(col,
-          _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toDouble() : 0.0))));
+          _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toDouble() : 0.0))))
+      ..facets = _map(data['facets']).map((col, v) => MapEntry(col,
+          _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toInt() : 0))));
   }
 
   /// One record, as the resource's Go type serializes it.

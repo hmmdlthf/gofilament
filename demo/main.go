@@ -40,6 +40,7 @@ func newPanel(id, path string) *filament.Panel {
 		Colors(map[string]any{colors.RolePrimary: colors.Emerald, colors.RoleGray: colors.Zinc}).
 		DarkMode(true).
 		SidebarCollapsibleOnDesktop().
+		SidebarCollapseModes(filament.SidebarIcons, filament.SidebarHidden).
 		GlobalSearch().
 		NavigationGroups([]string{"Sales", "Catalog", "System"}).
 		Login().

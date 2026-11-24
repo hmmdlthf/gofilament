@@ -305,6 +305,15 @@ const Map<String, dynamic> panelSchema = <String, dynamic>{
   ],
   'saved_views': false,
   'session_duration': 86400,
+  'sidebar': <String, dynamic>{
+    'collapsible': true,
+    'default': 'expanded',
+    'modes': <dynamic>[
+      'expanded',
+      'icons',
+      'hidden',
+    ],
+  },
   'snapshot': true,
   'support': <String, dynamic>{
     'enabled': false,

@@ -95,6 +95,7 @@ type CellUpdateHandlerFunc func(ctx *Context, id, column string, value any) erro
 // BaseResource implements ResourceInterface with generic Ent/model type T.
 type BaseResource[T any] struct {
 	summariesUsing            func(ctx *Context, search string, filters map[string]string) (tables.Summaries, error)
+	facetCounts               FacetCountsFunc
 	versionOf                 func(record T) string
 	slug                      string
 	modelName                 string

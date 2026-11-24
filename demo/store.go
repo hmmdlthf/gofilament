@@ -238,7 +238,15 @@ func matchFilters(m map[string]any, filters map[string]string) bool {
 			}
 			continue
 		}
-		if !strings.EqualFold(got, want) {
+		// refined filters send several accepted values: "paid,shipped"
+		match := false
+		for _, w := range strings.Split(want, ",") {
+			if strings.EqualFold(got, strings.TrimSpace(w)) {
+				match = true
+				break
+			}
+		}
+		if !match {
 			return false
 		}
 	}

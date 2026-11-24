@@ -490,6 +490,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"session_duration":      int(p.GetSessionDuration().Seconds()),
 			"remember_me_duration":  int(p.GetRememberMeDuration().Seconds()),
 			"tabs_enabled":          p.IsTabsEnabled(),
+			"sidebar":               p.sidebarDTO(),
 			"default_list_mode":                  string(p.GetDefaultListMode()),
 			"default_per_page":                   p.GetDefaultPerPage(),
 			"default_per_page_options":           p.GetDefaultPerPageOptions(),
@@ -1321,6 +1322,13 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			}); ok {
 				if totals := lt.ListTotals(ctx, search, filters); totals != nil {
 					out["summaries"] = totals
+				}
+			}
+			if lf, ok := res.(interface {
+				ListFacets(ctx *Context, search string, filters map[string]string) map[string]map[string]int
+			}); ok {
+				if facets := lf.ListFacets(ctx, search, filters); facets != nil {
+					out["facets"] = facets
 				}
 			}
 			if rm, ok := res.(interface {

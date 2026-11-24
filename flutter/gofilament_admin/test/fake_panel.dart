@@ -83,6 +83,12 @@ class FakePanel {
   List<Map<String, dynamic>> extraWidgets = [];
   List<Map<String, dynamic>> extraFilters = [];
 
+  /// Live refined-filter counts returned with each list response.
+  Map<String, Map<String, int>>? listFacets;
+
+  /// The schema's desktop sidebar settings (null: none sent).
+  Map<String, dynamic>? sidebar;
+
   /// Sent as the list's "summaries" (totals over all results).
   Map<String, dynamic>? listSummaries;
 
@@ -522,6 +528,7 @@ class FakePanel {
         : rows.sublist(start, (start + perPage).clamp(0, rows.length));
     return {
       if (listSummaries != null) 'summaries': listSummaries,
+      if (listFacets != null) 'facets': listFacets,
       'row_meta': {
         for (final r in page0)
           '${r['id']}': {
@@ -666,6 +673,7 @@ class FakePanel {
   Map<String, dynamic> _schema() => {
         'path': '/app',
         'global_search': {'enabled': globalSearch},
+        if (sidebar != null) 'sidebar': sidebar,
         if (tenants.isNotEmpty) 'tenancy': true,
         if (tenants.isNotEmpty) 'tenant': activeTenant,
         'manage_roles': manageRoles,

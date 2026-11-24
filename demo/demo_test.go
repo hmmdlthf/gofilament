@@ -219,3 +219,34 @@ func TestClientIPUsesProxyHop(t *testing.T) {
 		t.Fatalf("client ip: %s", ip)
 	}
 }
+
+func TestRefinedFiltersAndFacets(t *testing.T) {
+	h := testApp(t)
+	admin := login(t, h, "admin@example.com")
+	rec := call(t, h, "GET", "/admin/api/resources/orders?filter_status=paid,shipped&per_page=5", admin, "")
+	var out struct {
+		Total  int                       `json:"total"`
+		Data   []map[string]any          `json:"data"`
+		Facets map[string]map[string]int `json:"facets"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	for _, o := range out.Data {
+		if s := o["status"]; s != "paid" && s != "shipped" {
+			t.Fatalf("status filter let %v through", s)
+		}
+	}
+	st := out.Facets["status"]
+	if st["paid"]+st["shipped"] != out.Total || st["delivered"] == 0 {
+		t.Fatalf("status facets %v for total %d", st, out.Total)
+	}
+	if len(out.Facets["channel"]) == 0 {
+		t.Fatalf("no channel facets: %v", out.Facets)
+	}
+	rec = call(t, h, "GET", "/admin/api/resources/products", admin, "")
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if out.Facets["brand"]["Sonance"] == 0 {
+		t.Fatalf("brand facets from data: %v", out.Facets["brand"])
+	}
+}

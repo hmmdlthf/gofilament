@@ -41,10 +41,53 @@ class _AdminShellState extends State<AdminShell> {
   /// ("new" opens the create form).
   String? _pendingRecord;
 
+  /// The user's desktop sidebar choice ('expanded', 'icons' or 'hidden'),
+  /// remembered per device; null until chosen.
+  String? _sidebarChoice;
+  static const _sidebarPref = 'sidebar_mode';
+  static const _knownModes = ['expanded', 'icons', 'hidden'];
+
   @override
   void initState() {
     super.initState();
     _restoreFromLocation();
+    _loadSidebarMode();
+  }
+
+  /// The modes the panel offers (Go: SidebarCollapseModes), expanded first.
+  List<String> get _sidebarModes {
+    final s = admin.schema['sidebar'];
+    final raw = s is Map ? s['modes'] : null;
+    final modes = [
+      'expanded',
+      if (raw is List)
+        for (final m in raw.map((e) => '$e'))
+          if (m != 'expanded' && _knownModes.contains(m)) m,
+    ];
+    return modes;
+  }
+
+  String get _sidebarMode {
+    final s = admin.schema['sidebar'];
+    final mode =
+        _sidebarChoice ?? (s is Map ? '${s['default'] ?? ''}' : 'expanded');
+    return _sidebarModes.contains(mode) ? mode : 'expanded';
+  }
+
+  Future<void> _loadSidebarMode() async {
+    try {
+      final saved = await admin.api.readPreference(_sidebarPref);
+      if (saved != null && _knownModes.contains(saved) && mounted) {
+        setState(() => _sidebarChoice = saved);
+      }
+    } catch (_) {}
+  }
+
+  void _cycleSidebar() {
+    final modes = _sidebarModes;
+    final next = modes[(modes.indexOf(_sidebarMode) + 1) % modes.length];
+    setState(() => _sidebarChoice = next);
+    admin.api.writePreference(_sidebarPref, next).catchError((_) {});
   }
 
   /// Deep links: `#/resources/<slug>[/<id>|/new]` and `#/pages/<id>`, so a
@@ -225,27 +268,33 @@ class _AdminShellState extends State<AdminShell> {
       });
     }
     final wide = MediaQuery.sizeOf(context).width >= 1000;
-    final sidebar = _Sidebar(
-      admin: admin,
-      groups: _groups(),
-      current: _current,
-      onSelect: (id) => _go(id, closeDrawer: !wide),
-    );
+    final mode = wide ? _sidebarMode : 'expanded';
+    final modes = _sidebarModes;
+    final next = modes[(modes.indexOf(mode) + 1) % modes.length];
+    _Sidebar sidebarFor({required bool compact}) => _Sidebar(
+          admin: admin,
+          groups: _groups(),
+          current: _current,
+          compact: compact,
+          onSelect: (id) => _go(id, closeDrawer: !wide),
+        );
+    final sidebar = sidebarFor(compact: false);
 
     return Scaffold(
       drawer: wide ? null : Drawer(width: 280, child: SafeArea(child: sidebar)),
       body: SafeArea(
         child: Row(
           children: [
-            if (wide)
+            if (wide && mode != 'hidden')
               Container(
-                width: 264,
+                key: Key('sidebar-$mode'),
+                width: mode == 'icons' ? 72 : 264,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
                   border: Border(
                       right: BorderSide(color: Theme.of(context).dividerColor)),
                 ),
-                child: sidebar,
+                child: mode == 'icons' ? sidebarFor(compact: true) : sidebar,
               ),
             Expanded(
               child: Column(children: [
@@ -253,6 +302,10 @@ class _AdminShellState extends State<AdminShell> {
                     admin: admin,
                     title: _title(),
                     showMenu: !wide,
+                    sidebarMode: mode,
+                    nextSidebarMode: next,
+                    onToggleSidebar:
+                        wide && modes.length > 1 ? _cycleSidebar : null,
                     onSearch: _searchEnabled ? _openSearch : null),
                 Expanded(child: _body()),
               ]),
@@ -269,16 +322,21 @@ class _Sidebar extends StatelessWidget {
       {required this.admin,
       required this.groups,
       required this.current,
-      required this.onSelect});
+      required this.onSelect,
+      this.compact = false});
 
   final AdminController admin;
   final Map<String, List<_NavEntry>> groups;
   final String current;
   final ValueChanged<String> onSelect;
 
+  /// Icon rail: icons only, labels as tooltips, groups as dividers.
+  final bool compact;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    if (compact) return _rail(context);
     final children = <Widget>[
       _item(
           context,
@@ -320,6 +378,72 @@ class _Sidebar extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: children)),
     ]);
+  }
+
+  Widget _rail(BuildContext context) {
+    final children = <Widget>[
+      _railItem(
+          context,
+          _NavEntry(
+              'dashboard', 'Dashboard', Icons.space_dashboard_outlined, '')),
+    ];
+    groups.forEach((name, items) {
+      if (name.isNotEmpty) {
+        children.add(const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Divider(height: 1)));
+      }
+      children.addAll(items.map((e) => _railItem(context, e)));
+    });
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Tooltip(
+            message: admin.brandName,
+            child: BrandMark(admin: admin, size: 34)),
+      ),
+      const Divider(),
+      Expanded(
+          child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: children)),
+    ]);
+  }
+
+  Widget _railItem(BuildContext context, _NavEntry e) {
+    final theme = Theme.of(context);
+    final palette = AdminPalette.of(context);
+    final selected = e.id == current;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: Tooltip(
+        message: e.label,
+        preferBelow: false,
+        waitDuration: const Duration(milliseconds: 250),
+        child: Material(
+          color: selected
+              ? palette.color('primary', 500).withValues(alpha: 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            key: Key('nav-${e.id}'),
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => onSelect(e.id),
+            child: SizedBox(
+              height: 44,
+              child: Center(
+                child: Icon(e.icon,
+                    size: 22,
+                    semanticLabel: e.label,
+                    color: selected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _item(BuildContext context, _NavEntry e) {
@@ -368,11 +492,19 @@ class _TopBar extends StatelessWidget {
       {required this.admin,
       required this.title,
       required this.showMenu,
+      this.sidebarMode = 'expanded',
+      this.nextSidebarMode = 'expanded',
+      this.onToggleSidebar,
       this.onSearch});
 
   final AdminController admin;
   final String title;
   final bool showMenu;
+  final String sidebarMode;
+  final String nextSidebarMode;
+
+  /// Switches the desktop sidebar to [nextSidebarMode] (null: no button).
+  final VoidCallback? onToggleSidebar;
   final VoidCallback? onSearch;
 
   @override
@@ -394,6 +526,21 @@ class _TopBar extends StatelessWidget {
             tooltip: tr('Menu'),
             icon: const Icon(Icons.menu),
             onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        if (onToggleSidebar != null)
+          IconButton(
+            key: const Key('sidebar-toggle'),
+            tooltip: switch (nextSidebarMode) {
+              'icons' => tr('Collapse to icons'),
+              'hidden' => tr('Hide sidebar'),
+              _ => tr('Expand sidebar'),
+            },
+            icon: Icon(switch (sidebarMode) {
+              'expanded' => Icons.menu_open,
+              'icons' => Icons.view_sidebar_outlined,
+              _ => Icons.menu,
+            }),
+            onPressed: onToggleSidebar,
           ),
         const SizedBox(width: 4),
         Expanded(
