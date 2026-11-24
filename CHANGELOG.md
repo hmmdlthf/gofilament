@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Demo**: refined filters on product brand and category, order status and channel, and customer country, plus the collapsible sidebar.
 
 ### Fixed
+- **Flutter: relation manager tables did not adapt to small screens**: they always drew a wide table that scrolled sideways. Below 600 px of their own width (a phone, or a narrow form dialog) they now show one card per record, like the resource list: the first column as the title, the others as labelled fields, with the edit and delete buttons.
+- **Demo invoice prints**: the layout is now built from HTML tables (header, parties, line items with the totals in `<tfoot>`), with print styles. Colours are kept, the page is A4, column headings repeat on every page, and rows don't split across pages. Amounts show thousands separators.
 - **Flutter: every menu item had the same icon when resources used `heroicon-<name>`** (or Heroicons v2 names such as `qr-code`): only `heroicon-o-<name>` was recognised. All spellings and about 60 more Heroicons v2 names now map to Material icons.
 - **Refined filter options came in random order**: they were built from a Go map.
 
