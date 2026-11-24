@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.42.0] - 2026-11-24
+
 ### Added
 - **Create a missing option from a select**: `forms.Select(...).CreateOptionFrom("categories")` (reusing that resource's form, validation, create handler and create permission), or `CreateOptionForm(...)` with `CreateOptionUsing(fn)`. The Flutter admin's picker offers **Create …** / **Create "typed text"**, opens a small form prefilled with the search text, then adds and selects the new option, keeping everything already typed in the form. The select's schema carries `create_option`, and the API adds `GET`/`POST /resources/{slug}/form/options/create?field=`. The resource create API now returns the new record's `id` when the handler reports it (`SetCreatedID` or `data["id"]`).
 - **Demo**: a Categories resource. The product form's category is a select that can create a category on the spot, for admins only (warehouse staff don't get the entry).
@@ -18,18 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Live facet counts for refined filters**: list responses now include `facets` (`{column: {value: count}}`) for every `tables.RefinedFilter`. Each column's counts apply the search and the other filters but not its own, and the Flutter filter dialog shows them. A refined filter without `Options` offers the values found in the data, and listed options are sorted by label. Counts are read through `OnList`, up to `filament.MaxFacetScan` records; for large tables, `Resource.FacetCounts(fn)` counts in the database instead.
 - **Collapsible desktop sidebar in the Flutter admin**: a top-bar button switches the sidebar between full width, an icon rail (labels as tooltips) and hidden, and each device remembers the choice. `Panel.SidebarCollapseModes(filament.SidebarIcons, filament.SidebarHidden)` picks which collapsed forms are offered (both by default), `Panel.SidebarDefaultMode(...)` sets the starting one, and `SidebarCollapsibleOnDesktop(false)` turns it off. The schema carries `sidebar: {collapsible, modes, default}`.
 - **Demo**: refined filters on product brand and category, order status and channel, and customer country, plus the collapsible sidebar.
+- **Live demo** (`demo/`, deployed to https://demo.gofilament.elridhma.com by `.github/workflows/demo.yml`): Apex Store, a shop back office in the Flutter admin app, served with its panel API from one Go binary. It has products with variant and barcode tabs, orders with an audit trail, customers, dashboard charts, admin and warehouse roles with one-click demo sign-in, and sample data that resets every hour. The website's landing page links to it, with a screenshot.
+- **Flutter: several demo accounts**: `GoFilamentAdmin(demoLogins: [...])` shows one button per account, and `DemoLogin(submit: true)` signs in with a single tap.
 
 ### Fixed
 - **Flutter: relation manager tables did not adapt to small screens**: they always drew a wide table that scrolled sideways. Below 600 px of their own width (a phone, or a narrow form dialog) they now show one card per record, like the resource list: the first column as the title, the others as labelled fields, with the edit and delete buttons.
 - **Demo invoice prints**: the layout is now built from HTML tables (header, parties, line items with the totals in `<tfoot>`), with print styles. Colours are kept, the page is A4, column headings repeat on every page, and rows don't split across pages. Amounts show thousands separators.
 - **Flutter: every menu item had the same icon when resources used `heroicon-<name>`** (or Heroicons v2 names such as `qr-code`): only `heroicon-o-<name>` was recognised. All spellings and about 60 more Heroicons v2 names now map to Material icons.
 - **Refined filter options came in random order**: they were built from a Go map.
-
-### Added
-- **Live demo** (`demo/`, deployed to https://demo.gofilament.elridhma.com by `.github/workflows/demo.yml`): Apex Store, a shop back office in the Flutter admin app, served with its panel API from one Go binary. It has products with variant and barcode tabs, orders with an audit trail, customers, dashboard charts, admin and warehouse roles with one-click demo sign-in, and sample data that resets every hour. The website's landing page links to it, with a screenshot.
-- **Flutter: several demo accounts**: `GoFilamentAdmin(demoLogins: [...])` shows one button per account, and `DemoLogin(submit: true)` signs in with a single tap.
-
-### Fixed
 - **Dashboard charts without a `WidgetID` all showed the first chart's data**: they shared an empty id, so `/widgets/{id}/data` answered every chart with the same widget. `Panel.Widget` now gives widgets without an id their own (`widget-1`, `widget-2`, ...).
 
 ## [v1.41.0] - 2026-11-23
