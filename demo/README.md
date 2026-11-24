@@ -10,6 +10,8 @@ One Go binary serves both the app and the panel API it reads, at `/admin`.
   filters, a trash, import/export and bulk edits (status, category, featured)
 - **Orders**, with line items, a **Ship** action, and an audit-trail History
   timeline on every record
+- **Categories**: the product form's category select can create a missing
+  category on the spot (`CreateOptionFrom("categories")`)
 - **Customers** and the **Audit log**
 - **Dashboard**: stats with trends, a revenue chart (7/30/90 days), orders by
   status, and sales by category

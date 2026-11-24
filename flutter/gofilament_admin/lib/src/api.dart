@@ -404,6 +404,27 @@ class AdminApi {
     );
   }
 
+  /// The form that creates a missing option of select [field]
+  /// (`create_option` in the field's schema).
+  Future<FormPayload> createOptionForm(String slug, String field) async =>
+      _formPayload(
+          _map(await _get(
+              '/resources/$slug/form/options/create', {'field': field})),
+          false);
+
+  /// Creates an option of select [field] from the create form's [data] and
+  /// returns it, so it can be selected.
+  Future<FieldOption> createOption(
+      String slug, String field, Map<String, dynamic> data) async {
+    final out = _map(await _send(
+        'POST',
+        '/resources/$slug/form/options/create'
+            '?field=${Uri.encodeQueryComponent(field)}',
+        data));
+    final o = _map(out['option']);
+    return FieldOption('${o['value']}', '${o['label'] ?? o['value']}');
+  }
+
   Future<List<FieldOption>> options(String slug, String field, String query,
       {int limit = 25}) async {
     final data = _map(await _get('/resources/$slug/form/options',

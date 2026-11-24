@@ -661,6 +661,30 @@ forms.Select("discount_type").
     })
 ```
 
+### Creating a Missing Option from a Select
+
+Users filling in a form can add an option that doesn't exist yet (a new category, a new supplier) from the select itself, without leaving the form. In the Flutter admin the field's picker shows **Create …**, or **Create "typed text"** after a search. A small form opens with the typed text filled in, and when it's saved the new option is added and selected.
+
+```go
+// Reuse another resource: its form, validation, create handler and create
+// permission. Users who may not create categories don't see the entry.
+forms.Select("category_id").Label("Category").
+    OptionsUsing(categoryOptions).
+    CreateOptionFrom("categories")
+
+// Or a custom form and handler.
+forms.Select("tag").OptionsUsing(tagOptions).
+    CreateOptionForm(forms.TextInput("name").Required()).
+    CreateOptionUsing(func(ctx context.Context, data map[string]any) (forms.Option, error) {
+        id, err := tags.Create(ctx, data["name"].(string))
+        return forms.Option{Value: id, Label: data["name"].(string)}, err
+    })
+```
+
+With `CreateOptionFrom`, the target resource's `OnCreate` must report the new id, by calling `filament.SetCreatedID(ctx, id)` or setting `data["id"]`; it becomes the selected value. Its label comes from the field's options, so use `OptionsUsing` or `SearchUsing` (live options) rather than a fixed `Options` map. `CreateOptionLabel("Add supplier")` changes the entry's text (default: "Create <label>").
+
+The API behind it is `GET` and `POST /api/resources/{slug}/form/options/create?field=<name>`. POST answers `201 {"option": {"value", "label"}}`. The resource create API (`POST /api/resources/{slug}`) now also returns the new record's `id` when the handler reports it.
+
 ---
 
 ## 7. Table Builder Engine (`pkg/tables`)
