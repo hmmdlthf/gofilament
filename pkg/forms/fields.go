@@ -388,6 +388,8 @@ type SelectField struct {
 	optionsFunc OptionsFunc
 	searchFunc  OptionSearchFunc
 	labelFunc   OptionLabelFunc
+
+	createOpt *createOption // CreateOptionFrom / CreateOptionForm
 }
 
 func Select(name string) *SelectField {

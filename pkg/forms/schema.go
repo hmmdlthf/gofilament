@@ -66,6 +66,9 @@ type Node struct {
 	// DynamicOptions is true when Options were resolved for this request
 	// (OptionsUsing) rather than declared, so they may change between requests.
 	DynamicOptions bool `json:"dynamic_options,omitempty"`
+	// CreateOption is set when users may create a missing option from the
+	// field (SelectField.CreateOptionFrom / CreateOptionForm).
+	CreateOption *CreateOption `json:"create_option,omitempty"`
 
 	// Component / Props: a field drawn by a Flutter field component (Custom).
 	Component string `json:"component,omitempty"`
@@ -164,6 +167,7 @@ func describe(ctx context.Context, c Component) (Node, bool) {
 			n.Options = f.ResolveOptions(ctx)
 			n.DynamicOptions = f.optionsFunc != nil
 		}
+		n.CreateOption = f.describeCreateOption()
 		return n, true
 	case *ToggleField:
 		return baseNode(&f.BaseField, "toggle"), true

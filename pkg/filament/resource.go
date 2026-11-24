@@ -2266,7 +2266,17 @@ func (r *BaseResource[T]) InvokeCreate(ctx *Context, data map[string]any) error 
 	if err != nil {
 		return err
 	}
-	return r.onCreate(ctx, data)
+	if err := r.onCreate(ctx, data); err != nil {
+		return err
+	}
+	// Handlers report the new id with SetCreatedID or by putting "id" in
+	// data; keep it on the context for the response and the audit log.
+	if CreatedID(ctx) == "" {
+		if id, ok := data["id"]; ok && id != nil && fmt.Sprint(id) != "" {
+			SetCreatedID(ctx, fmt.Sprint(id))
+		}
+	}
+	return nil
 }
 
 func (r *BaseResource[T]) InvokeUpdate(ctx *Context, id string, data map[string]any) error {
