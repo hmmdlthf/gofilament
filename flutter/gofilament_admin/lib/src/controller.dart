@@ -90,6 +90,10 @@ class AdminController extends ChangeNotifier {
   AdminPalette palette = const AdminPalette({});
   ThemeMode themeMode = ThemeMode.system;
 
+  /// The user's desktop sidebar choice ('expanded', 'icons' or 'hidden'),
+  /// remembered on this device; null until chosen (the panel's default).
+  String? sidebarChoice;
+
   // ------------------------------------------------------------ derived
 
   Map<String, dynamic> get brand {
@@ -162,6 +166,8 @@ class AdminController extends ChangeNotifier {
       final saved = await api.readPreference('theme');
       if (saved == 'dark') themeMode = ThemeMode.dark;
       if (saved == 'light') themeMode = ThemeMode.light;
+      final savedSidebar = await api.readPreference('sidebar_mode');
+      if (sidebarModes.contains(savedSidebar)) sidebarChoice = savedSidebar;
       final savedTenant = await api.readPreference('tenant');
       if (savedTenant != null && savedTenant.isNotEmpty) {
         api.tenant = savedTenant;
@@ -334,10 +340,55 @@ class AdminController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleTheme(Brightness current) {
-    themeMode = current == Brightness.dark ? ThemeMode.light : ThemeMode.dark;
-    api.writePreference(
-        'theme', themeMode == ThemeMode.dark ? 'dark' : 'light');
+  void toggleTheme(Brightness current) => setThemeMode(
+      current == Brightness.dark ? ThemeMode.light : ThemeMode.dark);
+
+  /// Light, dark or the device's setting (remembered on this device).
+  void setThemeMode(ThemeMode mode) {
+    themeMode = mode;
+    api.writePreference('theme', switch (mode) {
+      ThemeMode.dark => 'dark',
+      ThemeMode.light => 'light',
+      ThemeMode.system => 'system',
+    });
+    notifyListeners();
+  }
+
+  /// Whether the panel fixes light or dark mode (brand theme_mode), so
+  /// users cannot switch.
+  bool get themeLocked =>
+      brand['theme_mode'] == 'dark' || brand['theme_mode'] == 'light';
+
+  /// Every desktop sidebar mode there is.
+  static const sidebarModes = ['expanded', 'icons', 'hidden'];
+
+  /// The sidebar modes the panel offers (Go: SidebarCollapseModes),
+  /// expanded first.
+  List<String> get sidebarOptions {
+    final s = schema['sidebar'];
+    final raw = s is Map ? s['modes'] : null;
+    return [
+      'expanded',
+      if (raw is List)
+        for (final m in raw.map((e) => '$e'))
+          if (m != 'expanded' && sidebarModes.contains(m)) m,
+    ];
+  }
+
+  /// The desktop sidebar mode in use: the user's choice, else the panel's
+  /// default.
+  String get sidebarMode {
+    final s = schema['sidebar'];
+    final mode =
+        sidebarChoice ?? (s is Map ? '${s['default'] ?? ''}' : 'expanded');
+    return sidebarOptions.contains(mode) ? mode : 'expanded';
+  }
+
+  /// Switches the desktop sidebar (remembered on this device).
+  void setSidebarMode(String mode) {
+    if (!sidebarModes.contains(mode)) return;
+    sidebarChoice = mode;
+    api.writePreference('sidebar_mode', mode).catchError((_) {});
     notifyListeners();
   }
 }

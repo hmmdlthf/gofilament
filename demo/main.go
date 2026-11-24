@@ -37,11 +37,18 @@ func newPanel(id, path string) *filament.Panel {
 	p := filament.NewPanel(id).
 		Path(path).
 		BrandName(brand).
+		BrandLogo(path+"/icons/Icon-192.png"). // demo/client/web/icons
+		Favicon(path+"/favicon.png").
 		Colors(map[string]any{colors.RolePrimary: colors.Emerald, colors.RoleGray: colors.Zinc}).
 		DarkMode(true).
 		SidebarCollapsibleOnDesktop().
 		SidebarCollapseModes(filament.SidebarIcons, filament.SidebarHidden).
 		GlobalSearch().
+		// The app's own words come in these languages (Settings → Language);
+		// Arabic switches the layout to right-to-left.
+		Locales("en", "ar", "de", "es", "fr").
+		DefaultLocale("en").
+		LocaleLabels(map[string]string{"en": "English", "ar": "العربية", "de": "Deutsch", "es": "Español", "fr": "Français"}).
 		NavigationGroups([]string{"Sales", "Catalog", "System"}).
 		Login().
 		AuthValidator(validateLogin).
@@ -60,7 +67,7 @@ func newPanel(id, path string) *filament.Panel {
 	p.Resource(activitylog.EnableAuditLog(orderResource()))
 	p.Resource(activitylog.EnableAuditLog(customerResource()))
 	p.Resource(activitylog.EnableAuditLog(productResource()))
-	p.Resource(activitylog.NewActivityResource().NavigationGroup("System"))
+	p.Resource(activitylog.NewActivityResource().NavigationGroup("System").NavigationIcon("heroicon-history"))
 	return p
 }
 
@@ -80,6 +87,7 @@ func buildApp() (http.Handler, error) {
 
 	app.GET("/", func(c *gcontext.Context) error { return c.HTML(http.StatusOK, homePage(flutterBuilt)) })
 	app.GET("/healthz", func(c *gcontext.Context) error { return c.String(http.StatusOK, "ok") })
+	app.GET("/invoices/:id", invoiceHandler)
 	// The Flutter app's banner reads the countdown to the next reset.
 	app.GET("/demo/status", func(c *gcontext.Context) error {
 		return c.JSON(http.StatusOK, map[string]any{

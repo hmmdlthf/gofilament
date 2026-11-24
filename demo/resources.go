@@ -422,6 +422,8 @@ func orderResource() *filament.BaseResource[*Order] {
 			HeaderActions(tables.ExportAction[*Order]()).
 			Actions(
 				tables.ViewAction[*Order](),
+				tables.Action[*Order]("invoice").Label("Invoice").Icon("heroicon-printer").Color("gray").
+					URL(func(o *Order) string { return invoiceURL(o.ID, time.Now().Add(invoiceLinkTTL)) }),
 				tables.Action[*Order]("ship").Label("Ship").Icon("heroicon-truck").Color("success").RequiresConfirmation().
 					Visible(func(o *Order) bool { return o.Status == "paid" }).
 					Action(func(o *Order) error { shipOrders([]string{o.ID}, "Ship action"); return nil }),

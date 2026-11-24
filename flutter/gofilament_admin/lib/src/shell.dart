@@ -10,6 +10,7 @@ import 'icons.dart';
 import 'login.dart';
 import 'notifications.dart';
 import 'roles_screen.dart';
+import 'settings.dart';
 import 'tenant_switcher.dart';
 import 'resource_list.dart';
 import 'theme.dart';
@@ -41,54 +42,18 @@ class _AdminShellState extends State<AdminShell> {
   /// ("new" opens the create form).
   String? _pendingRecord;
 
-  /// The user's desktop sidebar choice ('expanded', 'icons' or 'hidden'),
-  /// remembered per device; null until chosen.
-  String? _sidebarChoice;
-  static const _sidebarPref = 'sidebar_mode';
-  static const _knownModes = ['expanded', 'icons', 'hidden'];
-
   @override
   void initState() {
     super.initState();
     _restoreFromLocation();
-    _loadSidebarMode();
-  }
-
-  /// The modes the panel offers (Go: SidebarCollapseModes), expanded first.
-  List<String> get _sidebarModes {
-    final s = admin.schema['sidebar'];
-    final raw = s is Map ? s['modes'] : null;
-    final modes = [
-      'expanded',
-      if (raw is List)
-        for (final m in raw.map((e) => '$e'))
-          if (m != 'expanded' && _knownModes.contains(m)) m,
-    ];
-    return modes;
-  }
-
-  String get _sidebarMode {
-    final s = admin.schema['sidebar'];
-    final mode =
-        _sidebarChoice ?? (s is Map ? '${s['default'] ?? ''}' : 'expanded');
-    return _sidebarModes.contains(mode) ? mode : 'expanded';
-  }
-
-  Future<void> _loadSidebarMode() async {
-    try {
-      final saved = await admin.api.readPreference(_sidebarPref);
-      if (saved != null && _knownModes.contains(saved) && mounted) {
-        setState(() => _sidebarChoice = saved);
-      }
-    } catch (_) {}
   }
 
   void _cycleSidebar() {
-    final modes = _sidebarModes;
-    final next = modes[(modes.indexOf(_sidebarMode) + 1) % modes.length];
-    setState(() => _sidebarChoice = next);
-    admin.api.writePreference(_sidebarPref, next).catchError((_) {});
+    final modes = admin.sidebarOptions;
+    admin.setSidebarMode(
+        modes[(modes.indexOf(admin.sidebarMode) + 1) % modes.length]);
   }
+
 
   /// Deep links: `#/resources/<slug>[/<id>|/new]` and `#/pages/<id>`, so a
   /// refresh or a shared link lands on the same screen.
@@ -268,8 +233,8 @@ class _AdminShellState extends State<AdminShell> {
       });
     }
     final wide = MediaQuery.sizeOf(context).width >= 1000;
-    final mode = wide ? _sidebarMode : 'expanded';
-    final modes = _sidebarModes;
+    final mode = wide ? admin.sidebarMode : 'expanded';
+    final modes = admin.sidebarOptions;
     final next = modes[(modes.indexOf(mode) + 1) % modes.length];
     _Sidebar sidebarFor({required bool compact}) => _Sidebar(
           admin: admin,
@@ -587,6 +552,10 @@ class _TopBar extends StatelessWidget {
               Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (_) => AccountScreen(admin: admin)));
             }
+            if (v == 'settings') {
+              Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (_) => SettingsScreen(admin: admin)));
+            }
           },
           itemBuilder: (_) => [
             PopupMenuItem<String>(
@@ -624,6 +593,15 @@ class _TopBar extends StatelessWidget {
                   Text(tr('Your account'))
                 ]),
               ),
+            PopupMenuItem<String>(
+              key: Key('account-menu-settings'),
+              value: 'settings',
+              child: Row(children: [
+                Icon(Icons.settings_outlined, size: 18),
+                SizedBox(width: 10),
+                Text(tr('Settings'))
+              ]),
+            ),
             for (final l in admin.languages.entries)
               CheckedPopupMenuItem<String>(
                 key: Key('language-${l.key}'),

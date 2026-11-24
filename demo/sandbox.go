@@ -102,6 +102,7 @@ func homePage(built bool) string {
 	}
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>` + brand + ` · GoFilament live demo</title><meta name="robots" content="noindex">
+<link rel="icon" href="/admin/favicon.png">
 <style>
 :root{color-scheme:light dark;--bg:#f7f8fa;--card:#fff;--text:#111827;--muted:#4b5563;--line:#e5e7eb;--accent:#059669}
 @media (prefers-color-scheme:dark){:root{--bg:#0b0f17;--card:#141a26;--text:#e8ebf2;--muted:#9aa3b5;--line:#232a38;--accent:#34d399}}
