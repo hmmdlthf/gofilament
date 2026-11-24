@@ -83,6 +83,12 @@ class FakePanel {
   List<Map<String, dynamic>> extraWidgets = [];
   List<Map<String, dynamic>> extraFilters = [];
 
+  /// When true, the items form's Category select can create categories.
+  bool creatableCategory = false;
+
+  /// Categories created through the select's create form (name).
+  final List<String> createdCategories = [];
+
   /// Live refined-filter counts returned with each list response.
   Map<String, Map<String, int>>? listFacets;
 
@@ -315,6 +321,36 @@ class FakePanel {
     }
     if (path == '/resources/items/form') {
       return _form(req.url.queryParameters['id']);
+    }
+    if (path == '/resources/items/form/options/create') {
+      if (req.method == 'GET') {
+        return _json({
+          'mode': 'create',
+          'schema': [
+            {
+              'kind': 'field',
+              'type': 'text',
+              'name': 'name',
+              'label': 'Name',
+              'required': true
+            }
+          ],
+          'state': {},
+          'abilities': {'create': true},
+        });
+      }
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      final name = '${body['name'] ?? ''}'.trim();
+      if (name.isEmpty) {
+        return _json({
+          'error': 'Validation failed',
+          'errors': {'name': 'The Name field is required.'}
+        }, 422);
+      }
+      createdCategories.add(name);
+      return _json({
+        'option': {'value': '${100 + createdCategories.length}', 'label': name}
+      }, 201);
     }
     if (path == '/resources/items/form/options') {
       final q = (req.url.queryParameters['q'] ?? '').toLowerCase();
@@ -597,6 +633,11 @@ class FakePanel {
                   {'value': '1', 'label': 'Necklaces'},
                   {'value': '2', 'label': 'Jewellery'}
                 ],
+                if (creatableCategory)
+                  'create_option': {
+                    'label': 'Create category',
+                    'resource': 'categories'
+                  },
               },
               {
                 'kind': 'field',

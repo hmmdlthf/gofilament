@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/golaravel/gofilament/pkg/activitylog"
@@ -21,13 +22,6 @@ var (
 	payments      = map[string]string{"card": "Card", "paypal": "PayPal", "bank": "Bank transfer"}
 	channels      = map[string]string{"web": "Web store", "mobile": "Mobile app", "pos": "In store"}
 	barcodeKinds  = map[string]string{"ean13": "EAN-13", "upca": "UPC-A", "qr": "QR code"}
-	categories    = func() map[string]string {
-		m := map[string]string{}
-		for _, c := range catalog {
-			m[c.category] = c.category
-		}
-		return m
-	}()
 )
 
 func trashed(m map[string]any) bool { return m["deleted_at"] != nil }
@@ -80,8 +74,8 @@ func productResource() *filament.BaseResource[*Product] {
 			).
 			Filters(
 				tables.SelectFilter("status").Label("Status").Options(productStatus),
-				tables.RefinedFilter("category").Label("Category").Options(categories),
-				tables.RefinedFilter("brand").Label("Brand"), // options come from the data
+				tables.RefinedFilter("category").Label("Category"), // options from the data
+				tables.RefinedFilter("brand").Label("Brand"),       // options come from the data
 				tables.TernaryFilter("featured").Label("Featured").TrueLabel("Featured only").FalseLabel("Not featured"),
 				tables.TrashedFilter(),
 			).
@@ -98,7 +92,9 @@ func productResource() *filament.BaseResource[*Product] {
 					forms.TextInput("name").Label("Name").Required(),
 					forms.TextInput("sku").Label("SKU").Required(),
 					forms.TextInput("brand").Label("Brand"),
-					forms.Select("category").Label("Category").Options(categories).Required(),
+					// Missing a category? Create it from here (the Categories form).
+					forms.Select("category").Label("Category").OptionsUsing(categoryOptions).
+						CreateOptionFrom("categories").Required(),
 				),
 				forms.Textarea("summary").Label("Summary"),
 			),
@@ -631,6 +627,116 @@ func customerResource() *filament.BaseResource[*Customer] {
 		if c, err := customers.get(id); err == nil {
 			c.DeletedAt = nil
 		}
+		return nil
+	})
+	return res
+}
+
+// ---------------------------------------------------------------- categories
+
+func categoryOptions(context.Context) []forms.Option {
+	mu.RLock()
+	defer mu.RUnlock()
+	rows, _ := list(cats.all(), listQuery{sortCol: "name", perPage: maxRows})
+	out := make([]forms.Option, 0, len(rows))
+	for _, c := range rows {
+		out = append(out, forms.Option{Value: c.ID, Label: c.Name})
+	}
+	return out
+}
+
+// countProducts fills each category's product count. Callers hold mu.
+func countProducts() {
+	n := map[string]int{}
+	for _, p := range products.rows {
+		if p.DeletedAt == nil {
+			n[p.Category]++
+		}
+	}
+	for _, c := range cats.rows {
+		c.Products = n[c.ID]
+	}
+}
+
+func categoryResource() *filament.BaseResource[*Category] {
+	res := filament.NewResource[*Category]("categories").
+		ModelName("Category").
+		PluralModelName("Categories").
+		NavigationGroup("Catalog").
+		NavigationIcon("heroicon-tag").
+		NavigationSort(2).
+		RecordID(func(c *Category) string { return c.ID })
+
+	res.Table(func(t *tables.Table[*Category]) *tables.Table[*Category] {
+		return t.Columns(
+			tables.TextColumn[*Category]("name").Label("Name").Weight("bold").Searchable().Sortable(),
+			tables.TextColumn[*Category]("description").Label("Description").Limit(60),
+			tables.TextColumn[*Category]("products").Label("Products").Sortable(),
+			tables.TextColumn[*Category]("created_at").Label("Created").DateTime("Jan 2, 2006").Sortable(),
+		).
+			Actions(tables.EditAction[*Category](), tables.DeleteAction[*Category]())
+	})
+	res.Form(func(f *forms.Form) *forms.Form {
+		return f.Schema(
+			forms.TextInput("name").Label("Name").Required(),
+			forms.Textarea("description").Label("Description"),
+		)
+	})
+	res.OnList(func(ctx *filament.Context, search, sortCol, sortDir string, page, perPage int, filters map[string]string) ([]*Category, int, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		countProducts()
+		if sortCol == "" {
+			sortCol, sortDir = "name", "asc"
+		}
+		rows, total := list(cats.all(), listQuery{search: search, fields: []string{"name", "description"},
+			sortCol: sortCol, sortDir: sortDir, page: page, perPage: perPage, filters: filters})
+		return rows, total, nil
+	})
+	res.OnFind(func(ctx *filament.Context, id string) (*Category, error) {
+		mu.RLock()
+		defer mu.RUnlock()
+		return cats.get(id)
+	})
+	res.OnCreate(func(ctx *filament.Context, data map[string]any) error {
+		name := strings.TrimSpace(fmt.Sprint(data["name"]))
+		mu.Lock()
+		defer mu.Unlock()
+		if len(cats.rows) >= 200 {
+			return errDemoLimit
+		}
+		for _, c := range cats.rows {
+			if strings.EqualFold(c.Name, name) {
+				return fmt.Errorf("a category named %q already exists", c.Name)
+			}
+		}
+		c := &Category{ID: name, Name: name, Description: strings.TrimSpace(fmt.Sprint(data["description"])), CreatedAt: time.Now()}
+		if c.Description == "<nil>" {
+			c.Description = ""
+		}
+		cats.rows[c.ID] = c
+		filament.SetCreatedID(ctx, c.ID)
+		return nil
+	})
+	res.OnUpdate(func(ctx *filament.Context, id string, data map[string]any) error {
+		mu.Lock()
+		defer mu.Unlock()
+		c, err := cats.get(id)
+		if err != nil {
+			return err
+		}
+		// The name is the products' key, so only the description changes.
+		return apply(c, map[string]any{"description": data["description"]})
+	})
+	res.OnDelete(func(ctx *filament.Context, id string) error {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, p := range products.rows {
+			if p.Category == id && p.DeletedAt == nil {
+				return fmt.Errorf("move the products in %q to another category first", id)
+			}
+		}
+		delete(cats.rows, id)
 		return nil
 	})
 	return res

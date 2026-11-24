@@ -52,6 +52,38 @@ Future<bool?> showResourceForm(
   );
 }
 
+/// Opens the form that creates a missing option of select [field] on
+/// resource [slug] (the field's `create_option`). [prefill] goes into the
+/// form's first text field, e.g. what the user typed in the picker. Returns
+/// the new option, or null when cancelled.
+Future<FieldOption?> showCreateOptionForm(
+  BuildContext context, {
+  required AdminController admin,
+  required String slug,
+  required String field,
+  String? title,
+  String? prefill,
+}) async {
+  final form = ResourceForm(
+      admin: admin,
+      slug: slug,
+      createOptionField: field,
+      title: title,
+      prefill: prefill);
+  final result = await showDialog<Object?>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 640),
+          child: form),
+    ),
+  );
+  return result is FieldOption ? result : null;
+}
+
 /// A form rendered from the server's description of the resource form.
 class ResourceForm extends StatefulWidget {
   const ResourceForm(
@@ -63,7 +95,9 @@ class ResourceForm extends StatefulWidget {
       this.relation,
       this.parentId,
       this.title,
-      this.action});
+      this.action,
+      this.createOptionField,
+      this.prefill});
 
   final AdminController admin;
   final String slug;
@@ -83,6 +117,14 @@ class ResourceForm extends StatefulWidget {
   /// When set, the form collects the input of this row action (its metadata
   /// from the schema) and runs it on record [id] instead of saving.
   final Map<String, dynamic>? action;
+
+  /// When set, the form creates a missing option of this select field of
+  /// the resource (see [showCreateOptionForm]) and closes with the new
+  /// [FieldOption].
+  final String? createOptionField;
+
+  /// Text for the first text field of a new record (create option).
+  final String? prefill;
 
   @override
   State<ResourceForm> createState() => _ResourceFormState();
@@ -108,6 +150,7 @@ class _ResourceFormState extends State<ResourceForm> {
   bool get _isEdit => widget.id != null;
   bool get _isRelation => widget.relation != null && widget.parentId != null;
   bool get _isAction => widget.action != null;
+  bool get _isCreateOption => widget.createOptionField != null;
 
   Future<List<FieldOption>> _searchOptions(String field, String query) =>
       _isRelation
@@ -151,7 +194,9 @@ class _ResourceFormState extends State<ResourceForm> {
   Future<void> _load() async {
     try {
       final api = widget.admin.api;
-      final payload = _isAction
+      final payload = _isCreateOption
+          ? await api.createOptionForm(widget.slug, widget.createOptionField!)
+          : _isAction
           ? await api.actionForm(
               widget.slug, widget.id!, '${widget.action!['name']}')
           : _isRelation
@@ -197,6 +242,13 @@ class _ResourceFormState extends State<ResourceForm> {
         }
       }
       _labels.addAll(payload.optionLabels);
+      final prefill = widget.prefill?.trim() ?? '';
+      if (prefill.isNotEmpty) {
+        final first = _fields.where((f) => '${f['type']}' == 'text');
+        if (first.isNotEmpty) {
+          _text['${first.first['name']}']?.text = prefill;
+        }
+      }
       _version = payload.version;
       if (mounted) setState(() => _payload = payload);
     } on ApiException catch (e) {
@@ -266,6 +318,12 @@ class _ResourceFormState extends State<ResourceForm> {
     });
     try {
       final data = _collect();
+      if (_isCreateOption) {
+        final option = await widget.admin.api
+            .createOption(widget.slug, widget.createOptionField!, data);
+        if (mounted) Navigator.of(context).pop(option);
+        return;
+      }
       if (_isAction) {
         await widget.admin.api.runAction(
             widget.slug, widget.id!, '${widget.action!['name']}', data);
@@ -320,7 +378,9 @@ class _ResourceFormState extends State<ResourceForm> {
     final theme = Theme.of(context);
     final model = widget.title ??
         '${widget.admin.resource(widget.slug)?['model_name'] ?? ''}';
-    final title = _isAction
+    final title = _isCreateOption
+        ? (widget.title ?? tr('Create'))
+        : _isAction
         ? '${widget.action!['modal_heading'] ?? widget.action!['label'] ?? ''}'
         : (widget.readOnly
             ? model
@@ -736,9 +796,35 @@ class _ResourceFormState extends State<ResourceForm> {
 
       case 'select':
       case 'radio':
+        final create = f['create_option'];
         return _SelectInput(
           key: Key('field-$name'),
           search: (q) => _searchOptions(name, q),
+          createLabel: create is Map ? '${create['label'] ?? ''}' : null,
+          onCreate: create is Map &&
+                  type == 'select' &&
+                  enabled &&
+                  !_isRelation &&
+                  !_isAction &&
+                  !_isCreateOption
+              ? (prefill) async {
+                  final option = await showCreateOptionForm(context,
+                      admin: widget.admin,
+                      slug: widget.slug,
+                      field: name,
+                      title: '${create['label'] ?? ''}',
+                      prefill: prefill);
+                  if (option != null) {
+                    // keep it in the field's list for later picks
+                    final list = f['options'];
+                    f['options'] = [
+                      if (list is List) ...list,
+                      {'value': option.value, 'label': option.label},
+                    ];
+                  }
+                  return option;
+                }
+              : null,
           field: f,
           value: _values[name] as String?,
           valueLabel: _labels[name],
@@ -850,6 +936,8 @@ class _SelectInput extends StatelessWidget {
   const _SelectInput({
     super.key,
     required this.search,
+    this.onCreate,
+    this.createLabel,
     required this.field,
     required this.value,
     required this.valueLabel,
@@ -860,6 +948,11 @@ class _SelectInput extends StatelessWidget {
   });
 
   final Future<List<FieldOption>> Function(String query) search;
+
+  /// Creates a missing option (the field's create_option), prefilled with
+  /// the picker's search text; null when options cannot be created here.
+  final Future<FieldOption?> Function(String prefill)? onCreate;
+  final String? createLabel;
   final Map<String, dynamic> field;
   final String? value;
   final String? valueLabel;
@@ -874,7 +967,10 @@ class _SelectInput extends StatelessWidget {
     final remote = field['remote'] == true;
     final required = field['required'] == true;
 
-    if (!remote && options.length <= 12 && field['searchable'] != true) {
+    if (!remote &&
+        options.length <= 12 &&
+        field['searchable'] != true &&
+        onCreate == null) {
       final known = options.any((o) => o.value == value);
       return DropdownButtonFormField<String>(
         initialValue: known ? value : null,
@@ -914,6 +1010,8 @@ class _SelectInput extends StatelessWidget {
                     options: options,
                     search: remote ? search : null,
                     allowClear: !required,
+                    onCreate: onCreate,
+                    createLabel: createLabel,
                   ),
                 );
                 if (picked == null) return;
@@ -939,12 +1037,16 @@ class _OptionPicker extends StatefulWidget {
       {required this.title,
       required this.options,
       required this.search,
-      required this.allowClear});
+      required this.allowClear,
+      this.onCreate,
+      this.createLabel});
 
   final String title;
   final List<FieldOption> options;
   final Future<List<FieldOption>> Function(String query)? search;
   final bool allowClear;
+  final Future<FieldOption?> Function(String prefill)? onCreate;
+  final String? createLabel;
 
   @override
   State<_OptionPicker> createState() => _OptionPickerState();
@@ -1020,6 +1122,28 @@ class _OptionPickerState extends State<_OptionPicker> {
           if (_loading) const LinearProgressIndicator(minHeight: 2),
           Flexible(
             child: ListView(shrinkWrap: true, children: [
+              if (widget.onCreate != null)
+                ListTile(
+                  key: const Key('option-create'),
+                  dense: true,
+                  leading: Icon(Icons.add_circle_outline,
+                      size: 20, color: theme.colorScheme.primary),
+                  title: Text(
+                      _query.text.trim().isEmpty
+                          ? ((widget.createLabel ?? '').isEmpty
+                              ? tr('Create')
+                              : widget.createLabel!)
+                          : tr('Create "{text}"', {'text': _query.text.trim()}),
+                      style: TextStyle(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600)),
+                  onTap: () async {
+                    final created = await widget.onCreate!(_query.text.trim());
+                    if (created != null && context.mounted) {
+                      Navigator.pop(context, created);
+                    }
+                  },
+                ),
               if (widget.allowClear)
                 ListTile(
                   dense: true,

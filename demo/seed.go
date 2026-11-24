@@ -25,6 +25,7 @@ func resetStore(now time.Time) {
 	mu.Lock()
 	products, variants, barcodes = newTable[*Product](), newTable[*Variant](), newTable[*Barcode]()
 	customers, orders, items = newTable[*Customer](), newTable[*Order](), newTable[*OrderItem]()
+	cats = newTable[*Category]()
 	seedCatalog(r, now)
 	seedCustomers(r, now)
 	seedOrders(r, now)
@@ -98,6 +99,12 @@ var (
 )
 
 func seedCatalog(r *rand.Rand, now time.Time) {
+	for _, c := range catalog {
+		if _, ok := cats.rows[c.category]; !ok {
+			cats.rows[c.category] = &Category{ID: c.category, Name: c.category,
+				Description: c.category + " products", CreatedAt: now.AddDate(-1, 0, 0)}
+		}
+	}
 	for i, c := range catalog {
 		id := products.nextID()
 		status := "active"

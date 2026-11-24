@@ -21,6 +21,7 @@ var (
 	customers = newTable[*Customer]()
 	orders    = newTable[*Order]()
 	items     = newTable[*OrderItem]()
+	cats      = newTable[*Category]()
 )
 
 // maxRows caps every table, so a public sandbox cannot be filled up between
@@ -45,6 +46,15 @@ type Product struct {
 	Summary   string     `json:"summary"`
 	CreatedAt time.Time  `json:"created_at"`
 	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+}
+
+// Category groups products. Its id is its name, which products store.
+type Category struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Products    int       `json:"products"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // Variant is a size/colour option of a product.

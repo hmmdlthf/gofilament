@@ -67,6 +67,7 @@ func newPanel(id, path string) *filament.Panel {
 	p.Resource(activitylog.EnableAuditLog(orderResource()))
 	p.Resource(activitylog.EnableAuditLog(customerResource()))
 	p.Resource(activitylog.EnableAuditLog(productResource()))
+	p.Resource(activitylog.EnableAuditLog(categoryResource()))
 	p.Resource(activitylog.NewActivityResource().NavigationGroup("System").NavigationIcon("heroicon-history"))
 	return p
 }

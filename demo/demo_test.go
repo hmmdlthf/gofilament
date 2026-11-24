@@ -288,3 +288,27 @@ func TestUSD(t *testing.T) {
 		}
 	}
 }
+
+func TestProductCategoryCanBeCreatedFromTheSelect(t *testing.T) {
+	h := testApp(t)
+	admin := login(t, h, "admin@example.com")
+	staff := login(t, h, "warehouse@example.com")
+
+	rec := call(t, h, "POST", "/admin/api/resources/products/form/options/create?field=category", admin, `{"name":"Garden"}`)
+	if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"value":"Garden"`) {
+		t.Fatalf("create category: %d %s", rec.Code, rec.Body.String())
+	}
+	mu.RLock()
+	_, ok := cats.rows["Garden"]
+	mu.RUnlock()
+	if !ok {
+		t.Fatal("category not stored")
+	}
+	if rec := call(t, h, "POST", "/admin/api/resources/products/form/options/create?field=category", admin, `{"name":"garden"}`); rec.Code < 400 {
+		t.Fatalf("duplicate accepted: %d", rec.Code)
+	}
+	// warehouse staff may not create categories: no create entry, and refused
+	if rec := call(t, h, "POST", "/admin/api/resources/products/form/options/create?field=category", staff, `{"name":"Toys"}`); rec.Code != http.StatusForbidden {
+		t.Fatalf("staff create: %d", rec.Code)
+	}
+}

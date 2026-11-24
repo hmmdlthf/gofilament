@@ -1692,10 +1692,14 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			if err := invoker.InvokeCreate(ctx, data); err != nil {
 				return p.apiErrorStatus(c, err, http.StatusBadRequest)
 			}
-			return c.JSON(http.StatusCreated, map[string]any{
+			out := map[string]any{
 				"success": true,
 				"message": "Record created successfully",
-			})
+			}
+			if id := CreatedID(ctx); id != "" {
+				out["id"] = id
+			}
+			return c.JSON(http.StatusCreated, out)
 		}
 
 		return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Create not implemented"})
