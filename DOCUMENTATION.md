@@ -687,6 +687,20 @@ The API behind it is `GET` and `POST /api/resources/{slug}/form/options/create?f
 
 ---
 
+### Conditional Sections and Fields (`VisibleWhen`)
+
+`VisibleWhen(field, values...)` shows a section, grid or field only while another field holds one of the values. The web panel and the Flutter admin both check it as the user edits. Hidden components' values are dropped on save and their rules are skipped, so a hidden `Required()` field doesn't block the form.
+
+```go
+forms.Select("driver").Options(map[string]string{"stripe": "Stripe", "payhere": "PayHere"}),
+forms.Section("Stripe").VisibleWhen("driver", "stripe").Schema(
+    forms.TextInput("stripe_key").Password().Required(),
+),
+forms.TextInput("gift_note").VisibleWhen("gift", "true"), // a toggle holds "true" / "false"
+```
+
+Unlike `Visible(func(get) bool)`, which only the server can run, `VisibleWhen` is declarative, so clients can evaluate it.
+
 ## 7. Table Builder Engine (`pkg/tables`)
 
 ### Column Types Reference
@@ -1423,6 +1437,30 @@ func main() {
 ```
 
 ---
+
+## 16. Payment Gateways (`pkg/payments`)
+
+`pkg/payments` puts golaravel's payment gateway layer (`pkg/payment`) in the panel. The built-in drivers are Stripe, PayHere, OnePay, Tabby, Tamara and a test gateway. Any `payment.Driver` plugin you install shows up as well.
+
+```go
+mgr := payment.NewManager(payment.Options{BaseURL: "https://shop.example.com", Store: store, Encrypter: enc})
+app.RegisterProvider(gateways.Provider(mgr)) // drivers + /payments routes (see golaravel's payment-gateways guide)
+
+res := payments.Register(panel, mgr)
+res.Gateways.AuthorizeWithGate()            // narrow access like any resource
+```
+
+- **Payment Gateways**:
+  - Pick a driver; the form shows only that driver's settings (`VisibleWhen`).
+  - Choose test or live mode, enable it, and turn on automatic capture if you want it.
+  - Secret settings are write-only: they're encrypted at rest and never sent back. A blank field keeps the saved value.
+  - Each gateway shows its webhook URL and has a **Test connection** action.
+- **Payments**:
+  - Lists every payment, with filters for status, gateway and mode, and search by order, email or gateway reference.
+  - The record view has a **History** tab with every status change, webhook and refund.
+  - Row actions show only where the gateway supports them: **Refund** (full or partial), **Capture** and **Void** for authorized payments, and **Sync with gateway**.
+  - The navigation badge counts authorized payments waiting to be captured.
+  - Payments can't be created, edited or deleted from the panel.
 
 ## Summary Checklist for AI Agents & Developers
 

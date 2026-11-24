@@ -48,6 +48,9 @@ type Node struct {
 	Disabled         bool   `json:"disabled,omitempty"`
 	ColumnSpan       int    `json:"column_span,omitempty"`
 	Live             bool   `json:"live,omitempty"`
+	// VisibleWhen shows the component only while another field holds one
+	// of some values; clients evaluate it as the user edits.
+	VisibleWhen *Condition `json:"visible_when,omitempty"`
 
 	// text
 	MinLength int    `json:"min_length,omitempty"`
@@ -103,6 +106,7 @@ func Describe(ctx context.Context, components []Component) []Node {
 	nodes := make([]Node, 0, len(components))
 	for _, c := range components {
 		if n, ok := describe(ctx, c); ok {
+			n.VisibleWhen = conditionOf(c)
 			nodes = append(nodes, n)
 		}
 	}
