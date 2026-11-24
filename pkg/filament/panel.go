@@ -1023,13 +1023,20 @@ func (p *Panel) Pages(pages ...PageInterface) *Panel {
 
 // Widget registers a dashboard widget.
 func (p *Panel) Widget(w WidgetInterface) *Panel {
+	// Widgets look up their data by id (/widgets/{id}/data); without one,
+	// every chart would get the first chart's data.
+	if s, ok := w.(interface{ SetDefaultID(string) }); ok && w.ID() == "" {
+		s.SetDefaultID(fmt.Sprintf("widget-%d", len(p.widgets)+1))
+	}
 	p.widgets = append(p.widgets, w)
 	return p
 }
 
 // Widgets registers multiple dashboard widgets.
 func (p *Panel) Widgets(ws ...WidgetInterface) *Panel {
-	p.widgets = append(p.widgets, ws...)
+	for _, w := range ws {
+		p.Widget(w)
+	}
 	return p
 }
 

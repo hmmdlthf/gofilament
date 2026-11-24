@@ -9,6 +9,21 @@ hero:
   install: "go get github.com/golaravel/gofilament"
   primary: { label: "Get started", url: "/docs/latest/guide/quickstart-building-an-admin-panel/" }
   secondary: { label: "Read the docs", url: "/docs/latest/" }
+  demo: { label: "Try the live demo", url: "https://demo.gofilament.elridhma.com/" }
+
+showcase:
+  title: "See it running"
+  lead: >-
+    Apex Store is a sample shop's back office built with GoFilament and shown in
+    the Flutter admin app: products with variants and barcodes, orders with an
+    audit trail, roles, charts, filters, bulk edits and import/export. Sign in
+    with one click as an admin or as warehouse staff; the data resets every hour.
+  image: "/images/demo-dashboard.webp"
+  width: 1600
+  height: 705
+  alt: "The Apex Store demo dashboard: revenue, orders, average order and low-stock cards above a 30-day revenue chart"
+  url: "https://demo.gofilament.elridhma.com/"
+  cta: "Open the live demo"
 
 features_title: "Everything an admin needs, in Go"
 features:

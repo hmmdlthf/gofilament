@@ -34,6 +34,14 @@ func (w *BaseWidget) SetID(id string) *BaseWidget {
 	return w
 }
 
+// SetDefaultID gives the widget an id when it has none (Panel.Widget does
+// this, so widgets without an explicit id still get their own data URL).
+func (w *BaseWidget) SetDefaultID(id string) {
+	if w.id == "" {
+		w.id = id
+	}
+}
+
 func (w *BaseWidget) Sort() int {
 	return w.sort
 }
