@@ -21,6 +21,7 @@ func testApp(t *testing.T) http.Handler {
 	if err := newPanel("admin", "/admin").FlutterFS(fsys).Register(app); err != nil {
 		t.Fatal(err)
 	}
+	app.GET("/invoices/:id", invoiceHandler)
 	return sandbox(app)
 }
 
@@ -248,5 +249,34 @@ func TestRefinedFiltersAndFacets(t *testing.T) {
 	_ = json.Unmarshal(rec.Body.Bytes(), &out)
 	if out.Facets["brand"]["Sonance"] == 0 {
 		t.Fatalf("brand facets from data: %v", out.Facets["brand"])
+	}
+}
+
+func TestInvoiceLinksAreSignedAndRenderFast(t *testing.T) {
+	h := testApp(t)
+	mu.RLock()
+	var id string
+	for k := range orders.rows {
+		id = k
+		break
+	}
+	mu.RUnlock()
+	good := invoiceURL(id, time.Now().Add(time.Hour))
+	rec := call(t, h, "GET", good, "", "")
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(body, "Invoice") || strings.Contains(body, renderTimeMark) {
+		t.Fatalf("invoice: %d %.200s", rec.Code, body)
+	}
+	if !strings.Contains(rec.Header().Get("Server-Timing"), "render") {
+		t.Fatal("no Server-Timing header")
+	}
+	for name, u := range map[string]string{
+		"tampered": strings.Replace(good, "sig=", "sig=0", 1),
+		"expired":  invoiceURL(id, time.Now().Add(-time.Minute)),
+		"other id": strings.Replace(good, "/invoices/"+id, "/invoices/x"+id, 1),
+	} {
+		if rec := call(t, h, "GET", u, "", ""); rec.Code != http.StatusForbidden {
+			t.Fatalf("%s link: %d", name, rec.Code)
+		}
 	}
 }

@@ -10,11 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Flutter: Settings screen** (account menu → Settings): appearance (System, Light or Dark), language (the panel's `Locales`) and the desktop sidebar mode, each shown when the panel offers it, plus a link to the account screen. Choices are remembered on the device and stay in sync with the top-bar controls. The screen is translated into Arabic, German, Spanish and French.
+- **Demo: printable invoices**: each order has an **Invoice** action that opens a print-ready page. It is rendered on the server by GoLaravel + Templ in about 20 µs (shown on the page and in a `Server-Timing` header), behind a signed link that expires after an hour.
+- **Demo**: its own icon (favicon, app icons and brand mark) instead of the Flutter default, and the app in English, Arabic (right to left), German, Spanish and French.
 - **Live facet counts for refined filters**: list responses now include `facets` (`{column: {value: count}}`) for every `tables.RefinedFilter`. Each column's counts apply the search and the other filters but not its own, and the Flutter filter dialog shows them. A refined filter without `Options` offers the values found in the data, and listed options are sorted by label. Counts are read through `OnList`, up to `filament.MaxFacetScan` records; for large tables, `Resource.FacetCounts(fn)` counts in the database instead.
 - **Collapsible desktop sidebar in the Flutter admin**: a top-bar button switches the sidebar between full width, an icon rail (labels as tooltips) and hidden, and each device remembers the choice. `Panel.SidebarCollapseModes(filament.SidebarIcons, filament.SidebarHidden)` picks which collapsed forms are offered (both by default), `Panel.SidebarDefaultMode(...)` sets the starting one, and `SidebarCollapsibleOnDesktop(false)` turns it off. The schema carries `sidebar: {collapsible, modes, default}`.
 - **Demo**: refined filters on product brand and category, order status and channel, and customer country, plus the collapsible sidebar.
 
 ### Fixed
+- **Flutter: every menu item had the same icon when resources used `heroicon-<name>`** (or Heroicons v2 names such as `qr-code`): only `heroicon-o-<name>` was recognised. All spellings and about 60 more Heroicons v2 names now map to Material icons.
 - **Refined filter options came in random order**: they were built from a Go map.
 
 ### Added

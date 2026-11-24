@@ -15,7 +15,10 @@ One Go binary serves both the app and the panel API it reads, at `/admin`.
   status, and sales by category
 - **Roles**: *Admin* can do everything; *Warehouse staff* see only products and
   orders, may update them but not delete, and can't open customers or the log
-- Global search and dark mode
+- Global search, and **Settings** (theme, language with Arabic right to left, sidebar)
+- **Printable invoices** from each order: a GoLaravel + Templ page rendered in
+  about 20 µs, behind a signed link that expires after an hour (`invoice.templ`;
+  run `templ generate` after editing it)
 
 ## Sandbox rules
 

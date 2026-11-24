@@ -9,6 +9,7 @@
 library;
 
 export 'src/account.dart';
+export 'src/settings.dart';
 export 'src/api.dart';
 export 'src/board.dart';
 export 'src/cells.dart';
