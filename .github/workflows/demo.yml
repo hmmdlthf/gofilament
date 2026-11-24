@@ -1,0 +1,140 @@
+name: Demo
+
+# Builds the live demo (demo/: the Flutter admin app compiled into one Go
+# binary) and deploys it to goplesk as https://demo.gofilament.elridhma.com
+# when a release is published. The first deploy also creates the app.
+# Pull requests that touch the demo or the Flutter package only build it.
+#
+# A workflow that creates releases with GITHUB_TOKEN does not trigger the
+# "release" event here; such a workflow should call this one instead:
+#   jobs:
+#     demo:
+#       uses: ./.github/workflows/demo.yml
+#       secrets: inherit
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      GOPLESK_URL:
+        required: false
+      GOPLESK_CLUSTER_KEY:
+        required: false
+      GOLARAVEL_READ_TOKEN:
+        required: false
+  pull_request:
+    paths: ["demo/**", "flutter/gofilament_admin/**", ".github/workflows/demo.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: false
+
+env:
+  # golaravel is a private module (see go.mod's replace and the README).
+  GOPRIVATE: github.com/hmmdlthf/*
+  # Repository variables override these (Settings -> Secrets and variables).
+  DEMO_DOMAIN: ${{ vars.DEMO_DOMAIN || 'demo.gofilament.elridhma.com' }}
+  DEMO_APP: ${{ vars.DEMO_APP || 'gofilament-demo' }}
+  DEMO_PORT: ${{ vars.DEMO_PORT || '8095' }}
+  GOPLESK_URL: ${{ secrets.GOPLESK_URL || vars.GOPLESK_URL || 'https://server1.goplesk.caaqit.com' }}
+
+jobs:
+  build:
+    name: Build demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.7
+          cache: true
+      - name: Access to the private golaravel module
+        env:
+          GOLARAVEL_READ_TOKEN: ${{ secrets.GOLARAVEL_READ_TOKEN }}
+        run: |
+          if [ -z "$GOLARAVEL_READ_TOKEN" ]; then
+            echo "::error::Add a repository secret GOLARAVEL_READ_TOKEN (see ci.yml)."
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${GOLARAVEL_READ_TOKEN}@github.com/hmmdlthf/".insteadOf "https://github.com/hmmdlthf/"
+      - name: Build the Flutter admin for the web
+        working-directory: demo/client
+        run: |
+          flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter build web --release --no-wasm-dry-run
+      - name: Embed it and build the server
+        run: |
+          find demo/flutterweb -mindepth 1 ! -name README.md -delete
+          cp -r demo/client/build/web/. demo/flutterweb/
+          go test -count=1 ./demo
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o demo-server ./demo
+          ls -lh demo-server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-server
+          path: demo-server
+          retention-days: 7
+
+  deploy:
+    name: Deploy to goplesk
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: demo
+      url: https://${{ vars.DEMO_DOMAIN || 'demo.gofilament.elridhma.com' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: demo-server
+      - name: Upload release to goplesk (creating the app the first time)
+        shell: bash
+        env:
+          GOPLESK_CLUSTER_KEY: ${{ secrets.GOPLESK_CLUSTER_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GOPLESK_CLUSTER_KEY" ]; then
+            echo "::error::Add the GOPLESK_CLUSTER_KEY secret (see demo/README.md)."
+            exit 1
+          fi
+          api="${GOPLESK_URL%/}/api/v1"
+          auth="Authorization: Bearer $GOPLESK_CLUSTER_KEY"
+          sum=$(sha256sum demo-server | cut -d' ' -f1)
+          post() { curl --silent --show-error --max-time 900 -o resp.txt -w '%{http_code}' -H "$auth" "$@"; }
+          ok() { case "$1" in 200|201|202) return 0 ;; *) return 1 ;; esac; }
+
+          echo "Uploading demo-server to $GOPLESK_URL ($(du -h demo-server | cut -f1), sha256 $sum), app $DEMO_APP"
+          code=$(post -H "X-Goplesk-Sha256: $sum" --data-binary @demo-server "$api/apps/$DEMO_APP/release")
+          if [ "$code" = 404 ]; then
+            # First deploy: store the binary, then create the app with it.
+            echo "App $DEMO_APP does not exist yet; creating it for $DEMO_DOMAIN on port $DEMO_PORT"
+            code=$(post -H "X-Goplesk-Sha256: $sum" --data-binary @demo-server "$api/artifacts")
+            if ! ok "$code"; then echo "::error::artifact upload: HTTP $code: $(cat resp.txt)"; exit 1; fi
+            body=$(jq -nc --arg n "$DEMO_APP" --arg d "$DEMO_DOMAIN" --argjson p "$DEMO_PORT" --arg r "$sum" \
+              '{name: $n, domain: $d, port: $p, memory_mb: 200, gomemlimit: "170MiB", health_path: "/healthz", release: $r}')
+            code=$(post -H "Content-Type: application/json" -d "$body" "$api/apps/deploy")
+          fi
+          if [ "$code" = 502 ]; then echo "::error::the new version failed its health check; the previous one is still serving: $(cat resp.txt)"; exit 1; fi
+          if ! ok "$code"; then echo "::error::goplesk answered HTTP $code: $(cat resp.txt)"; exit 1; fi
+          echo "goplesk: HTTP $code $(cat resp.txt)"
+      - name: Check the live demo
+        run: |
+          # The first deploy waits for goplesk to get the TLS certificate,
+          # which needs the domain's DNS to point at the server.
+          for i in $(seq 1 18); do
+            if curl -fsS -o /dev/null "https://$DEMO_DOMAIN/healthz"; then
+              echo "Live: https://$DEMO_DOMAIN/"; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::https://$DEMO_DOMAIN/healthz did not answer within 3 minutes (is the DNS record in place?)"
+          exit 1

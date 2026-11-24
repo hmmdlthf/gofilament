@@ -79,6 +79,7 @@ class DemoLogin {
     required this.password,
     this.label = 'Use demo account',
     this.debugOnly = true,
+    this.submit = false,
   });
 
   final String email;
@@ -92,17 +93,28 @@ class DemoLogin {
   /// meant to be shared.
   final bool debugOnly;
 
+  /// When true, the button signs in straight away instead of only filling
+  /// in the form.
+  final bool submit;
+
   /// Whether the button should be shown in this build.
   bool get isAvailable => !debugOnly || kDebugMode;
 }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key, required this.admin, this.demoLogin});
+  const LoginScreen(
+      {super.key,
+      required this.admin,
+      this.demoLogin,
+      this.demoLogins = const []});
 
   final AdminController admin;
 
   /// Optional demo account button (see [DemoLogin]).
   final DemoLogin? demoLogin;
+
+  /// More demo account buttons, after [demoLogin].
+  final List<DemoLogin> demoLogins;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -354,19 +366,25 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : Text(tr('Sign in')),
                   ),
-                  if (widget.demoLogin?.isAvailable ?? false) ...[
-                    const SizedBox(height: 12),
+                  for (final (i, demo) in [
+                    if (widget.demoLogin != null) widget.demoLogin!,
+                    ...widget.demoLogins,
+                  ].where((d) => d.isAvailable).indexed) ...[
+                    SizedBox(height: i == 0 ? 12 : 8),
                     OutlinedButton.icon(
-                      key: const Key('demo-login-btn'),
+                      key: Key(i == 0 ? 'demo-login-btn' : 'demo-login-btn-$i'),
                       icon: const Icon(Icons.bolt, size: 18),
-                      label: Text(tr(widget.demoLogin!.label)),
+                      label: Text(tr(demo.label)),
                       onPressed: _busy
                           ? null
-                          : () => setState(() {
-                                _username.text = widget.demoLogin!.email;
-                                _password.text = widget.demoLogin!.password;
+                          : () {
+                              setState(() {
+                                _username.text = demo.email;
+                                _password.text = demo.password;
                                 _error = null;
-                              }),
+                              });
+                              if (demo.submit) _submit();
+                            },
                     ),
                   ],
                   if (admin.accountFeatures['registration'] == true)

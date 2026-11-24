@@ -1,0 +1,23 @@
+name: apex_admin
+description: "Apex Store admin: the GoFilament live demo's Flutter app (gofilament_admin)."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.4.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  gofilament_admin:
+    path: ../../flutter/gofilament_admin
+  http: ^1.2.0
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

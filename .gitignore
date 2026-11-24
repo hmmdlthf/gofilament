@@ -30,3 +30,7 @@ pubspec.lock
 build/
 **/client/build/web/*
 !**/client/build/web/index.html
+
+# Live demo: the Flutter web build is copied into demo/flutterweb before go build.
+/demo/flutterweb/*
+!/demo/flutterweb/README.md

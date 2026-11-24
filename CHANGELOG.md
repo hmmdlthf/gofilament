@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Live demo** (`demo/`, deployed to https://demo.gofilament.elridhma.com by `.github/workflows/demo.yml`): Apex Store, a shop back office in the Flutter admin app, served with its panel API from one Go binary. It has products with variant and barcode tabs, orders with an audit trail, customers, dashboard charts, admin and warehouse roles with one-click demo sign-in, and sample data that resets every hour. The website's landing page links to it, with a screenshot.
+- **Flutter: several demo accounts**: `GoFilamentAdmin(demoLogins: [...])` shows one button per account, and `DemoLogin(submit: true)` signs in with a single tap.
+
+### Fixed
+- **Dashboard charts without a `WidgetID` all showed the first chart's data**: they shared an empty id, so `/widgets/{id}/data` answered every chart with the same widget. `Panel.Widget` now gives widgets without an id their own (`widget-1`, `widget-2`, ...).
+
 ## [v1.41.0] - 2026-11-23
 
 ### Changed

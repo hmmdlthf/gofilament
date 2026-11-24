@@ -14,6 +14,9 @@
       <div class="cta">
         <a class="btn btn-primary" href="{{ $l.hero.primary.url | relURL }}">{{ $l.hero.primary.label }}</a>
         <a class="btn btn-ghost" href="{{ $l.hero.secondary.url | relURL }}">{{ $l.hero.secondary.label }}</a>
+        {{- with $l.hero.demo }}
+        <a class="btn btn-ghost btn-demo" href="{{ .url }}"><span class="live-dot" aria-hidden="true"></span>{{ .label }}</a>
+        {{- end }}
       </div>
       <div class="install" data-copy-box>
         <span class="prompt" aria-hidden="true">$</span>
@@ -23,6 +26,21 @@
       <p class="eyebrow">{{ $l.hero.eyebrow }}</p>
     </div>
   </section>
+
+  {{- with $l.showcase }}
+  <section class="section showcase" aria-labelledby="showcase-h">
+    <div class="wrap">
+      <h2 id="showcase-h" class="section-title">{{ .title }}</h2>
+      {{- with .lead }}<p class="section-lead">{{ . }}</p>{{ end }}
+      <a class="showcase-shot" href="{{ .url }}">
+        <img src="{{ .image | relURL }}" alt="{{ .alt }}" width="{{ .width }}" height="{{ .height }}" loading="lazy" decoding="async">
+      </a>
+      {{- if .cta }}
+      <div class="cta showcase-cta"><a class="btn btn-primary" href="{{ .url }}">{{ .cta }}</a></div>
+      {{- end }}
+    </div>
+  </section>
+  {{- end }}
 
   <section class="section" aria-labelledby="features-h">
     <div class="wrap">
