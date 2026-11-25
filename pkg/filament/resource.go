@@ -1221,7 +1221,7 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 				}
 			}
 			if err := relManager.HandleCreate(ctx, parentID, data); err != nil {
-				return ctx.String(http.StatusInternalServerError, "Relation create error: %v", err)
+				return ctx.String(errorStatus(err, http.StatusInternalServerError), "Relation create error: %v", err)
 			}
 			return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s/%s/edit", basePath, parentID))
 		})
@@ -1248,7 +1248,7 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 					return ctx.HTML(http.StatusConflict, fmt.Sprintf(`<p>%s</p><p><a href="%s/%s/edit">Reload</a></p>`,
 						html.EscapeString(conflict.Error()), basePath, html.EscapeString(parentID)))
 				}
-				return ctx.String(http.StatusInternalServerError, "Relation update error: %v", err)
+				return ctx.String(errorStatus(err, http.StatusInternalServerError), "Relation update error: %v", err)
 			}
 			return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s/%s/edit", basePath, parentID))
 		})
@@ -1262,7 +1262,7 @@ func (r *BaseResource[T]) RegisterRoutes(p *Panel, router *router.Router) {
 			parentID := c.Param("id")
 			childID := c.Param("child_id")
 			if err := relManager.HandleDelete(ctx, parentID, childID); err != nil {
-				return ctx.String(http.StatusInternalServerError, "Relation delete error: %v", err)
+				return ctx.String(errorStatus(err, http.StatusInternalServerError), "Relation delete error: %v", err)
 			}
 			return ctx.Redirect(http.StatusSeeOther, fmt.Sprintf("%s/%s/edit", basePath, parentID))
 		}
@@ -2508,4 +2508,14 @@ func csvSafeCell(v string) string {
 		return "'" + v
 	}
 	return v
+}
+
+// errorStatus is the HTTP status an error asks for (StatusCode() int), or
+// fallback.
+func errorStatus(err error, fallback int) int {
+	var sc interface{ StatusCode() int }
+	if errors.As(err, &sc) && sc.StatusCode() >= 400 {
+		return sc.StatusCode()
+	}
+	return fallback
 }

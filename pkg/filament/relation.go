@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"net/http"
 	"reflect"
 	"strings"
 
@@ -205,37 +206,46 @@ func (rm *BaseRelationManager[T]) HandleList(ctx *Context, parentID string, sear
 
 // HandleCreate fulfills RelationManager interface.
 func (rm *BaseRelationManager[T]) HandleCreate(ctx *Context, parentID string, data map[string]any) error {
-	if rm.onCreate != nil {
-		data, err := rm.validateInput(ctx, parentID, data, true)
-		if err != nil {
-			return err
-		}
-		return rm.onCreate(ctx, parentID, data)
+	if rm.onCreate == nil {
+		return ErrRelationCreateUnavailable
 	}
-	return nil
+	data, err := rm.validateInput(ctx, parentID, data, true)
+	if err != nil {
+		return err
+	}
+	return rm.onCreate(ctx, parentID, data)
 }
+
+// Returned (405) for writes a relation manager has no handler for, instead of
+// answering success without doing anything. Read-only relations (OnList /
+// OnFind only) refuse every write; their abilities already report false.
+var (
+	ErrRelationCreateUnavailable error = &endpointError{status: http.StatusMethodNotAllowed, msg: "Related records cannot be created here"}
+	ErrRelationUpdateUnavailable error = &endpointError{status: http.StatusMethodNotAllowed, msg: "Related records cannot be edited here"}
+	ErrRelationDeleteUnavailable error = &endpointError{status: http.StatusMethodNotAllowed, msg: "Related records cannot be deleted here"}
+)
 
 // HandleUpdate fulfills RelationManager interface.
 func (rm *BaseRelationManager[T]) HandleUpdate(ctx *Context, parentID, childID string, data map[string]any) error {
-	if rm.onUpdate != nil {
-		if err := rm.checkVersion(ctx, parentID, childID, data); err != nil {
-			return err
-		}
-		data, err := rm.validateInput(ctx, parentID, data, false)
-		if err != nil {
-			return err
-		}
-		return rm.onUpdate(ctx, parentID, childID, data)
+	if rm.onUpdate == nil {
+		return ErrRelationUpdateUnavailable
 	}
-	return nil
+	if err := rm.checkVersion(ctx, parentID, childID, data); err != nil {
+		return err
+	}
+	data, err := rm.validateInput(ctx, parentID, data, false)
+	if err != nil {
+		return err
+	}
+	return rm.onUpdate(ctx, parentID, childID, data)
 }
 
 // HandleDelete fulfills RelationManager interface.
 func (rm *BaseRelationManager[T]) HandleDelete(ctx *Context, parentID, childID string) error {
-	if rm.onDelete != nil {
-		return rm.onDelete(ctx, parentID, childID)
+	if rm.onDelete == nil {
+		return ErrRelationDeleteUnavailable
 	}
-	return nil
+	return rm.onDelete(ctx, parentID, childID)
 }
 
 // extractID gets the string ID of record T.

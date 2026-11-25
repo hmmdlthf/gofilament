@@ -197,3 +197,58 @@ func TestRelationEndpointsRespectParentPermissions(t *testing.T) {
 		t.Errorf("unknown parent should be 404, got %d", code)
 	}
 }
+
+// A relation with only list / find handlers is read only: writes are refused
+// (405) instead of answering success without doing anything, and its
+// abilities tell clients not to offer them.
+func TestReadOnlyRelationRefusesWrites(t *testing.T) {
+	rows := []*relChild{{ID: 1, ParentID: 7, SKU: "A-1"}}
+	rm := filament.NewRelationManager[*relChild]("history", "History")
+	rm.Table(func(tb *tables.Table[*relChild]) *tables.Table[*relChild] {
+		return tb.Columns(tables.TextColumn[*relChild]("sku"))
+	})
+	rm.RecordID(func(c *relChild) string { return fmt.Sprint(c.ID) })
+	rm.OnList(func(ctx *filament.Context, parentID string, search, sort, dir string, page, perPage int) ([]*relChild, int, error) {
+		return rows, len(rows), nil
+	})
+	rm.OnFind(func(ctx *filament.Context, parentID, childID string) (*relChild, error) { return rows[0], nil })
+
+	res := filament.NewResource[*relParent]("parents")
+	res.ModelName("Parent").PluralModelName("Parents")
+	res.Form(func(f *forms.Form) *forms.Form { return f.Schema(forms.TextInput("name")) })
+	res.Table(func(tb *tables.Table[*relParent]) *tables.Table[*relParent] {
+		return tb.Columns(tables.TextColumn[*relParent]("name"))
+	})
+	res.OnFind(func(ctx *filament.Context, id string) (*relParent, error) { return &relParent{ID: 7}, nil })
+	res.OnUpdate(func(ctx *filament.Context, id string, data map[string]any) error { return nil })
+	res.Relations(rm)
+	p := filament.NewPanel("admin").Path("/admin").Engine(filament.EngineFlutter).Flutter(t.TempDir()).
+		TokenValidator(func(ctx *filament.Context, token string) (auth.Authenticatable, error) {
+			return &filament.PanelUser{ID: "1", Login: "admin"}, nil
+		}).
+		Resource(res)
+	app := golaravel.New()
+	if err := p.Register(app); err != nil {
+		t.Fatal(err)
+	}
+
+	const base = "/admin/api/resources/parents/7/relations"
+	_, meta := relDo(t, app, "GET", base, "good", nil)
+	ab := meta["relations"].([]any)[0].(map[string]any)["abilities"].(map[string]any)
+	if ab["create"] != false || ab["update"] != false || ab["delete"] != false {
+		t.Fatalf("read-only relation abilities: %v", ab)
+	}
+	if code, list := relDo(t, app, "GET", base+"/history", "good", nil); code != 200 || list["total"] != float64(1) {
+		t.Fatalf("list: %d %v", code, list)
+	}
+	for _, c := range []struct{ method, path string }{
+		{"POST", base + "/history"},
+		{"PUT", base + "/history/1"},
+		{"DELETE", base + "/history/1"},
+	} {
+		code, out := relDo(t, app, c.method, c.path, "good", map[string]any{"sku": "X"})
+		if code != http.StatusMethodNotAllowed || out["success"] == true {
+			t.Errorf("%s %s on a read-only relation: %d %v", c.method, c.path, code, out)
+		}
+	}
+}
