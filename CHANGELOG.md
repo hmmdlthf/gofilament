@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.43.1] - 2026-11-25
+
 ### Fixed
 - **Read-only relations answered success to writes**: a relation manager without `OnCreate`, `OnUpdate` or `OnDelete` replied 201 / 200 ("created successfully") to create, update and delete requests while doing nothing. Those requests now answer 405 (`ErrRelationCreateUnavailable`, `ErrRelationUpdateUnavailable`, `ErrRelationDeleteUnavailable`), on the API and the web routes. The relation's abilities already reported these operations as unavailable, so clients that follow them are unaffected. Web relation routes also answer with the error's own status (`StatusCode()`) instead of always 500.
 
