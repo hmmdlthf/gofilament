@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.44.0] - 2026-11-26
+
 ### Added
 - **Dashboard grid in the Flutter admin**: widgets are laid out three columns wide (two on tablets, one on phones) by their span, as in the web panel, instead of one per row. `Span(n)`, `Order(n)`, `Visible(fn)` and `Key(id)` are on every widget.
 - **Stat changes and trend lines**: `Stat.Change(percent, caption)` / `ChangeBetween(current, previous, caption)` show "+12.5% vs last week" with an arrow. The colour follows `LowerIsBetter()`. `ChartValues([]float64)` draws a trend line from amounts. The Flutter admin now shows the trend line, and a stat with a `URL` opens it.
