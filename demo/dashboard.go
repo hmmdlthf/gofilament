@@ -45,19 +45,6 @@ func sum(v []float64) float64 {
 	return t
 }
 
-// change is the % difference between the last half of v and the half before.
-func change(cur, prev float64) string {
-	if prev == 0 {
-		return "new"
-	}
-	d := (cur - prev) / prev * 100
-	sign := "+"
-	if d < 0 {
-		sign = ""
-	}
-	return fmt.Sprintf("%s%.1f%% vs previous 30 days", sign, d)
-}
-
 func spark(v []float64, buckets int) []int {
 	out := make([]int, buckets)
 	per := (len(v) + buckets - 1) / buckets
@@ -96,11 +83,11 @@ func dashboardWidgets() []filament.WidgetInterface {
 		}
 		return []widgets.Stat{
 			*widgets.NewStat("Revenue (30 days)", fmt.Sprintf("$%s", thousands(rev30))).
-				Description(change(rev30, revPrev)).Color(color(rev30, revPrev)).Chart(spark(rev[30:], 10)),
+				ChangeBetween(rev30, revPrev, "vs previous 30 days").Color(color(rev30, revPrev)).Chart(spark(rev[30:], 10)),
 			*widgets.NewStat("Orders (30 days)", fmt.Sprintf("%.0f", cnt30)).
-				Description(change(cnt30, cntPrev)).Color(color(cnt30, cntPrev)).Chart(spark(cnt[30:], 10)).URL("orders"),
+				ChangeBetween(cnt30, cntPrev, "vs previous 30 days").Color(color(cnt30, cntPrev)).Chart(spark(cnt[30:], 10)).URL("orders"),
 			*widgets.NewStat("Average order", fmt.Sprintf("$%.2f", aov)).
-				Description(change(aov, aovPrev)).Color(color(aov, aovPrev)),
+				ChangeBetween(aov, aovPrev, "vs previous 30 days").Color(color(aov, aovPrev)),
 			*widgets.NewStat("Low stock", fmt.Sprint(low)).
 				Description("active products under 10 units").Color(map[bool]string{true: "warning", false: "success"}[low > 0]).URL("products?filters[status]=active"),
 		}
@@ -109,7 +96,10 @@ func dashboardWidgets() []filament.WidgetInterface {
 	revenue := widgets.NewChartWidget("Revenue", widgets.ChartTypeLine).WidgetID("revenue").
 		Description("Paid, shipped and delivered orders per day").
 		Filters(map[string]string{"7": "Last 7 days", "30": "Last 30 days", "90": "Last 90 days"}).
+		FilterOrder("7", "30", "90").
 		DefaultFilter("30").
+		Money("USD").
+		Span(2).
 		FilterData(func(ctx *filament.Context, filter string) widgets.ChartData {
 			n := map[string]int{"7": 7, "30": 30, "90": 90}[filter]
 			if n == 0 {
@@ -117,11 +107,11 @@ func dashboardWidgets() []filament.WidgetInterface {
 			}
 			labels, rev, _ := dayTotals(n, time.Now())
 			return widgets.ChartData{Labels: labels, Datasets: []widgets.ChartDataset{
-				{Label: "Revenue ($)", Data: rev, BorderColor: "#10b981", BackgroundColor: "rgba(16,185,129,0.15)", Fill: true, Tension: 0.35},
+				{Label: "Revenue", Data: rev, BorderColor: "#10b981", BackgroundColor: "rgba(16,185,129,0.15)", Fill: true, Tension: 0.35},
 			}}
 		})
 
-	byStatus := widgets.NewChartWidget("Orders by status", widgets.ChartTypeDoughnut).WidgetID("orders-by-status").
+	byStatus := widgets.NewChartWidget("Orders by status", widgets.ChartTypeDoughnut).WidgetID("orders-by-status").Span(1).
 		Description("All orders in the store").
 		Data(func(ctx *filament.Context) widgets.ChartData {
 			order := []string{"pending", "paid", "shipped", "delivered", "cancelled", "refunded"}
@@ -140,7 +130,7 @@ func dashboardWidgets() []filament.WidgetInterface {
 			return widgets.ChartData{Labels: labels, Datasets: []widgets.ChartDataset{{Label: "Orders", Data: data}}}
 		})
 
-	byCategory := widgets.NewChartWidget("Sales by category", widgets.ChartTypeBar).WidgetID("sales-by-category").
+	byCategory := widgets.NewChartWidget("Sales by category", widgets.ChartTypeBar).WidgetID("sales-by-category").Span(1).
 		Description("Units sold in the last 90 days").
 		Data(func(ctx *filament.Context) widgets.ChartData {
 			cat := map[string]string{}
@@ -173,12 +163,12 @@ func dashboardWidgets() []filament.WidgetInterface {
 			return widgets.ChartData{Labels: labels, Datasets: []widgets.ChartDataset{{Label: "Units", Data: data, BackgroundColor: "#10b981"}}}
 		})
 
-	recent := widgets.NewTableWidget("Latest orders").
+	recent := widgets.NewTableWidget("Latest orders").Span(2).
 		Columns(
 			widgets.TableWidgetColumn{Name: "number", Label: "Order"},
 			widgets.TableWidgetColumn{Name: "customer", Label: "Customer"},
 			widgets.TableWidgetColumn{Name: "status", Label: "Status"},
-			widgets.TableWidgetColumn{Name: "total", Label: "Total"},
+			widgets.TableWidgetColumn{Name: "total", Label: "Total", Format: "money"},
 			widgets.TableWidgetColumn{Name: "placed", Label: "Placed"},
 		).
 		Rows(func(ctx *filament.Context) []map[string]any {
@@ -189,7 +179,8 @@ func dashboardWidgets() []filament.WidgetInterface {
 			for _, o := range rows {
 				out = append(out, map[string]any{
 					"number": o.Number, "customer": o.CustomerName, "status": orderStatus[o.Status],
-					"total": fmt.Sprintf("$%.2f", o.Total), "placed": activitylog.FormatTimeAgo(o.CreatedAt),
+					"total": o.Total, "placed": activitylog.FormatTimeAgo(o.CreatedAt),
+					widgets.RowURL: "orders/" + o.ID,
 				})
 			}
 			return out

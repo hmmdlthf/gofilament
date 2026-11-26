@@ -17,6 +17,7 @@ export 'src/components.dart';
 export 'src/app.dart';
 export 'src/controller.dart';
 export 'src/dashboard.dart';
+export 'src/dashboard_widgets.dart';
 export 'src/export.dart' show TableExport, saveFile, adminSaveFile;
 export 'src/files.dart';
 export 'src/format.dart';

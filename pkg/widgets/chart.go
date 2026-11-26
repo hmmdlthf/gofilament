@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"sort"
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/filament"
@@ -20,9 +21,19 @@ const (
 	ChartTypeRadar     ChartType = "radar"
 )
 
+// Value formats for chart axes and tooltips.
+const (
+	FormatNumber  = "number"
+	FormatMoney   = "money"
+	FormatPercent = "percent"
+)
+
 // ChartDataset represents an individual dataset line or bar series.
 type ChartDataset struct {
-	Label           string    `json:"label"`
+	Label string `json:"label"`
+	// Type draws this dataset as "bar" or "line" on a line or bar chart, so
+	// one chart can mix bars (e.g. income, expenses) and a line (net).
+	Type            string    `json:"type,omitempty"`
 	Data            []float64 `json:"data"`
 	BackgroundColor string    `json:"backgroundColor,omitempty"`
 	BorderColor     string    `json:"borderColor,omitempty"`
@@ -48,6 +59,9 @@ type ChartWidget struct {
 	defaultFilter    string
 	drilldownPattern string
 	enableDateRange  bool
+	filterOrder      []string
+	valueFormat      string
+	currency         string
 }
 
 // NewChartWidget initializes a new ChartWidget with a heading and chart type.
@@ -106,6 +120,29 @@ func (w *ChartWidget) Filters(periods map[string]string) *ChartWidget {
 
 func (w *ChartWidget) DefaultFilter(df string) *ChartWidget {
 	w.defaultFilter = df
+	return w
+}
+
+// FilterOrder sets the order of the period buttons (by key); without it they
+// are sorted by key.
+func (w *ChartWidget) FilterOrder(keys ...string) *ChartWidget {
+	w.filterOrder = keys
+	return w
+}
+
+// ValueFormat sets how values are shown on the axis and in tooltips:
+// FormatNumber (default), FormatMoney or FormatPercent.
+func (w *ChartWidget) ValueFormat(format string) *ChartWidget {
+	w.valueFormat = format
+	return w
+}
+
+// Money shows values as amounts, with the currency code in tooltips when given.
+func (w *ChartWidget) Money(currency ...string) *ChartWidget {
+	w.valueFormat = FormatMoney
+	if len(currency) > 0 {
+		w.currency = currency[0]
+	}
 	return w
 }
 
@@ -177,6 +214,25 @@ func (w *ChartWidget) EvaluateChartData(ctx *filament.Context, filter string) an
 	return w.EvaluateData(ctx, filter)
 }
 
+// orderedFilters lists the period keys in FilterOrder, then any others by key.
+func (w *ChartWidget) orderedFilters() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, k := range w.filterOrder {
+		if _, ok := w.filterPeriod[k]; ok && !seen[k] {
+			out, seen[k] = append(out, k), true
+		}
+	}
+	var rest []string
+	for k := range w.filterPeriod {
+		if !seen[k] {
+			rest = append(rest, k)
+		}
+	}
+	sort.Strings(rest)
+	return append(out, rest...)
+}
+
 func (w *ChartWidget) WidgetType() string {
 	return "chart"
 }
@@ -185,9 +241,14 @@ func (w *ChartWidget) ToWidgetDTO(ctx *filament.Context) map[string]any {
 	return map[string]any{
 		"type":           "chart",
 		"heading":        w.GetHeading(),
+		"description":    w.description,
 		"chart_type":     w.GetChartTypeString(),
 		"filters":        w.GetFilters(),
+		"filter_order":   w.orderedFilters(),
 		"default_filter": w.GetDefaultFilter(),
+		"value_format":   w.valueFormat,
+		"currency":       w.currency,
+		"max_height":     w.maxHeight,
 		"drilldown_url":  w.GetDrilldownPattern(),
 		"polling":        w.GetPolling(),
 		"data":           w.EvaluateChartData(ctx, ""),
@@ -227,7 +288,8 @@ func (w *ChartWidget) Render(ctx *filament.Context) string {
 
 	if len(w.filterPeriod) > 0 {
 		filterControls.WriteString(fmt.Sprintf(`<select id="%s_filter" class="form-control" style="padding: 0.25rem 0.75rem; font-size: 0.8125rem; border-radius: 0.375rem;" onchange="window.FilamentCharts && window.FilamentCharts.update('%s', this.value)">`, chartID, chartID))
-		for k, v := range w.filterPeriod {
+		for _, k := range w.orderedFilters() {
+			v := w.filterPeriod[k]
 			selected := ""
 			if k == activeFilter {
 				selected = "selected"

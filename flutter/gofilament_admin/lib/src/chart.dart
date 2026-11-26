@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'i18n.dart';
 
 import 'controller.dart';
+import 'dashboard_widgets.dart' show formatWidgetValue;
 import 'theme.dart';
 
 /// A chart widget of the dashboard (widgets.ChartWidget in Go): line and bar
@@ -25,6 +26,10 @@ class _AdminChartCardState extends State<AdminChartCard> {
   late String _filter = '${widget.dto['default_filter'] ?? ''}';
   bool _loading = false;
 
+  /// The label index (or slice) under the pointer; its values are shown
+  /// under the heading.
+  int? _selected;
+
   static Map<String, dynamic> _asMap(dynamic v) =>
       v is Map ? Map<String, dynamic>.from(v) : const {};
 
@@ -36,7 +41,12 @@ class _AdminChartCardState extends State<AdminChartCard> {
     try {
       final d = await widget.admin.api
           .get('/widgets/${widget.dto['id']}/data', {'filter': filter});
-      if (mounted) setState(() => _data = _asMap(d));
+      if (mounted) {
+        setState(() {
+          _data = _asMap(d);
+          _selected = null;
+        });
+      }
     } catch (_) {
       // keep the previous data
     } finally {
@@ -50,8 +60,22 @@ class _AdminChartCardState extends State<AdminChartCard> {
     final filters = widget.dto['filters'] is Map
         ? Map<String, dynamic>.from(widget.dto['filters'] as Map)
         : const <String, dynamic>{};
-    final keys = filters.keys.toList()..sort();
+    final order = widget.dto['filter_order'] is List
+        ? (widget.dto['filter_order'] as List)
+            .map((e) => '$e')
+            .where(filters.containsKey)
+            .toList()
+        : <String>[];
+    final keys = order.isNotEmpty ? order : (filters.keys.toList()..sort());
     final type = '${widget.dto['chart_type'] ?? 'line'}';
+    final format = '${widget.dto['value_format'] ?? ''}';
+    final currency = '${widget.dto['currency'] ?? ''}';
+    final description = '${widget.dto['description'] ?? ''}';
+    final height = ((widget.dto['max_height'] as num?)?.toDouble() ?? 240)
+        .clamp(160.0, 420.0);
+    String fmt(double v) =>
+        formatWidgetValue(v, format.isEmpty ? 'number' : format,
+            currency: currency);
     final labels =
         (_data['labels'] is List ? _data['labels'] as List : const [])
             .map((e) => '$e')
@@ -65,11 +89,32 @@ class _AdminChartCardState extends State<AdminChartCard> {
                       .map((v) => v is num ? v.toDouble() : 0.0)
                       .toList(),
                   _color(d['borderColor']) ?? _color(d['backgroundColor']),
+                  '${d['type'] ?? ''}',
                 ))
             .toList();
 
+    final sel = _selected;
+    String? readout;
+    if (sel != null && sel < labels.length) {
+      if (_isRound(type)) {
+        final vals = datasets.isEmpty ? <double>[] : datasets.first.values;
+        final total = vals.fold<double>(0, (a, b) => a + (b > 0 ? b : 0));
+        final v = sel < vals.length ? vals[sel] : 0.0;
+        readout = '${labels[sel]}: ${fmt(v)}'
+            '${total > 0 ? ' (${(v / total * 100).toStringAsFixed(1)}%)' : ''}';
+      } else {
+        readout = [
+          labels[sel],
+          for (final d in datasets)
+            if (sel < d.values.length)
+              '${d.label.isEmpty ? '' : '${d.label} '}${fmt(d.values[sel])}',
+        ].join(' · ');
+      }
+    }
+
     return Card(
       key: Key('chart-${widget.dto['id']}'),
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -87,6 +132,13 @@ class _AdminChartCardState extends State<AdminChartCard> {
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2)),
             ]),
+            if (description.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(description,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              ),
             if (keys.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -100,31 +152,65 @@ class _AdminChartCardState extends State<AdminChartCard> {
                     ),
                 ]),
               ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 18,
+              child: readout == null
+                  ? null
+                  : Text(readout,
+                      key: Key('chart-readout-${widget.dto['id']}'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 8),
             if (datasets.isEmpty || labels.isEmpty)
               Text(tr('No data yet.'),
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
             else
               SizedBox(
-                height: 220,
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: _ChartPainter(
-                    type: type,
-                    labels: labels,
-                    datasets: datasets,
-                    palette: [
-                      theme.colorScheme.primary,
-                      theme.colorScheme.tertiary,
-                      theme.colorScheme.secondary,
-                      Colors.orange,
-                      Colors.teal,
-                      Colors.pink,
-                    ],
-                    textStyle: theme.textTheme.bodySmall ?? const TextStyle(),
-                    grid: theme.dividerColor,
-                  ),
-                ),
+                height: height,
+                child: LayoutBuilder(builder: (context, box) {
+                  void pick(Offset p) {
+                    final i = _ChartPainter.indexAt(
+                        type, labels, datasets, Size(box.maxWidth, height), p);
+                    if (i != _selected) setState(() => _selected = i);
+                  }
+
+                  return MouseRegion(
+                    onHover: (e) => pick(e.localPosition),
+                    onExit: (_) => setState(() => _selected = null),
+                    child: GestureDetector(
+                      key: Key('chart-canvas-${widget.dto['id']}'),
+                      onTapDown: (d) => pick(d.localPosition),
+                      onHorizontalDragUpdate: (d) => pick(d.localPosition),
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: _ChartPainter(
+                          type: type,
+                          labels: labels,
+                          datasets: datasets,
+                          selected: _selected,
+                          axisLabel: (v) => format == 'percent'
+                              ? '${_ChartPainter.short(v)}%'
+                              : _ChartPainter.short(v),
+                          palette: [
+                            theme.colorScheme.primary,
+                            theme.colorScheme.tertiary,
+                            theme.colorScheme.secondary,
+                            Colors.orange,
+                            Colors.teal,
+                            Colors.pink,
+                          ],
+                          textStyle:
+                              theme.textTheme.bodySmall ?? const TextStyle(),
+                          grid: theme.dividerColor,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
               ),
             if (datasets.length > 1 || _isRound(type))
               Padding(
@@ -170,10 +256,13 @@ bool _isRound(String type) =>
     const {'pie', 'doughnut', 'polarArea', 'radar'}.contains(type);
 
 class _Dataset {
-  _Dataset(this.label, this.values, this.color);
+  _Dataset(this.label, this.values, this.color, [this.kind = '']);
   final String label;
   final List<double> values;
   final Color? color;
+
+  /// "bar" or "line" to mix series on one chart; "" follows the chart type.
+  final String kind;
 }
 
 class _ChartPainter extends CustomPainter {
@@ -184,11 +273,47 @@ class _ChartPainter extends CustomPainter {
     required this.palette,
     required this.textStyle,
     required this.grid,
-  });
+    this.selected,
+    String Function(double)? axisLabel,
+  }) : axisLabel = axisLabel ?? short;
 
   final String type;
   final List<String> labels;
   final List<_Dataset> datasets;
+  final int? selected;
+  final String Function(double) axisLabel;
+
+  static const _left = 44.0, _bottom = 22.0;
+
+  /// The label index under [p] (axes) or the slice under it (round charts).
+  static int? indexAt(String type, List<String> labels, List<_Dataset> datasets,
+      Size size, Offset p) {
+    if (labels.isEmpty) return null;
+    if (_isRound(type)) {
+      final c = size.center(Offset.zero);
+      final radius = math.min(size.width, size.height) / 2;
+      final d = p - c;
+      if (d.distance > radius || datasets.isEmpty) return null;
+      final values = datasets.first.values;
+      final total = values.fold<double>(0, (a, b) => a + (b > 0 ? b : 0));
+      if (total <= 0) return null;
+      var angle = math.atan2(d.dy, d.dx) + math.pi / 2;
+      if (angle < 0) angle += 2 * math.pi;
+      var start = 0.0;
+      for (var i = 0; i < values.length; i++) {
+        if (values[i] <= 0) continue;
+        final sweep = values[i] / total * 2 * math.pi;
+        if (angle >= start && angle < start + sweep) return i;
+        start += sweep;
+      }
+      return null;
+    }
+    final width = size.width - _left;
+    if (p.dx < _left || width <= 0) return null;
+    final i = ((p.dx - _left) / (width / labels.length)).floor();
+    return i.clamp(0, labels.length - 1);
+  }
+
   final List<Color> palette;
   final TextStyle textStyle;
   final Color grid;
@@ -230,7 +355,7 @@ class _ChartPainter extends CustomPainter {
   }
 
   void _paintAxes(Canvas canvas, Size size) {
-    const left = 40.0, bottom = 22.0;
+    const left = _left, bottom = _bottom;
     final plot = Rect.fromLTRB(left, 4, size.width, size.height - bottom);
     var maxV = 0.0, minV = 0.0;
     for (final d in datasets) {
@@ -250,7 +375,7 @@ class _ChartPainter extends CustomPainter {
       final v = minV + (maxV - minV) * i / 4;
       final yy = y(v);
       canvas.drawLine(Offset(plot.left, yy), Offset(plot.right, yy), gridPaint);
-      _text(canvas, _short(v), Offset(0, yy - 7), left - 6, TextAlign.right);
+      _text(canvas, axisLabel(v), Offset(0, yy - 7), left - 6, TextAlign.right);
     }
 
     final n = labels.length;
@@ -261,13 +386,25 @@ class _ChartPainter extends CustomPainter {
           step * every, TextAlign.center);
     }
 
-    if (type == 'bar') {
+    if (selected != null && selected! < n) {
+      canvas.drawRect(
+          Rect.fromLTWH(
+              plot.left + step * selected!, plot.top, step, plot.height),
+          Paint()..color = grid.withValues(alpha: 0.35));
+    }
+    bool isBar(_Dataset d) => d.kind.isEmpty ? type == 'bar' : d.kind == 'bar';
+    final bars = [
+      for (var d = 0; d < datasets.length; d++)
+        if (isBar(datasets[d])) d
+    ];
+    if (bars.isNotEmpty) {
       final groupW = step * 0.8;
-      final barW = groupW / datasets.length;
-      for (var d = 0; d < datasets.length; d++) {
+      final barW = groupW / bars.length;
+      for (var b = 0; b < bars.length; b++) {
+        final d = bars[b];
         final paint = Paint()..color = _color(d);
         for (var i = 0; i < math.min(n, datasets[d].values.length); i++) {
-          final x = plot.left + step * i + step * 0.1 + barW * d;
+          final x = plot.left + step * i + step * 0.1 + barW * b;
           final v = datasets[d].values[i];
           canvas.drawRect(
               Rect.fromLTRB(x, math.min(y(v), y(0)), x + barW * 0.9,
@@ -275,9 +412,9 @@ class _ChartPainter extends CustomPainter {
               paint);
         }
       }
-      return;
     }
     for (var d = 0; d < datasets.length; d++) {
+      if (isBar(datasets[d])) continue;
       final paint = Paint()
         ..color = _color(d)
         ..strokeWidth = 2
@@ -297,7 +434,7 @@ class _ChartPainter extends CustomPainter {
     }
   }
 
-  String _short(double v) {
+  static String short(double v) {
     final a = v.abs();
     if (a >= 1e6) return '${(v / 1e6).toStringAsFixed(1)}M';
     if (a >= 1e3) return '${(v / 1e3).toStringAsFixed(1)}k';
@@ -318,5 +455,8 @@ class _ChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ChartPainter old) =>
-      old.type != type || old.labels != labels || old.datasets != datasets;
+      old.type != type ||
+      old.labels != labels ||
+      old.datasets != datasets ||
+      old.selected != selected;
 }

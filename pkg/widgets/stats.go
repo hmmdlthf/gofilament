@@ -3,6 +3,7 @@ package widgets
 import (
 	"fmt"
 	"html"
+	"math"
 	"strings"
 
 	"github.com/golaravel/gofilament/pkg/filament"
@@ -16,7 +17,11 @@ type Stat struct {
 	descriptionIcon string
 	color           string // success, danger, warning, primary, gray
 	chart           []int
-	url             string // click-through drilldown URL
+	values          []float64 // trend line (ChartValues); takes precedence over chart
+	url             string    // click-through drilldown URL
+	change          *float64  // % change against the comparison period
+	changeCaption   string    // e.g. "vs last week"
+	lowerIsBetter   bool      // a fall is good news (costs, returns, overdue)
 }
 
 // NewStat creates a new KPI stat metric.
@@ -48,9 +53,49 @@ func (s *Stat) Chart(data []int) *Stat {
 	return s
 }
 
+// ChartValues sets the stat's trend line from any numbers (amounts, not
+// only counts). It replaces Chart.
+func (s *Stat) ChartValues(values []float64) *Stat {
+	s.values = values
+	return s
+}
+
 func (s *Stat) URL(u string) *Stat {
 	s.url = u
 	return s
+}
+
+// Change shows the percentage change against a comparison period, e.g.
+// Change(12.5, "vs last week") draws "+12.5% vs last week" with an up arrow.
+func (s *Stat) Change(percent float64, caption ...string) *Stat {
+	s.change = &percent
+	if len(caption) > 0 {
+		s.changeCaption = caption[0]
+	}
+	return s
+}
+
+// ChangeBetween computes the change from previous to current. Nothing is
+// shown when previous is zero (there is nothing to compare with).
+func (s *Stat) ChangeBetween(current, previous float64, caption ...string) *Stat {
+	if previous == 0 {
+		return s
+	}
+	return s.Change((current-previous)/math.Abs(previous)*100, caption...)
+}
+
+// LowerIsBetter colours a fall green and a rise red (costs, returns, debts).
+func (s *Stat) LowerIsBetter() *Stat {
+	s.lowerIsBetter = true
+	return s
+}
+
+// GetChange returns the percentage change, if one was set.
+func (s *Stat) GetChange() (float64, bool) {
+	if s.change == nil {
+		return 0, false
+	}
+	return *s.change, true
 }
 
 func (s *Stat) GetLabel() string {
@@ -65,14 +110,39 @@ func (s *Stat) GetURL() string {
 	return s.url
 }
 
+// trend is the stat's trend line as numbers.
+func (s *Stat) trend() []float64 {
+	if len(s.values) > 0 {
+		return s.values
+	}
+	out := make([]float64, 0, len(s.chart))
+	for _, v := range s.chart {
+		out = append(out, float64(v))
+	}
+	return out
+}
+
+// changeText is the change as shown, e.g. "+12.5% vs last week".
+func (s *Stat) changeText() string {
+	if s.change == nil {
+		return ""
+	}
+	t := fmt.Sprintf("%+.1f%%", *s.change)
+	if s.changeCaption != "" {
+		t += " " + s.changeCaption
+	}
+	return t
+}
+
 func (s *Stat) renderSparkline() string {
-	if len(s.chart) < 2 {
+	values := s.trend()
+	if len(values) < 2 {
 		return ""
 	}
 
-	minVal := s.chart[0]
-	maxVal := s.chart[0]
-	for _, v := range s.chart {
+	minVal := values[0]
+	maxVal := values[0]
+	for _, v := range values {
 		if v < minVal {
 			minVal = v
 		}
@@ -87,13 +157,13 @@ func (s *Stat) renderSparkline() string {
 
 	width := 120
 	height := 36
-	step := float64(width) / float64(len(s.chart)-1)
+	step := float64(width) / float64(len(values)-1)
 
 	var points []string
-	for i, v := range s.chart {
+	for i, v := range values {
 		x := float64(i) * step
 		// Invert y because SVG y goes downwards
-		normalized := float64(v-minVal) / float64(diff)
+		normalized := (v - minVal) / diff
 		y := float64(height) - (normalized * float64(height-6)) - 3
 		points = append(points, fmt.Sprintf("%.1f,%.1f", x, y))
 	}
@@ -144,8 +214,11 @@ func (w *StatsOverviewWidget) EvaluateStatsMap(ctx *filament.Context) []map[stri
 			"description":      s.description,
 			"description_icon": s.descriptionIcon,
 			"color":            s.color,
-			"chart":            s.chart,
+			"chart":            s.trend(),
 			"url":              s.url,
+			"change":           s.change,
+			"change_caption":   s.changeCaption,
+			"lower_is_better":  s.lowerIsBetter,
 		})
 	}
 	return result
@@ -180,8 +253,17 @@ func (w *StatsOverviewWidget) Render(ctx *filament.Context) string {
 		}
 
 		descHTML := ""
+		if c := s.changeText(); c != "" {
+			good := (*s.change >= 0) != s.lowerIsBetter
+			changeColor := "text-emerald-600"
+			if !good {
+				changeColor = "text-red-500"
+			}
+			descHTML += fmt.Sprintf(`<div style="margin-top: 0.25rem; font-size: 0.8125rem;" class="%s">%s</div>`,
+				changeColor, html.EscapeString(c))
+		}
 		if s.description != "" {
-			descHTML = fmt.Sprintf(`<div style="margin-top: 0.5rem; font-size: 0.8125rem;" class="%s">%s</div>`,
+			descHTML += fmt.Sprintf(`<div style="margin-top: 0.5rem; font-size: 0.8125rem;" class="%s">%s</div>`,
 				colorClass, html.EscapeString(s.description))
 		}
 

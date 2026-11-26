@@ -5,14 +5,16 @@ import 'api.dart';
 import 'chart.dart';
 import 'components.dart';
 import 'controller.dart';
-import 'icons.dart';
-import 'theme.dart';
+import 'dashboard_widgets.dart';
 
 /// The panel dashboard: the widgets registered on the server.
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key, required this.admin});
+  const DashboardPage({super.key, required this.admin, this.onOpen});
 
   final AdminController admin;
+
+  /// Opens a panel URL from a stat card, table row, quick action or banner.
+  final DashboardOpen? onOpen;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -53,6 +55,46 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  /// Widgets in their `sort` order (stable for equal values).
+  static List<Map<String, dynamic>> _sorted(List<Map<String, dynamic>> ws) {
+    final indexed = [for (var i = 0; i < ws.length; i++) (i, ws[i])];
+    int sortOf(Map<String, dynamic> w) =>
+        w['sort'] is num ? (w['sort'] as num).toInt() : 0;
+    indexed.sort((a, b) {
+      final c = sortOf(a.$2).compareTo(sortOf(b.$2));
+      return c != 0 ? c : a.$1.compareTo(b.$1);
+    });
+    return [for (final e in indexed) e.$2];
+  }
+
+  Widget _widget(Map<String, dynamic> w) {
+    final open = widget.onOpen;
+    switch ('${w['type'] ?? ''}') {
+      case 'chart':
+        return AdminChartCard(
+            key: ValueKey('chart-card-${w['id']}'),
+            admin: widget.admin,
+            dto: w);
+      case 'table':
+        return DashboardTable(dto: w, onOpen: open);
+      case 'breakdown':
+        return DashboardBreakdown(dto: w);
+      case 'progress':
+        return DashboardProgress(dto: w);
+      case 'quick_actions':
+        return DashboardQuickActions(dto: w, onOpen: open);
+      case 'banner':
+        return DashboardBanner(dto: w, onOpen: open);
+      case 'custom':
+        return _CustomWidget(admin: widget.admin, dto: w);
+    }
+    if (w['stats'] is List) {
+      return DashboardStatsRow(
+          stats: (w['stats'] as List).whereType<Map>().toList(), onOpen: open);
+    }
+    return const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -80,18 +122,10 @@ class _DashboardPageState extends State<DashboardPage> {
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 20),
-          for (final w in _widgets!) ...[
-            if (w['stats'] is List)
-              _StatsRow(stats: (w['stats'] as List).whereType<Map>().toList()),
-            if (w['type'] == 'custom')
-              _CustomWidget(admin: widget.admin, dto: w),
-            if (w['type'] == 'chart')
-              AdminChartCard(
-                  key: ValueKey('chart-card-${w['id']}'),
-                  admin: widget.admin,
-                  dto: w),
-            const SizedBox(height: 16),
-          ],
+          DashboardGrid(
+            widgets: _sorted(_widgets!),
+            builder: (w) => _widget(w),
+          ),
           if (_widgets!.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 40),
@@ -102,91 +136,6 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _StatsRow extends StatelessWidget {
-  const _StatsRow({required this.stats});
-
-  final List<Map> stats;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, c) {
-      final columns = c.maxWidth >= 1100 ? 4 : (c.maxWidth >= 620 ? 2 : 1);
-      const gap = 14.0;
-      final width = (c.maxWidth - gap * (columns - 1)) / columns;
-      return Wrap(
-        spacing: gap,
-        runSpacing: gap,
-        children: [
-          for (final s in stats)
-            SizedBox(width: width, child: _StatCard(stat: s))
-        ],
-      );
-    });
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.stat});
-
-  final Map stat;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final palette = AdminPalette.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    final role = '${stat['color'] ?? 'primary'}';
-    final color = palette.color(role, dark ? 400 : 600);
-    final description = '${stat['description'] ?? ''}';
-    final iconName = '${stat['description_icon'] ?? ''}';
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Container(
-                width: 8,
-                height: 8,
-                decoration:
-                    BoxDecoration(color: color, shape: BoxShape.circle)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text('${stat['label'] ?? ''}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600)),
-            ),
-          ]),
-          const SizedBox(height: 10),
-          Text('${stat['value'] ?? ''}',
-              style: theme.textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          if (description.isEmpty) const SizedBox(height: 22),
-          if (description.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Row(children: [
-              if (iconName.isNotEmpty) ...[
-                Icon(adminIcon(iconName, fallback: Icons.info_outline),
-                    size: 14, color: color),
-                const SizedBox(width: 4),
-              ],
-              Expanded(
-                child: Text(description,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(color: color)),
-              ),
-            ]),
-          ],
-        ]),
       ),
     );
   }
@@ -216,6 +165,7 @@ class _CustomWidget extends StatelessWidget {
     }
     return Card(
       key: Key('widget-${dto['id']}'),
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

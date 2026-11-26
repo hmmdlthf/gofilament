@@ -27,10 +27,20 @@ Duration jobPollInterval = const Duration(seconds: 1);
 
 class ResourceListPage extends StatefulWidget {
   const ResourceListPage(
-      {super.key, required this.admin, required this.slug, this.openRecord});
+      {super.key,
+      required this.admin,
+      required this.slug,
+      this.openRecord,
+      this.initialFilters = const {},
+      this.initialSearch = ''});
 
   final AdminController admin;
   final String slug;
+
+  /// Filters (name -> value) and search to start with, e.g. from a dashboard
+  /// link.
+  final Map<String, String> initialFilters;
+  final String initialSearch;
 
   /// Opens this record's form once the list is shown ("new" = create form).
   final String? openRecord;
@@ -449,6 +459,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
     _perPage = (_resource['per_page'] as num?)?.toInt() ?? 25;
     _group = '${_resource['default_group'] ?? ''}';
     if (!_groups.contains(_group)) _group = '';
+    _filters.addAll(widget.initialFilters);
+    if (widget.initialSearch.isNotEmpty) _search.text = widget.initialSearch;
     _loadColumnChoice();
     _loadWidths();
     _loadViews();

@@ -987,6 +987,57 @@ adminPanel.Widgets(
 
 ---
 
+### Dashboard layout, stat changes and chart formats
+
+The dashboard is a grid **three columns wide** (two on tablets, one on phones), in the web panel and the Flutter admin alike. Each widget takes `Span(n)` columns and widgets fill the rows in `Order(n)` order. Stat rows and banners take the whole width when no span is set.
+
+```go
+adminPanel.Widgets(
+    widgets.NewStatsOverviewWidget(func(ctx *filament.Context) []widgets.Stat {
+        return []widgets.Stat{
+            *widgets.NewStat("Sales today", "LKR 125,400.00").
+                ChangeBetween(125400, 111800, "vs last Tuesday"). // "+12.2% vs last Tuesday", green
+                ChartValues(last14Days).                          // trend line from any numbers
+                URL("/app/resources/sales?filter_status=paid"),   // tapping opens the filtered list
+            *widgets.NewStat("Returns", "LKR 3,200.00").Change(8, "vs yesterday").LowerIsBetter(), // a rise is red
+        }
+    }).Order(1),
+
+    widgets.NewChartWidget("Profit and loss", widgets.ChartTypeBar).
+        Description("Last 12 months").
+        Money("LKR").                                   // axis and tooltips as amounts (or ValueFormat(widgets.FormatPercent))
+        Filters(map[string]string{"7d": "7 days", "30d": "30 days", "12m": "12 months"}).
+        FilterOrder("7d", "30d", "12m").                // button order (otherwise sorted by key)
+        DefaultFilter("12m").
+        Span(2).Order(2).
+        FilterData(func(ctx *filament.Context, period string) widgets.ChartData {
+            return widgets.ChartData{Labels: months, Datasets: []widgets.ChartDataset{
+                {Label: "Income", Data: income},
+                {Label: "Expenses", Data: expenses},
+                {Label: "Net", Type: "line", Data: net}, // bars and a line on one chart
+            }}
+        }),
+
+    widgets.NewTableWidget("Top products").Span(1).Order(3).
+        EmptyText("No sales yet").
+        Columns(
+            widgets.TableWidgetColumn{Name: "name", Label: "Product"},
+            widgets.TableWidgetColumn{Name: "revenue", Label: "Revenue", Format: "money"}, // number, money, percent
+        ).
+        Rows(func(ctx *filament.Context) []map[string]any {
+            return []map[string]any{{"name": "Rice 5kg", "revenue": 125000.5, widgets.RowURL: "/app/resources/products/12"}}
+        }),
+)
+```
+
+- **Stats**: `Change(percent, caption)` or `ChangeBetween(current, previous, caption)` (left out when the previous figure is zero), `LowerIsBetter()`, `ChartValues([]float64)` (or `Chart([]int)`), `URL(...)`.
+- **Charts**: `Money(currency)` / `ValueFormat(...)`, `FilterOrder(...)`, `Description(...)`, and per-dataset `Type: "bar"` or `"line"`. In the Flutter admin, hovering or tapping shows the values at that point, or a slice's value and share.
+- **Tables**: column `Format` and `Align`, `Description`, `EmptyText`. A row with `widgets.RowURL` opens it.
+- **Links** (stat `URL`, table rows, quick actions, banner actions) are panel URLs such as `/app/resources/orders?filter_status=paid&search=rice` or `orders/42`. The Flutter admin opens the resource with those filters (`filter_<name>=` or `filters[<name>]=`) and the search.
+- **Every widget** has `Span`, `Order` and `Visible(fn)`, and most have `Key(id)`. In the Flutter admin, tables, breakdowns, progress meters, quick actions and banners are drawn as well as stats and charts. A dismissible banner can be closed for the visit.
+
+---
+
 ## 11. Activity Log & Audit Trail Timeline (`pkg/activitylog`)
 
 GoFilament provides an enterprise audit trail system with zero boilerplate:

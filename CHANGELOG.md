@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Dashboard grid in the Flutter admin**: widgets are laid out three columns wide (two on tablets, one on phones) by their span, as in the web panel, instead of one per row. `Span(n)`, `Order(n)`, `Visible(fn)` and `Key(id)` are on every widget.
+- **Stat changes and trend lines**: `Stat.Change(percent, caption)` / `ChangeBetween(current, previous, caption)` show "+12.5% vs last week" with an arrow. The colour follows `LowerIsBetter()`. `ChartValues([]float64)` draws a trend line from amounts. The Flutter admin now shows the trend line, and a stat with a `URL` opens it.
+- **Chart formats and mixed series**: `ChartWidget.Money(currency)` / `ValueFormat(FormatMoney | FormatPercent | FormatNumber)` format the axis and tooltips, `FilterOrder(...)` orders the period buttons, and a dataset's `Type: "bar"` or `"line"` mixes bars and a line on one chart. The chart's `Description` is sent to clients. In the Flutter admin, hovering or tapping a chart shows the values at that point (a slice's value and share on pie and doughnut charts).
+- **Table widget**: column `Format` (number, money, percent) and `Align`, `Description`, `EmptyText`, and rows that open a link (`widgets.RowURL`). An empty table is sent as `[]`.
+- **Flutter admin draws every dashboard widget type**: tables, breakdowns, progress meters, quick actions and banners, as well as stats and charts. `DashboardCard`, `dashboardColor` and `formatWidgetValue` are exported for custom widgets.
+- **Links with filters**: panel URLs opened by the Flutter admin (dashboard links, notifications, global search) carry `filter_<name>=` / `filters[<name>]=` and `search=` to the resource list.
+- **Demo dashboard** uses the grid, the stat changes, money formatting and order links.
+
 ## [v1.43.1] - 2026-11-25
 
 ### Fixed

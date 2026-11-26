@@ -42,6 +42,11 @@ class _AdminShellState extends State<AdminShell> {
   /// ("new" opens the create form).
   String? _pendingRecord;
 
+  /// Filters and search a link carried (`?filter_status=open&search=x`),
+  /// applied once to the list it opens.
+  Map<String, String> _pendingQuery = const {};
+  int _listGeneration = 0;
+
   @override
   void initState() {
     super.initState();
@@ -53,7 +58,6 @@ class _AdminShellState extends State<AdminShell> {
     admin.setSidebarMode(
         modes[(modes.indexOf(admin.sidebarMode) + 1) % modes.length]);
   }
-
 
   /// Deep links: `#/resources/<slug>[/<id>|/new]` and `#/pages/<id>`, so a
   /// refresh or a shared link lands on the same screen.
@@ -100,7 +104,9 @@ class _AdminShellState extends State<AdminShell> {
   /// Opens a panel URL from the server (`<panel>/<slug>[/<id>[/edit]]` or a
   /// page): global search results, notifications.
   void openUrl(String url) {
-    var path = Uri.tryParse(url)?.path ?? url;
+    final uri = Uri.tryParse(url);
+    var path = uri?.path ?? url;
+    final query = uri?.queryParameters ?? const <String, String>{};
     final base = '${admin.schema['path'] ?? ''}';
     if (base.isNotEmpty && path.startsWith(base)) {
       path = path.substring(base.length);
@@ -117,6 +123,8 @@ class _AdminShellState extends State<AdminShell> {
         _pendingRecord = parts.length >= 2 && parts[1] != 'create'
             ? (parts[1] == 'new' ? 'new' : parts[1])
             : null;
+        _pendingQuery = query;
+        _listGeneration++;
       });
       _publishLocation();
       return;
@@ -212,8 +220,15 @@ class _AdminShellState extends State<AdminShell> {
       if (admin.resource(slug) != null) {
         final open = _pendingRecord;
         _pendingRecord = null;
+        final query = _pendingQuery;
+        _pendingQuery = const {};
         return ResourceListPage(
-            key: ValueKey(slug), admin: admin, slug: slug, openRecord: open);
+            key: ValueKey(query.isEmpty ? slug : '$slug#$_listGeneration'),
+            admin: admin,
+            slug: slug,
+            openRecord: open,
+            initialFilters: linkFilters(query),
+            initialSearch: query['search'] ?? '');
       }
     }
     if (_current.startsWith('page:')) {
@@ -221,7 +236,7 @@ class _AdminShellState extends State<AdminShell> {
           .where((p) => 'page:${p.id}' == _current && admin.canOpenPage(p));
       if (page.isNotEmpty) return page.first.builder(context, admin);
     }
-    return DashboardPage(admin: admin);
+    return DashboardPage(admin: admin, onOpen: openUrl);
   }
 
   @override
@@ -364,8 +379,7 @@ class _Sidebar extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Tooltip(
-            message: admin.brandName,
-            child: BrandMark(admin: admin, size: 34)),
+            message: admin.brandName, child: BrandMark(admin: admin, size: 34)),
       ),
       const Divider(),
       Expanded(
@@ -633,4 +647,20 @@ class _TopBar extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// The list filters a panel link carries: `filter_<name>=value` or
+/// `filters[<name>]=value`.
+Map<String, String> linkFilters(Map<String, String> query) {
+  final out = <String, String>{};
+  final bracket = RegExp(r'^filters\[(.+)\]$');
+  for (final e in query.entries) {
+    if (e.key.startsWith('filter_')) {
+      out[e.key.substring(7)] = e.value;
+    } else {
+      final m = bracket.firstMatch(e.key);
+      if (m != null) out[m.group(1)!] = e.value;
+    }
+  }
+  return out;
 }
