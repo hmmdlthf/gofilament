@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.46.2] - 2026-11-27
+
+### Changed
+- **golaravel v1.21.0** (from v1.19.0). Nothing changes in gofilament; the new golaravel releases add Flutter offline sync, the features endpoint with TypeScript and Flutter feature clients, offline sync tests on MySQL and Postgres, and `artisan make:syncable`.
+
 ## [v1.46.1] - 2026-11-27
 
 ### Security
