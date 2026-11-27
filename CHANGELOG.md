@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **`Context.Tenant()` fails closed.** It used to fall back to the raw `:tenant` path segment (and to a tenant left in the request context) when the panel had refused that tenant, because no `TenantLoader` entry matched or `CanAccessTenant` said no. Code trusting it could then act on another tenant: `/admin/initech/...` worked for a user outside `initech`. It now returns only the tenant the panel resolved and checked (or `CurrentTenant` / `SetTenant` set); a refused or unknown tenant gives `""`, and the request context's `privacy` tenant is cleared too, so ORM queries scoped by it fail closed as well. On a panel without `Tenancy`, the tenant set by middleware (`privacy.WithTenantID`) is still used as before.
+- New `Context.RequestedTenant()` returns the raw, unchecked key (path, cookie, header, subdomain or middleware) for display or redirects only.
+- **Roles**: a binding in one tenant gives no power to grant or revoke roles there unless the panel lets the user use that tenant, so a leftover binding in a tenant the user has left can't be used to hand out roles in it. Bindings for every tenant (`*`) are unaffected.
+- **Support tickets**: on a tenant-scoped panel (`TenantAdminSupport`, `TenantScoping`), staff with no allowed tenant now see no tickets instead of every tenant's, cannot pick another tenant with `?tenant_id=` (super admin panels still can), and the support resource answers 404 for another tenant's ticket opened by ID.
+- Upgrade note: on a panel with `Tenancy`, a tenant that only middleware put in the request context is now a candidate like a cookie, and needs a `TenantLoader`, `CanAccessTenant` or `CurrentTenant` to accept it.
+
 ## [v1.46.0] - 2026-11-27
 
 ### Added

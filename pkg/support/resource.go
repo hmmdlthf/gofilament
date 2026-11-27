@@ -352,11 +352,15 @@ func NewSupportResource(opts ...SupportResourceOption) *filament.BaseResource[*T
 			Department: filters["department"],
 		}
 
-		// Auto-scope by tenant if in Tenant Admin mode or TenantScoping is enabled
-		if (cfg.Scope == ScopeTenantAdmin || cfg.TenantScoping) && ctx != nil {
-			if tenant := ctx.Tenant(); tenant != "" {
-				filter.TenantID = tenant
+		// Auto-scope by tenant if in Tenant Admin mode or TenantScoping is
+		// enabled. Without a tenant the panel allowed, list nothing: an
+		// empty TenantID would otherwise mean every tenant's tickets.
+		if tenantScoped(cfg) {
+			tenant := ctx.Tenant()
+			if tenant == "" {
+				return nil, 0, nil
 			}
+			filter.TenantID = tenant
 		}
 
 		list, err := cfg.Store.ListTickets(c, filter)
@@ -388,7 +392,15 @@ func NewSupportResource(opts ...SupportResourceOption) *filament.BaseResource[*T
 		if ctx != nil && ctx.Request != nil {
 			c = ctx.Request.Context()
 		}
-		return cfg.Store.GetTicket(c, id)
+		t, err := cfg.Store.GetTicket(c, id)
+		if err != nil {
+			return nil, err
+		}
+		// Another tenant's ticket is "not found", like a missing one.
+		if tenantScoped(cfg) && (t == nil || ctx.Tenant() == "" || t.TenantID != ctx.Tenant()) {
+			return nil, filament.ErrRecordNotFound
+		}
+		return t, nil
 	})
 
 	// Detailed View Representation with Audio Player & Transcripts
@@ -443,4 +455,10 @@ func RenderVoicePlayerHTML(vr *VoiceRecording) string {
 </div>`, dataURI, html.EscapeString(vr.MimeType), dur, strings.ToUpper(vr.Language))
 	}
 	return fmt.Sprintf(`<span>🎙️ Audio (%s • %s)</span>`, dur, strings.ToUpper(vr.Language))
+}
+
+// tenantScoped reports whether the support resource shows only the active
+// tenant's tickets.
+func tenantScoped(cfg *SupportResourceConfig) bool {
+	return cfg.Scope == ScopeTenantAdmin || cfg.TenantScoping
 }

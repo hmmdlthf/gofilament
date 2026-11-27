@@ -22,7 +22,7 @@ func (p *Panel) canGrant(ctx *Context, role RoleDef, panel, tenant string) bool 
 	if p.roles == nil || u == nil {
 		return false
 	}
-	mine := p.permissionsAt(ctx, u.GetAuthIdentifier(), panel, tenant)
+	mine := p.grantPermissionsAt(ctx, u.GetAuthIdentifier(), panel, tenant)
 	if mine["*"] || mine[PermManageRoles] {
 		return true
 	}
@@ -35,6 +35,21 @@ func (p *Panel) canGrant(ctx *Context, role RoleDef, panel, tenant string) bool 
 		}
 	}
 	return true
+}
+
+// grantPermissionsAt is permissionsAt for giving roles in tenant. A binding
+// for that one tenant counts only while the panel lets the user use the
+// tenant (the active one, or one its TenantLoader / CanAccessTenant allows):
+// a leftover binding in a tenant the user has left gives no power there.
+// Bindings for every tenant ("*") always count.
+func (p *Panel) grantPermissionsAt(ctx *Context, userID, panel, tenant string) map[string]bool {
+	if tenant == AnyScope || !p.tenancyEnabled() || tenant == ctx.Tenant() {
+		return p.permissionsAt(ctx, userID, panel, tenant)
+	}
+	if _, ok := p.tenantAllowed(ctx, tenant); ok {
+		return p.permissionsAt(ctx, userID, panel, tenant)
+	}
+	return p.permissionsAt(ctx, userID, panel, AnyScope)
 }
 
 // managerEverywhere reports whether userID can manage roles in every panel
