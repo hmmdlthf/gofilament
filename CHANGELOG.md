@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.45.0] - 2026-11-27
+
 ### Added
 - **Flutter admin sized for phones, tablets and desktops**: one set of breakpoints (`AdminFormFactor`: phone under 600px, tablet under 1024px, desktop) and per-layout sizes (`AdminSizes`: top bar, control and search heights, icon buttons, padding, font sizes) carried by the theme. `buildAdminTheme` takes a `formFactor`, and the app rebuilds its theme when the window crosses a breakpoint. Inputs, buttons and icon buttons are no longer phone-tall on every screen.
 - **Account hub**: the top bar avatar opens a page (on phones) or a dialog (tablets and desktops) with the signed-in user, Your account, Settings, Roles, the workspace (tenant), appearance, language and sign out (with a confirmation). Settings and Your account open the same way. `showAdaptivePage`, `showAdaptiveSheet` and `AdaptiveDialog` are exported.
