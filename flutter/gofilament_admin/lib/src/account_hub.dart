@@ -5,6 +5,7 @@ import 'controller.dart';
 import 'i18n.dart';
 import 'responsive.dart';
 import 'roles_screen.dart';
+import 'tenant_settings_screen.dart';
 import 'settings.dart';
 import 'theme.dart';
 
@@ -101,6 +102,14 @@ class _AccountHubState extends State<AccountHub> {
     await admin.logout();
   }
 
+  /// The schema's tenant_settings, when the user may change them.
+  Map<String, dynamic>? get _tenantSettings {
+    final ts = admin.schema['tenant_settings'];
+    return ts is Map && ts['enabled'] == true && ts['path'] != null
+        ? Map<String, dynamic>.from(ts)
+        : null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -141,6 +150,20 @@ class _AccountHubState extends State<AccountHub> {
               onTap: () => _open((c) => Navigator.of(c).push(
                   MaterialPageRoute<void>(
                       builder: (_) => RolesScreen(api: admin.api)))),
+            ),
+          if (_tenantSettings != null)
+            _NavCard(
+              key: const Key('account-menu-tenant-settings'),
+              icon: Icons.tune_outlined,
+              color: palette.color('warning'),
+              title: '${_tenantSettings!['label'] ?? tr('Settings')}',
+              subtitle: tr('Change how this workspace works'),
+              onTap: () => _open((c) => Navigator.of(c).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) => TenantSettingsScreen(
+                          api: admin.api,
+                          path: '${_tenantSettings!['path']}',
+                          title: '${_tenantSettings!['label'] ?? ''}')))),
             ),
           if (_tenants.length > 1) ...[
             _Heading(tr('Workspace')),

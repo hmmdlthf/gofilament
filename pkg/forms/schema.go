@@ -105,6 +105,9 @@ type Node struct {
 func Describe(ctx context.Context, components []Component) []Node {
 	nodes := make([]Node, 0, len(components))
 	for _, c := range components {
+		if !gateAllows(ctx, c) {
+			continue
+		}
 		if n, ok := describe(ctx, c); ok {
 			n.VisibleWhen = conditionOf(c)
 			nodes = append(nodes, n)

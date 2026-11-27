@@ -104,6 +104,13 @@ class FakePanel {
   /// Extra JSON routes keyed by "METHOD /path" (path without /app/api).
   Map<String, Object Function(http.Request req)> extraRoutes = {};
 
+  /// Status codes for extra routes (default 200), keyed like extraRoutes.
+  /// Read after the route runs, so a route can set its own status.
+  Map<String, int> extraStatus = {};
+
+  /// The schema's tenant_settings entry (Panel.Features), if any.
+  Map<String, dynamic>? tenantSettings;
+
   bool globalSearch = false;
 
   /// Tenants offered by /tenants; the active one follows X-Tenant-ID.
@@ -166,7 +173,10 @@ class FakePanel {
     final path = req.url.path.replaceFirst('/app/api', '');
     final authed = req.headers['Authorization'] == 'Bearer token-1';
     final extra = extraRoutes['${req.method} $path'];
-    if (extra != null && authed) return _json(extra(req));
+    if (extra != null && authed) {
+      final body = extra(req);
+      return _json(body, extraStatus['${req.method} $path'] ?? 200);
+    }
 
     if (path == '/boot') {
       return _json({
@@ -718,6 +728,7 @@ class FakePanel {
         if (tenants.isNotEmpty) 'tenancy': true,
         if (tenants.isNotEmpty) 'tenant': activeTenant,
         'manage_roles': manageRoles,
+        if (tenantSettings != null) 'tenant_settings': tenantSettings,
         'notifications': notificationsOn,
         'saved_views': savedViews,
         'background_jobs': backgroundJobs,

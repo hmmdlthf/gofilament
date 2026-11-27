@@ -67,8 +67,8 @@ func (r *BaseResource[T]) authorizeRecord(ctx *Context, id string, check func(ct
 
 // editableColumn reports whether name is an editable column of the table and
 // returns its options (select columns).
-func (r *BaseResource[T]) editableColumn(name string) (bool, map[string]string) {
-	for _, c := range r.GetColumns() {
+func (r *BaseResource[T]) editableColumn(ctx *Context, name string) (bool, map[string]string) {
+	for _, c := range r.ColumnsFor(ctx) {
 		if c.Name == name && c.Editable {
 			return true, c.Options
 		}

@@ -37,7 +37,7 @@ func (r *BaseResource[T]) ListFacets(ctx *Context, search string, filters map[st
 	if r.tableBuilder == nil {
 		return nil
 	}
-	tbl := r.tableBuilder(tables.New[T]())
+	tbl := r.table(ctx)
 	var out map[string]map[string]int
 	for _, f := range tbl.GetFilters() {
 		if f.GetType() != tables.FilterTypeRefined {

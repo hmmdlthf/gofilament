@@ -1,6 +1,7 @@
 package tables
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"reflect"
@@ -58,6 +59,8 @@ type Table[T any] struct {
 	defaultGroup              string
 	activeGroup               string
 	totals                    Summaries
+	ctx                       context.Context
+	hasGates                  bool
 }
 
 // New creates an empty Table instance.
@@ -173,6 +176,7 @@ func (t *Table[T]) DefaultColumns(cols ...string) *Table[T] {
 
 // GetDefaultColumns returns the column names visible by default.
 func (t *Table[T]) GetDefaultColumns() []string {
+	t.applyGates()
 	if len(t.defaultColumns) > 0 {
 		return t.defaultColumns
 	}
@@ -195,6 +199,7 @@ func (t *Table[T]) SelectableColumns(cols ...string) *Table[T] {
 
 // GetSelectableColumns returns the list of column names that can be toggled by the user.
 func (t *Table[T]) GetSelectableColumns() []string {
+	t.applyGates()
 	if len(t.selectableColumns) > 0 {
 		return t.selectableColumns
 	}
@@ -223,6 +228,7 @@ func (t *Table[T]) AdvancedSearchable(cols ...string) *Table[T] {
 
 // GetAdvancedSearchableColumns returns the list of column names enabled for advanced search.
 func (t *Table[T]) GetAdvancedSearchableColumns() []string {
+	t.applyGates()
 	if len(t.advancedSearchableColumns) > 0 {
 		return t.advancedSearchableColumns
 	}
@@ -242,6 +248,7 @@ func (t *Table[T]) IsAdvancedSearchEnabled() bool {
 
 // GetColumnDTOs returns the ColumnDTO representation of all columns in the table.
 func (t *Table[T]) GetColumnDTOs() []ColumnDTO {
+	t.applyGates()
 	dtos := make([]ColumnDTO, 0, len(t.columns))
 	defaultSet := make(map[string]bool)
 	for _, d := range t.GetDefaultColumns() {
@@ -335,6 +342,7 @@ func (t *Table[T]) IsSoftDeletesEnabled() bool {
 
 // HasFilter checks if a filter with the given name is registered.
 func (t *Table[T]) HasFilter(name string) bool {
+	t.applyGates()
 	for _, f := range t.filters {
 		if f.GetName() == name {
 			return true
@@ -345,6 +353,7 @@ func (t *Table[T]) HasFilter(name string) bool {
 
 // ResolveFilters combines explicitly registered filters with auto-generated column filters.
 func (t *Table[T]) ResolveFilters() []FilterInterface {
+	t.applyGates()
 	allFilters := make([]FilterInterface, 0, len(t.filters))
 	existing := make(map[string]bool)
 
@@ -398,6 +407,7 @@ func (t *Table[T]) GetFilters() []FilterInterface {
 // Columns registers table columns.
 func (t *Table[T]) Columns(cols ...ColumnRenderer[T]) *Table[T] {
 	t.columns = cols
+	t.markGates()
 	return t
 }
 
@@ -410,18 +420,21 @@ func (t *Table[T]) Filters(filters ...FilterInterface) *Table[T] {
 // Actions registers row-level actions.
 func (t *Table[T]) Actions(actions ...*TableAction[T]) *Table[T] {
 	t.actions = actions
+	t.markGates()
 	return t
 }
 
 // BulkActions registers multi-record actions.
 func (t *Table[T]) BulkActions(actions ...*BulkActionDef) *Table[T] {
 	t.bulkActions = actions
+	t.markGates()
 	return t
 }
 
 // HeaderActions registers table header actions.
 func (t *Table[T]) HeaderActions(actions ...*TableAction[T]) *Table[T] {
 	t.headerActions = actions
+	t.markGates()
 	return t
 }
 
@@ -480,21 +493,25 @@ func (t *Table[T]) extractRecordID(record T) string {
 
 // GetColumns returns the configured columns.
 func (t *Table[T]) GetColumns() []ColumnRenderer[T] {
+	t.applyGates()
 	return t.columns
 }
 
 // GetHeaderActions returns the configured header actions.
 func (t *Table[T]) GetHeaderActions() []*TableAction[T] {
+	t.applyGates()
 	return t.headerActions
 }
 
 // GetActions returns the row-level actions.
 func (t *Table[T]) GetActions() []*TableAction[T] {
+	t.applyGates()
 	return t.actions
 }
 
 // GetBulkActions returns the bulk actions.
 func (t *Table[T]) GetBulkActions() []*BulkActionDef {
+	t.applyGates()
 	return t.bulkActions
 }
 
@@ -570,6 +587,7 @@ func lookupStructField(val reflect.Value, name string) reflect.Value {
 
 // Render renders the entire table HTML.
 func (t *Table[T]) Render(basePath string) string {
+	t.applyGates()
 	var sb strings.Builder
 
 	storageKey := fmt.Sprintf("filament_cols_%s", strings.ReplaceAll(basePath, "/", "_"))

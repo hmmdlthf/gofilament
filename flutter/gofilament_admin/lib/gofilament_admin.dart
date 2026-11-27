@@ -32,6 +32,7 @@ export 'src/resource_form.dart';
 export 'src/resource_list.dart';
 export 'src/responsive.dart';
 export 'src/roles_screen.dart';
+export 'src/tenant_settings_screen.dart';
 export 'src/session_store.dart';
 export 'src/shell.dart';
 export 'src/theme.dart';

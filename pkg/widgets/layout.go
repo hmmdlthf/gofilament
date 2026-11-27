@@ -106,3 +106,45 @@ func (w *BannerWidget) Visible(fn func(ctx *Ctx) bool) *BannerWidget { w.visible
 
 // Ctx is the request context widget callbacks receive.
 type Ctx = filament.Context
+
+// RequiresFeature shows the widget only while cond holds for the request's tenant.
+func (w *StatsOverviewWidget) RequiresFeature(cond filament.Condition) *StatsOverviewWidget {
+	w.BaseWidget.RequiresFeature(cond)
+	return w
+}
+
+// RequiresFeature shows the widget only while cond holds for the request's tenant.
+func (w *ChartWidget) RequiresFeature(cond filament.Condition) *ChartWidget {
+	w.BaseWidget.RequiresFeature(cond)
+	return w
+}
+
+// RequiresFeature shows the widget only while cond holds for the request's tenant.
+func (w *TableWidget) RequiresFeature(cond filament.Condition) *TableWidget {
+	w.BaseWidget.RequiresFeature(cond)
+	return w
+}
+
+// RequiresFeature shows the widget only while cond holds for the request's tenant.
+func (w *BreakdownWidget) RequiresFeature(cond filament.Condition) *BreakdownWidget {
+	w.BaseWidget.RequiresFeature(cond)
+	return w
+}
+
+// RequiresFeature shows the widget only while cond holds for the request's tenant.
+func (w *ProgressWidget) RequiresFeature(cond filament.Condition) *ProgressWidget {
+	w.BaseWidget.RequiresFeature(cond)
+	return w
+}
+
+// RequiresFeature shows the widget only while cond holds for the request's tenant.
+func (w *QuickActionsWidget) RequiresFeature(cond filament.Condition) *QuickActionsWidget {
+	w.BaseWidget.RequiresFeature(cond)
+	return w
+}
+
+// RequiresFeature shows the widget only while cond holds for the request's tenant.
+func (w *BannerWidget) RequiresFeature(cond filament.Condition) *BannerWidget {
+	w.BaseWidget.RequiresFeature(cond)
+	return w
+}

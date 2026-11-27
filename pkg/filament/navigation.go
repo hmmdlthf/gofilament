@@ -11,6 +11,9 @@ type NavigationItem struct {
 	Sort       int
 	Active     bool
 	Visible    func(ctx *Context) bool
+	// Feature hides the item unless the Condition holds for the request,
+	// e.g. filament.FeatureEnabled(appfeatures.RecurringInvoices).
+	Feature Condition
 }
 
 // UserMenuItem represents an action item inside the topbar user avatar dropdown.

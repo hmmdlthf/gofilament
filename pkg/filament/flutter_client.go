@@ -54,7 +54,7 @@ func (rm *BaseRelationManager[T]) RecordType() reflect.Type { return reflect.Typ
 // record, so a client generator can read it.
 func (r *BaseResource[T]) DescribeActionForms(ctx *Context) map[string][]forms.Node {
 	withSelf(ctx)
-	tbl := r.table()
+	tbl := r.table(ctx)
 	if tbl == nil {
 		return nil
 	}
@@ -97,6 +97,7 @@ type FlutterPageDef struct {
 	info    FlutterPageInfo
 	sort    int
 	visible func(ctx *Context) bool
+	gate    Condition
 }
 
 // FlutterPage declares a Flutter-only page. The server decides who sees it
@@ -121,6 +122,16 @@ func (f *FlutterPageDef) Visible(fn func(ctx *Context) bool) *FlutterPageDef {
 	return f
 }
 
+// RequiresFeature shows the page only while cond holds for the request's
+// tenant, e.g. filament.FeatureEnabled(appfeatures.PointOfSale).
+func (f *FlutterPageDef) RequiresFeature(cond Condition) *FlutterPageDef {
+	f.gate = cond
+	return f
+}
+
+// FeatureGate returns the condition set with RequiresFeature.
+func (f *FlutterPageDef) FeatureGate() Condition { return f.gate }
+
 func (f *FlutterPageDef) ID() string                   { return f.info.ID }
 func (f *FlutterPageDef) Title() string                { return f.info.Label }
 func (f *FlutterPageDef) Slug() string                 { return f.info.ID }
@@ -128,7 +139,7 @@ func (f *FlutterPageDef) FlutterPage() FlutterPageInfo { return f.info }
 
 // NavigationItem returns nil for users who may not see the page.
 func (f *FlutterPageDef) NavigationItem(ctx *Context) *NavigationItem {
-	if f.visible != nil && !f.visible(ctx) {
+	if (f.visible != nil && !f.visible(ctx)) || !f.gate.Allows(ctx) {
 		return nil
 	}
 	return &NavigationItem{Label: f.info.Label, Icon: f.info.Icon, Group: f.info.Group, Sort: f.sort}
@@ -146,7 +157,7 @@ func (p *Panel) clientPages(ctx *Context) []FlutterPageInfo {
 			continue
 		}
 		item := pg.NavigationItem(ctx)
-		if item == nil || (item.Visible != nil && !item.Visible(ctx)) {
+		if item == nil || (item.Visible != nil && !item.Visible(ctx)) || !item.Feature.Allows(ctx) || !gateAllows(ctx, pg) {
 			continue
 		}
 		out = append(out, fp.FlutterPage())

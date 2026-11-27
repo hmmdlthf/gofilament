@@ -2,7 +2,8 @@ module github.com/golaravel/gofilament
 
 go 1.26.0
 
-replace github.com/golaravel/golaravel => github.com/hmmdlthf/golaravel v1.18.0
+// TODO: switch to the golaravel release that ships pkg/features
+replace github.com/golaravel/golaravel => /home/ahmad/Apps/projects/invent/golaravel
 
 require (
 	entgo.io/ent v0.14.3

@@ -48,6 +48,7 @@ type TableMeta struct {
 
 // Meta describes the table's actions.
 func (t *Table[T]) Meta() TableMeta {
+	t.applyGates()
 	m := TableMeta{Actions: []ActionDTO{}, BulkActions: []ActionDTO{}, HeaderActions: []ActionDTO{}, Reorderable: t.IsReorderable()}
 	for _, a := range t.GetActions() {
 		m.Actions = append(m.Actions, a.ToDTO())

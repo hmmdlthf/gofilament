@@ -143,7 +143,7 @@ func (rm *BaseRelationManager[T]) Table(fn ...func(t *tables.Table[T]) *tables.T
 // GetTable returns the configured table instance.
 func (rm *BaseRelationManager[T]) GetTable() *tables.Table[T] {
 	if rm.tableBuilder != nil {
-		return rm.tableBuilder(rm.tableDef)
+		return rm.tableBuilder(tables.New[T]())
 	}
 	return rm.tableDef
 }
@@ -284,6 +284,7 @@ func (rm *BaseRelationManager[T]) Render(ctx *Context, parentBasePath, parentID 
 	if rm.tableBuilder != nil {
 		tbl = rm.tableBuilder(tbl)
 	}
+	tbl.WithContext(ctx.GoContext())
 	if rm.idExtractor != nil {
 		tbl.RecordID(rm.idExtractor)
 	}

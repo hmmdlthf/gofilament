@@ -51,6 +51,8 @@
 13. [Flutter Multiplatform Client Architecture (`pkg/flutterclient`)](#13-flutter-multiplatform-client-architecture-pkgflutterclient)
 14. [Artisan CLI Generator Reference (`pkg/commands`)](#14-artisan-cli-generator-reference-pkgcommands)
 15. [Complete End-to-End Code Blueprint](#15-complete-end-to-end-code-blueprint)
+16. [Payment Gateways (`pkg/payments`)](#16-payment-gateways-pkgpayments)
+17. [Per-Tenant Features & Settings (`pkg/features`)](#17-per-tenant-features--settings-pkgfeatures)
 
 ---
 
@@ -1521,6 +1523,85 @@ res.Gateways.AuthorizeWithGate()            // narrow access like any resource
 - **Saved Payment Methods**:
   - Cards customers saved through preapproval, shown as "Visa •••• 4242 (12/30)". The gateway token is never shown.
   - Each has a History tab and a **Revoke** action.
+
+## 17. Per-Tenant Features & Settings (`pkg/features`)
+
+GoFilament builds on GoLaravel's `pkg/features`: features and settings are declared in code with a default, and a tenant gets a `tenant_settings` row only when its value differs. See GoLaravel's `docs/tenant-features-and-settings.md` for declaring features, the manager, caching and the CLI.
+
+### Wiring a panel
+
+```go
+panel.Features(mgr)                        // settings page + API, schema "features"
+panel.TenantSettings(filament.TenantSettingsConfig{
+    Slug: "settings", Label: "Workspace settings", Group: "Settings",
+    CanManage: func(ctx *filament.Context) bool { return isOwner(ctx) },
+})
+central.TenantFeaturesAdmin(mgr, filament.TenantFeaturesAdminConfig{
+    Tenants: func(ctx *filament.Context) ([]filament.Tenant, error) { return allTenants(ctx) },
+})
+```
+
+Every panel request carries its resolved tenant in the context (`privacy.WithTenantID`) and a request memo (`features.WithMemo`), so all the feature checks of one request read the tenant's values once. `ctx.GoContext()` is the context to pass to `features.Enabled` in your own handlers.
+
+### Conditions
+
+`filament.Condition` is `func(ctx context.Context) bool`. The helpers read the request's tenant and **fail closed**: with no tenant, an unregistered feature or a database error, they return `false`.
+
+| Helper | Holds when |
+|---|---|
+| `FeatureEnabled(f)` | the bool feature is on |
+| `FeatureDisabled(f)` | the bool feature is known to be off |
+| `FeatureIs(f, v)` | the value equals `v` |
+| `FeatureIn(f, v1, v2...)` | the value is one of the values |
+| `AllOf(c...)`, `AnyOf(c...)` | combinations |
+
+Every gated item uses a method named `RequiresFeature(cond)` (`VisibleWhen` already means a client-side field condition on forms and a user check on widgets):
+
+| Item | Effect when the condition fails |
+|---|---|
+| `BaseResource.RequiresFeature` | left out of navigation, `/api/schema` (`resources`, `resource_meta`, `navigation`) and global search; every web and API URL under the resource answers **404**; create-option forms for it are refused |
+| `FlutterPageDef.RequiresFeature`, custom pages implementing `FeatureGated` | left out of navigation and `client_pages`; URLs under the page answer 404 |
+| `NavigationItem{Feature: cond}` (returned by a custom page or resource) | item hidden |
+| `widgets.BaseWidget.RequiresFeature` (and every widget type) | widget hidden, its data endpoint answers 404 |
+| `tables.TableAction.RequiresFeature`, `BulkActionDef.RequiresFeature` | not rendered, not in the table meta, cannot be run (web or API) |
+| `tables.*Column.RequiresFeature` | not rendered, not exported, not in the schema, not editable inline |
+| `forms.*.RequiresFeature` (fields, `Section`, `Grid`) | not rendered, not described to the Flutter client, its submitted values are dropped by `forms.Validate` |
+
+Tables get the request context from the panel (`Table.WithContext`). A table built without one hides every gated column and action.
+
+### Tenant settings page
+
+`<panel>/tenant-settings` lists the features with `ManagedBy == features.TenantAdmin`, grouped by `Meta.Group`:
+
+| Type | Control |
+|---|---|
+| `bool` | toggle |
+| `enum` | select over `Meta.Options` |
+| `int` | number input with `Meta.Min` / `Meta.Max` |
+| `string` | text input |
+| `json` | JSON textarea |
+
+Each field shows **Overridden** (with the default and **Reset to default**) or **Default**. Saving writes only the values that changed, through `mgr.Set` (strings are parsed and validated). `features.ErrInvalidValue` messages show on their field with status 422. Valid values in the same submission are saved.
+
+Who may use it: `TenantSettingsConfig.CanManage`, else the `tenant-settings.manage` permission when the panel has `Roles`, else every user of the panel. The page needs a tenant (403 without one).
+
+**SuperAdmin features** are never listed. Every endpoint checks the keys it is asked to change before writing anything, and answers 403 for a `SuperAdmin` feature (404 for an unknown key), so hiding the field is not the only protection.
+
+### JSON API
+
+| Method & path | Body / response |
+|---|---|
+| `GET <panel>/api/tenant-settings` | `{tenant, groups: [{name, features: [{key, type, label, description, group, managed_by, public, options, min, max, default, value, overridden}]}]}` |
+| `PUT` (or `POST`) `<panel>/api/tenant-settings` | `{"values": {"tax.mode": "exclusive", "branches.max": 7}}` → the listing; 422 with `errors: {key: message}` |
+| `DELETE <panel>/api/tenant-settings/{key}` (or `POST .../{key}/reset`) | reset to default → the listing |
+| `GET` / `PUT` `<central>/api/tenant-features/{tenant}` | the same for any tenant, `SuperAdmin` features included |
+| `DELETE <central>/api/tenant-features/{tenant}/{key}` | reset |
+
+`/api/schema` adds `features` (the tenant's `Public` values), `tenant_settings: {enabled, label, endpoint, path}` and, on a central panel, `tenant_features_admin`. The Flutter admin shows **Tenant settings** in the account hub when `tenant_settings.enabled` is true (`TenantSettingsScreen`).
+
+### Central screen
+
+`TenantFeaturesAdmin` adds `<panel>/tenant-features` (a tenant list, or a tenant key field without `Tenants`) and `<panel>/tenant-features/{tenant}`, with the same controls plus a **Super admin only** badge. With `Tenants` set, only listed tenants open (404 otherwise). Access: `CanManage`, else `tenant-features.manage` with `Roles`, else every user of the panel, so protect a central panel with `CanAccess`.
 
 ## Summary Checklist for AI Agents & Developers
 

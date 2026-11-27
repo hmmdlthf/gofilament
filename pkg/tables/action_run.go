@@ -96,6 +96,7 @@ func (a *TableAction[T]) GetSuccessMessage() string { return a.successMessage }
 
 // FindAction returns the row action named name.
 func (t *Table[T]) FindAction(name string) *TableAction[T] {
+	t.applyGates()
 	for _, a := range t.actions {
 		if a.name == name {
 			return a

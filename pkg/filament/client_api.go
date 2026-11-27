@@ -171,7 +171,7 @@ func (r *BaseResource[T]) Meta(ctx *Context) ResourceMeta {
 		},
 	}
 	if r.tableBuilder != nil {
-		m.Table = r.tableBuilder(tables.New[T]()).Meta()
+		m.Table = r.table(ctx).Meta()
 		for _, a := range m.Table.HeaderActions {
 			if a.Name == "import" {
 				m.Abilities["import"] = m.Abilities["create"]
@@ -218,7 +218,7 @@ func (p *Panel) decorateSchema(ctx *Context, schema map[string]any) {
 
 	meta := make(map[string]ResourceMeta, len(p.resources))
 	for _, res := range p.resources {
-		if res.NavigationItem(ctx) == nil {
+		if res.NavigationItem(ctx) == nil || !gateAllows(ctx, res) {
 			continue
 		}
 		if d, ok := res.(interface {

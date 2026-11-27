@@ -33,11 +33,18 @@ func withSelf(ctx *Context) {
 // for the record or the user may not run it.
 var ErrActionUnavailable = errors.New("This action is not available for this record")
 
-func (r *BaseResource[T]) table() *tables.Table[T] {
+// table builds the resource's table for a request. Feature-gated columns
+// and actions are checked against ctx (all of them are hidden when ctx is
+// nil).
+func (r *BaseResource[T]) table(ctx *Context) *tables.Table[T] {
 	if r.tableBuilder == nil {
 		return nil
 	}
-	return r.tableBuilder(tables.New[T]())
+	tbl := r.tableBuilder(tables.New[T]())
+	if tbl != nil && ctx != nil {
+		tbl.WithContext(ctx.GoContext())
+	}
+	return tbl
 }
 
 // RowMeta reports, for each record of a list page, which edit / delete and
@@ -48,7 +55,7 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 		return nil
 	}
 	withSelf(ctx)
-	tbl := r.table()
+	tbl := r.table(ctx)
 	var custom []*tables.TableAction[T]
 	if tbl != nil {
 		for _, a := range tbl.GetActions() {
@@ -115,7 +122,7 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 func (r *BaseResource[T]) findForAction(ctx *Context, id, name string) (T, *tables.TableAction[T], error) {
 	var zero T
 	withSelf(ctx)
-	tbl := r.table()
+	tbl := r.table(ctx)
 	if tbl == nil {
 		return zero, nil, ErrActionUnavailable
 	}

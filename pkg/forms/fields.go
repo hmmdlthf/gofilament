@@ -24,6 +24,7 @@ type BaseField struct {
 	afterUpdated     func(state any, form *Form)
 	visibleFunc      func(get Get) bool
 	visibleWhen      *Condition
+	gate             func(ctx context.Context) bool
 	dehydrateFunc    func(state any) bool
 }
 

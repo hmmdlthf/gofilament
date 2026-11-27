@@ -34,7 +34,7 @@ func (p *Panel) canCreateIn(ctx *Context, slug string) bool {
 	target, ok := p.resourceBySlug(slug).(interface {
 		Meta(ctx *Context) ResourceMeta
 	})
-	return ok && target.Meta(ctx).Abilities["create"]
+	return ok && gateAllows(ctx, target) && target.Meta(ctx).Abilities["create"]
 }
 
 // filterCreateOptions drops the create entry of selects whose target

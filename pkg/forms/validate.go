@@ -88,6 +88,9 @@ func (v *validator) fail(key, msg string) {
 
 func (v *validator) walk(components []Component, data, out map[string]any, prefix string) {
 	for _, c := range components {
+		if !gateAllows(v.ctx, c) {
+			continue // gated out for this request: values dropped, rules skipped
+		}
 		if !conditionOf(c).Matches(stateGetter(data)) {
 			continue // hidden: its values are dropped and its rules skipped
 		}
