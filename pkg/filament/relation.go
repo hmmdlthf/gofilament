@@ -466,6 +466,12 @@ func (rm *BaseRelationManager[T]) FormField(name string) forms.Component {
 	return forms.FindField(rm.formComponents(), name)
 }
 
+// FormFieldFor is FormField for a request (fields gated out for ctx are
+// not found).
+func (rm *BaseRelationManager[T]) FormFieldFor(ctx *Context, name string) forms.Component {
+	return forms.FindFieldFor(ctx.GoContext(), rm.formComponents(), name)
+}
+
 // GetAPISchema returns schema metadata for REST/Flutter integration.
 func (rm *BaseRelationManager[T]) GetAPISchema() map[string]any {
 	tbl := rm.GetTable()

@@ -111,6 +111,9 @@ class FakePanel {
   /// The schema's tenant_settings entry (Panel.Features), if any.
   Map<String, dynamic>? tenantSettings;
 
+  /// The schema's tenant_features_admin entry (central panels), if any.
+  Map<String, dynamic>? featuresAdmin;
+
   bool globalSearch = false;
 
   /// Tenants offered by /tenants; the active one follows X-Tenant-ID.
@@ -729,6 +732,7 @@ class FakePanel {
         if (tenants.isNotEmpty) 'tenant': activeTenant,
         'manage_roles': manageRoles,
         if (tenantSettings != null) 'tenant_settings': tenantSettings,
+        if (featuresAdmin != null) 'tenant_features_admin': featuresAdmin,
         'notifications': notificationsOn,
         'saved_views': savedViews,
         'background_jobs': backgroundJobs,

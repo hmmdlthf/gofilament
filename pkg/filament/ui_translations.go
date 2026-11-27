@@ -6,6 +6,11 @@ import "strings"
 // English text (see Panel.UITranslations). Generated from the app's tr() calls.
 var defaultUITranslations = map[string]map[string]string{
 	"ar": {
+		"Super admin only":                 "مخصص لمسؤول المنصة فقط",
+		"Tenant key":                       "مفتاح المستأجر",
+		"Open":                             "فتح",
+		"No tenants.":                      "لا يوجد مستأجرون.",
+		"Change any tenant's features":     "غيّر ميزات أي مستأجر",
 		"Appearance, language and sidebar": "المظهر واللغة والشريط الجانبي",
 		"More":                             "المزيد",
 		"Signed in":                        "تم تسجيل الدخول",
@@ -274,6 +279,11 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} صفًا: {valid} جاهزة للاستيراد، و{invalid} بها مشكلات.",
 	},
 	"de": {
+		"Super admin only":                 "Nur Super-Admin",
+		"Tenant key":                       "Mandantenschlüssel",
+		"Open":                             "Öffnen",
+		"No tenants.":                      "Keine Mandanten.",
+		"Change any tenant's features":     "Funktionen jedes Mandanten ändern",
 		"Appearance, language and sidebar": "Darstellung, Sprache und Seitenleiste",
 		"More":                             "Mehr",
 		"Signed in":                        "Angemeldet",
@@ -542,6 +552,11 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} Zeilen: {valid} bereit zum Import, {invalid} mit Problemen.",
 	},
 	"es": {
+		"Super admin only":                 "Solo superadministrador",
+		"Tenant key":                       "Clave del inquilino",
+		"Open":                             "Abrir",
+		"No tenants.":                      "No hay inquilinos.",
+		"Change any tenant's features":     "Cambia las funciones de cualquier inquilino",
 		"Appearance, language and sidebar": "Apariencia, idioma y barra lateral",
 		"More":                             "Más",
 		"Signed in":                        "Sesión iniciada",
@@ -810,6 +825,11 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} filas: {valid} listas para importar, {invalid} con problemas.",
 	},
 	"fr": {
+		"Super admin only":                 "Super administrateur uniquement",
+		"Tenant key":                       "Clé du locataire",
+		"Open":                             "Ouvrir",
+		"No tenants.":                      "Aucun locataire.",
+		"Change any tenant's features":     "Modifiez les fonctionnalités de n'importe quel locataire",
 		"Appearance, language and sidebar": "Apparence, langue et barre latérale",
 		"More":                             "Plus",
 		"Signed in":                        "Connecté",

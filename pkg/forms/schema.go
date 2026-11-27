@@ -272,8 +272,23 @@ func describe(ctx context.Context, c Component) (Node, bool) {
 }
 
 // FindField returns the field named name anywhere in the component tree.
+// Feature-gated components (RequiresFeature) are skipped, since there is no
+// request to check them against; use FindFieldFor in a request.
 func FindField(components []Component, name string) Component {
+	return findField(nil, components, name)
+}
+
+// FindFieldFor is FindField for a request: components whose feature gate
+// fails for ctx, and everything inside them, are not found.
+func FindFieldFor(ctx context.Context, components []Component, name string) Component {
+	return findField(ctx, components, name)
+}
+
+func findField(ctx context.Context, components []Component, name string) Component {
 	for _, c := range components {
+		if !gateAllows(ctx, c) {
+			continue
+		}
 		var children []Component
 		switch f := c.(type) {
 		case *SectionComponent:
@@ -286,14 +301,14 @@ func FindField(components []Component, name string) Component {
 			children = f.schema
 		case *TabsComponent:
 			for _, t := range f.tabs {
-				if found := FindField(t.schema, name); found != nil {
+				if found := findField(ctx, t.schema, name); found != nil {
 					return found
 				}
 			}
 			continue
 		case *WizardComponent:
 			for _, s := range f.steps {
-				if found := FindField(s.schema, name); found != nil {
+				if found := findField(ctx, s.schema, name); found != nil {
 					return found
 				}
 			}
@@ -309,7 +324,7 @@ func FindField(components []Component, name string) Component {
 			}
 			continue
 		}
-		if found := FindField(children, name); found != nil {
+		if found := findField(ctx, children, name); found != nil {
 			return found
 		}
 	}

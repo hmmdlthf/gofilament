@@ -156,7 +156,7 @@ func (p *Panel) canManageTenantFeatures(ctx *Context) bool {
 // the user may open.
 func (p *Panel) featureNavigation(ctx *Context, basePrefix, currentPath string) []*NavigationItem {
 	var out []*NavigationItem
-	if p.canManageTenantSettings(ctx) && ctx.Tenant() != "" {
+	if p.canManageTenantSettings(ctx) && verifiedTenant(ctx) != "" {
 		c := p.tenantSettings
 		u := basePrefix + "/" + c.slug()
 		out = append(out, &NavigationItem{
@@ -547,9 +547,13 @@ func (p *Panel) tenantScope(c *gcontext.Context) (*Context, contextLike, feature
 	if !p.canManageTenantSettings(ctx) {
 		return ctx, nil, featureScope{}, p.featureDenied(c, api, http.StatusForbidden, "You may not change this tenant's settings.")
 	}
-	tenant := ctx.Tenant()
+	tenant := verifiedTenant(ctx)
 	if tenant == "" {
 		return ctx, nil, featureScope{}, p.featureDenied(c, api, http.StatusForbidden, "Choose a tenant first.")
+	}
+	if want := c.Param("tenant"); want != "" && want != tenant {
+		// A tenant in the path the user may not use: not the resolved one.
+		return ctx, nil, featureScope{}, p.featureDenied(c, api, http.StatusNotFound, "Unknown tenant.")
 	}
 	if !api && c.Request.Method == http.MethodPost && !p.formGuard(c) {
 		return ctx, nil, featureScope{}, denied(c.String(http.StatusForbidden, "403 Forbidden: your session expired"))
@@ -588,7 +592,7 @@ func (p *Panel) mountTenantSettings(r *router.Router) {
 	slug := p.tenantSettings.slug()
 	base := p.path + "/" + slug
 	page := func(ctx *Context) featurePage {
-		u := base
+		u := p.TenantURL(ctx, slug) // <panel>/<tenant>/<slug> with TenantPathScoping
 		return featurePage{
 			title:       orDefault(p.tenantSettings.Label, "Tenant settings"),
 			description: "Settings for " + tenantName(ctx) + ". Fields marked Default follow the application default.",
@@ -604,6 +608,18 @@ func (p *Panel) mountTenantSettings(r *router.Router) {
 		return p.renderFeaturePage(ctx, status, pg)
 	}
 
+	bases := []string{base}
+	if p.tenantConfig != nil && p.tenantConfig.Enabled && p.tenantConfig.PathScoping {
+		// The navigation links to <panel>/<tenant>/<slug>.
+		bases = append(bases, p.path+"/:tenant/"+slug)
+	}
+	for _, base := range bases {
+		p.mountTenantSettingsAt(r, base, page, show)
+	}
+}
+
+func (p *Panel) mountTenantSettingsAt(r *router.Router, base string, page func(*Context) featurePage,
+	show func(*Context, contextLike, featureScope, int, featurePage) error) {
 	r.GET(base, func(c *gcontext.Context) error {
 		ctx, fctx, s, err := p.tenantScope(c)
 		if err != nil {
@@ -663,7 +679,7 @@ func (p *Panel) mountTenantSettingsAPI(r *router.Router) {
 		if err != nil {
 			return p.featureFailure(ctx, true, err)
 		}
-		body := map[string]any{"tenant": ctx.Tenant(), "groups": featureGroups(items)}
+		body := map[string]any{"tenant": verifiedTenant(ctx), "groups": featureGroups(items)}
 		if len(errs) > 0 {
 			body["errors"] = errs
 			body["message"] = "Some settings were not saved."
@@ -717,7 +733,7 @@ func tenantName(ctx *Context) string {
 	if t := ctx.TenantRecord(); t != nil && t.GetTenantName() != "" {
 		return t.GetTenantName()
 	}
-	return ctx.Tenant()
+	return verifiedTenant(ctx)
 }
 
 // decodeFeatureValues reads {"values": {key: value}} from a JSON body.
@@ -900,8 +916,34 @@ func (p *Panel) mountTenantFeaturesAdminAPI(r *router.Router) {
 		p.setCorsHeaders(c)
 		return c.NoContent(http.StatusNoContent)
 	}
+	r.OPTIONS(api, preflight)
 	r.OPTIONS(api+"/:tenant", preflight)
 	r.OPTIONS(api+"/:tenant/:key", preflight)
+	// GET <panel>/api/tenant-features: the tenants to pick from. Without
+	// TenantsConfig.Tenants the list is empty and free_entry is true (the
+	// client asks for a tenant key).
+	r.GET(api, func(c *gcontext.Context) error {
+		ctx, _, err := p.adminTenant(c, "")
+		if err != nil {
+			return err
+		}
+		type tenantDTO struct {
+			Key  string `json:"key"`
+			Name string `json:"name"`
+		}
+		out := []tenantDTO{}
+		if cfg.Tenants != nil {
+			tenants, err := cfg.Tenants(ctx)
+			if err != nil {
+				return p.featureFailure(ctx, true, err)
+			}
+			for _, t := range tenants {
+				out = append(out, tenantDTO{Key: t.GetTenantKey(), Name: t.GetTenantName()})
+			}
+		}
+		p.setCorsHeaders(c)
+		return c.JSON(http.StatusOK, map[string]any{"tenants": out, "free_entry": cfg.Tenants == nil})
+	})
 	list := func(c *gcontext.Context, ctx *Context, t Tenant, status int, errs map[string]string) error {
 		items, err := scope.list(features.ForTenant(ctx.GoContext(), t.GetTenantKey()))
 		if err != nil {

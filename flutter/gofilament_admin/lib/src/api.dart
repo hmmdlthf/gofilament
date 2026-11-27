@@ -668,6 +668,12 @@ class AdminApi {
           String path, Map<String, dynamic> values) async =>
       _map(await _send('PUT', path, {'values': values}));
 
+  /// The central tenant features screen's tenants (Panel.TenantFeaturesAdmin
+  /// at [path]): {tenants: [{key, name}], free_entry}. Each tenant's
+  /// features are at '[path]/{key}', in the tenantSettings shape.
+  Future<Map<String, dynamic>> tenantFeatureTenants(String path) async =>
+      _map(await _get(path));
+
   /// Puts one setting back to its default.
   Future<Map<String, dynamic>> resetTenantSetting(
           String path, String key) async =>

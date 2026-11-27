@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/golaravel/golaravel/pkg/features"
+	"github.com/golaravel/golaravel/pkg/privacy"
 )
 
 // ---------------------------------------------------------------------------
@@ -184,6 +185,22 @@ func (p *Panel) refuseFeature(ctx *Context) error {
 	return denied(ctx.String(http.StatusNotFound, "404 Not Found"))
 }
 
+// verifiedTenant is the request's tenant as the panel resolved and checked
+// it (or as trusted middleware set it in the privacy context). Unlike
+// Context.Tenant it never falls back to an unchecked :tenant path segment.
+func verifiedTenant(ctx *Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if t := ctx.TenantRecord(); t != nil {
+		return t.GetTenantKey()
+	}
+	if t, ok := privacy.TenantFromContext(ctx.GoContext()); ok {
+		return t
+	}
+	return ""
+}
+
 // featureSchema adds the tenant's Public features and the settings screens
 // to <panel>/api/schema, for the Flutter client.
 func (p *Panel) featureSchema(ctx *Context, schema map[string]any) {
@@ -191,14 +208,14 @@ func (p *Panel) featureSchema(ctx *Context, schema map[string]any) {
 		return
 	}
 	pub := map[string]any{}
-	if ctx.Tenant() != "" {
-		if v, err := p.featureMgr.Public(features.ForTenant(ctx.GoContext(), ctx.Tenant())); err == nil {
+	if verifiedTenant(ctx) != "" {
+		if v, err := p.featureMgr.Public(features.ForTenant(ctx.GoContext(), verifiedTenant(ctx))); err == nil {
 			pub = v
 		}
 	}
 	schema["features"] = pub
 	ts := map[string]any{"enabled": false}
-	if p.canManageTenantSettings(ctx) && ctx.Tenant() != "" {
+	if p.canManageTenantSettings(ctx) && verifiedTenant(ctx) != "" {
 		ts = map[string]any{
 			"enabled":  true,
 			"label":    orDefault(p.tenantSettings.Label, "Tenant settings"),

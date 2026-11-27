@@ -552,6 +552,13 @@ func TestSuperAdminTenantFeatures(t *testing.T) {
 		t.Fatalf("unknown tenant: %d", rec.Code)
 	}
 	// API.
+	rec = apiCall(t, app, "GET", "/central/api/tenant-features", "", nil)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `{"key":"acme","name":"Acme Inc"}`) || !strings.Contains(rec.Body.String(), `"free_entry":false`) {
+		t.Fatalf("api tenant list: %d %s", rec.Code, rec.Body.String())
+	}
+	if pick, _ := schemaOfCentral(t, app)["tenant_features_admin"].(map[string]any); pick["path"] != "/tenant-features" {
+		t.Fatalf("schema tenant_features_admin: %v", pick)
+	}
 	rec = apiCall(t, app, "PUT", "/central/api/tenant-features/globex", "", map[string]any{"values": map[string]any{"invoices.recurring": true}})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("api: %d %s", rec.Code, rec.Body.String())
@@ -833,4 +840,96 @@ func TestFeatureChecksLoadOncePerRequest(t *testing.T) {
 	if n := db.loads.Load(); n != 1 {
 		t.Fatalf("list page loaded the tenant's features %d times, want 1", n)
 	}
+}
+
+func TestTenantSettingsWithPathScoping(t *testing.T) {
+	f := newAppFeatures(t, nil)
+	app := golaravel.New()
+	p := filament.NewPanel("admin").Path("/admin").
+		Tenancy(&filament.TenantConfig{
+			PathScoping:     true,
+			CanAccessTenant: func(ctx *filament.Context, key string) bool { return key == "acme" || key == "globex" },
+		}).
+		Features(f.mgr)
+	if err := p.Register(app); err != nil {
+		t.Fatal(err)
+	}
+	w := newWebClient(t, app)
+	rec := w.do("GET", "/admin/acme/tenant-settings", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/admin/acme/tenant-settings"`) || !strings.Contains(body, `action="/admin/acme/tenant-settings"`) {
+		t.Fatal("navigation link or form action is not tenant-scoped")
+	}
+	token := w.csrfFrom(body)
+	rec = w.do("POST", "/admin/globex/tenant-settings", url.Values{"_token": {token}, "tax.mode": {"none"}})
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/admin/globex/tenant-settings?status=saved" {
+		t.Fatalf("save: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if mustValue(t, f.mgr, "globex", "tax.mode") != "none" || mustValue(t, f.mgr, "acme", "tax.mode") != "inclusive" {
+		t.Fatal("saved for the wrong tenant")
+	}
+	// A tenant in the path the user may not use is refused.
+	if rec := w.do("GET", "/admin/initech/tenant-settings", nil); rec.Code != http.StatusForbidden && rec.Code != http.StatusNotFound {
+		t.Fatalf("foreign tenant: %d", rec.Code)
+	}
+}
+
+func TestFeatureGatedSelectRefusesOptionEndpoints(t *testing.T) {
+	f := newAppFeatures(t, nil)
+	app := golaravel.New()
+	on := filament.FeatureEnabled(f.recurring)
+	plans := filament.NewResource[*invoice]("invoices").ModelName("Invoice").
+		Form(func(form *forms.Form) *forms.Form {
+			return form.Schema(
+				forms.TextInput("number"),
+				forms.Select("plan").RequiresFeature(on).
+					OptionsUsing(func(context.Context) []forms.Option { return []forms.Option{{Value: "m", Label: "Monthly"}} }).
+					CreateOptionForm(forms.TextInput("name").Required()).
+					CreateOptionUsing(func(ctx context.Context, data map[string]any) (forms.Option, error) {
+						return forms.Option{Value: "x", Label: "x"}, nil
+					}),
+			)
+		}).
+		OnList(func(*filament.Context, string, string, string, int, int, map[string]string) ([]*invoice, int, error) {
+			return nil, 0, nil
+		}).
+		OnCreate(func(*filament.Context, map[string]any) error { return nil })
+	p := filament.NewPanel("admin").Path("/admin").
+		Tenancy(&filament.TenantConfig{CanAccessTenant: func(*filament.Context, string) bool { return true }}).
+		Resources(plans)
+	if err := p.Register(app); err != nil {
+		t.Fatal(err)
+	}
+	create := "/admin/api/resources/invoices/form/options/create?field=plan"
+	search := "/admin/api/resources/invoices/form/options?field=plan&q=m"
+	for _, path := range []string{create, search} {
+		if rec := apiCall(t, app, "GET", path, "acme", nil); rec.Code != http.StatusNotFound {
+			t.Errorf("off: GET %s: %d", path, rec.Code)
+		}
+	}
+	if rec := apiCall(t, app, "POST", create, "acme", map[string]any{"name": "Yearly"}); rec.Code != http.StatusNotFound {
+		t.Errorf("off: create: %d", rec.Code)
+	}
+	if err := f.recurring.Set(features.ForTenant(context.Background(), "acme"), true); err != nil {
+		t.Fatal(err)
+	}
+	if rec := apiCall(t, app, "GET", create, "acme", nil); rec.Code != http.StatusOK {
+		t.Errorf("on: create form: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := apiCall(t, app, "GET", search, "acme", nil); rec.Code != http.StatusOK {
+		t.Errorf("on: search: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func schemaOfCentral(t *testing.T, app http.Handler) map[string]any {
+	t.Helper()
+	rec := apiCall(t, app, "GET", "/central/api/schema", "", nil)
+	var out map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("schema: %d %v", rec.Code, err)
+	}
+	return out
 }

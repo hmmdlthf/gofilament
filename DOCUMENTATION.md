@@ -1565,7 +1565,7 @@ Every gated item uses a method named `RequiresFeature(cond)` (`VisibleWhen` alre
 | `widgets.BaseWidget.RequiresFeature` (and every widget type) | widget hidden, its data endpoint answers 404 |
 | `tables.TableAction.RequiresFeature`, `BulkActionDef.RequiresFeature` | not rendered, not in the table meta, cannot be run (web or API) |
 | `tables.*Column.RequiresFeature` | not rendered, not exported, not in the schema, not editable inline |
-| `forms.*.RequiresFeature` (fields, `Section`, `Grid`) | not rendered, not described to the Flutter client, its submitted values are dropped by `forms.Validate` |
+| `forms.*.RequiresFeature` (fields, `Section`, `Grid`) | not rendered, not described to the Flutter client, its submitted values are dropped by `forms.Validate`; a gated select's option search, create-option form and a gated upload field answer 404 (`forms.FindFieldFor`, `BaseResource.FormFieldFor`) |
 
 Tables get the request context from the panel (`Table.WithContext`). A table built without one hides every gated column and action.
 
@@ -1583,7 +1583,7 @@ Tables get the request context from the panel (`Table.WithContext`). A table bui
 
 Each field shows **Overridden** (with the default and **Reset to default**) or **Default**. Saving writes only the values that changed, through `mgr.Set` (strings are parsed and validated). `features.ErrInvalidValue` messages show on their field with status 422. Valid values in the same submission are saved.
 
-Who may use it: `TenantSettingsConfig.CanManage`, else the `tenant-settings.manage` permission when the panel has `Roles`, else every user of the panel. The page needs a tenant (403 without one).
+Who may use it: `TenantSettingsConfig.CanManage`, else the `tenant-settings.manage` permission when the panel has `Roles`, else every user of the panel. The page needs a tenant the panel resolved and checked (403 without one). With `TenantPathScoping` it is also served at `<panel>/<tenant>/tenant-settings`, and a path tenant the user may not use is refused.
 
 **SuperAdmin features** are never listed. Every endpoint checks the keys it is asked to change before writing anything, and answers 403 for a `SuperAdmin` feature (404 for an unknown key), so hiding the field is not the only protection.
 
@@ -1594,10 +1594,11 @@ Who may use it: `TenantSettingsConfig.CanManage`, else the `tenant-settings.mana
 | `GET <panel>/api/tenant-settings` | `{tenant, groups: [{name, features: [{key, type, label, description, group, managed_by, public, options, min, max, default, value, overridden}]}]}` |
 | `PUT` (or `POST`) `<panel>/api/tenant-settings` | `{"values": {"tax.mode": "exclusive", "branches.max": 7}}` → the listing; 422 with `errors: {key: message}` |
 | `DELETE <panel>/api/tenant-settings/{key}` (or `POST .../{key}/reset`) | reset to default → the listing |
+| `GET <central>/api/tenant-features` | `{tenants: [{key, name}], free_entry}` (`free_entry` when `Tenants` is not set) |
 | `GET` / `PUT` `<central>/api/tenant-features/{tenant}` | the same for any tenant, `SuperAdmin` features included |
 | `DELETE <central>/api/tenant-features/{tenant}/{key}` | reset |
 
-`/api/schema` adds `features` (the tenant's `Public` values), `tenant_settings: {enabled, label, endpoint, path}` and, on a central panel, `tenant_features_admin`. The Flutter admin shows **Tenant settings** in the account hub when `tenant_settings.enabled` is true (`TenantSettingsScreen`).
+`/api/schema` adds `features` (the tenant's `Public` values), `tenant_settings: {enabled, label, endpoint, path}` and, on a central panel, `tenant_features_admin`. The Flutter admin shows **Tenant settings** in the account hub when `tenant_settings.enabled` is true (`TenantSettingsScreen`), and **Tenant features** on a central panel (`TenantFeaturesAdminScreen`: pick a tenant, then the same screen with a *Super admin only* badge).
 
 ### Central screen
 

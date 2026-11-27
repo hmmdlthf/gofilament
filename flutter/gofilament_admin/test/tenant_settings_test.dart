@@ -126,6 +126,73 @@ void main() {
     expect(find.text('Overridden'), findsNWidgets(2));
   });
 
+  testWidgets('a super admin picks a tenant and edits its features',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var recurring = {
+      ..._feature('invoices.recurring', 'bool', false,
+          label: 'Recurring invoices'),
+      'managed_by': 'super_admin',
+    };
+    Map<String, dynamic> listing() => {
+          'tenant': 'acme',
+          'groups': [
+            {
+              'name': 'Billing',
+              'features': [recurring]
+            }
+          ]
+        };
+    final saves = <Map<String, dynamic>>[];
+    final panel = FakePanel()
+      ..featuresAdmin = {
+        'enabled': true,
+        'label': 'Tenant features',
+        'path': '/tenant-features'
+      };
+    panel.extraRoutes.addAll({
+      'GET /tenant-features': (_) => {
+            'tenants': [
+              {'key': 'acme', 'name': 'Acme Inc'},
+              {'key': 'globex', 'name': 'Globex'},
+            ],
+            'free_entry': false,
+          },
+      'GET /tenant-features/acme': (_) => listing(),
+      'PUT /tenant-features/acme': (r) {
+        final values = Map<String, dynamic>.from(
+            (json.decode(r.body) as Map)['values'] as Map);
+        saves.add(values);
+        recurring = {...recurring, 'value': true, 'overridden': true};
+        return listing();
+      },
+    });
+
+    await tester.pumpWidget(GoFilamentAdmin(api: panel.api()));
+    await tester.pumpAndSettle();
+    await signIn(tester);
+    await tester.tap(find.byKey(const Key('account-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('account-menu-tenant-features')));
+    await tester.pumpAndSettle();
+    expect(find.text('Globex'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('tenant-features-acme')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Acme Inc'), findsOneWidget); // app bar title
+    expect(find.text('Super admin only'), findsOneWidget);
+    await tester
+        .tap(find.byKey(const Key('tenant-setting-invoices.recurring')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('tenant-settings-save')));
+    await tester.pumpAndSettle();
+    expect(saves.single, {'invoices.recurring': true});
+    expect(find.text('Overridden'), findsOneWidget);
+  });
+
   testWidgets('no settings entry without tenant_settings in the schema',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 1100);

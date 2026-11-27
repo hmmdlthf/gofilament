@@ -5,6 +5,7 @@ import 'controller.dart';
 import 'i18n.dart';
 import 'responsive.dart';
 import 'roles_screen.dart';
+import 'tenant_features_admin_screen.dart';
 import 'tenant_settings_screen.dart';
 import 'settings.dart';
 import 'theme.dart';
@@ -102,6 +103,14 @@ class _AccountHubState extends State<AccountHub> {
     await admin.logout();
   }
 
+  /// The schema's tenant_features_admin (central panels).
+  Map<String, dynamic>? get _featuresAdmin {
+    final fa = admin.schema['tenant_features_admin'];
+    return fa is Map && fa['enabled'] == true && fa['path'] != null
+        ? Map<String, dynamic>.from(fa)
+        : null;
+  }
+
   /// The schema's tenant_settings, when the user may change them.
   Map<String, dynamic>? get _tenantSettings {
     final ts = admin.schema['tenant_settings'];
@@ -164,6 +173,20 @@ class _AccountHubState extends State<AccountHub> {
                           api: admin.api,
                           path: '${_tenantSettings!['path']}',
                           title: '${_tenantSettings!['label'] ?? ''}')))),
+            ),
+          if (_featuresAdmin != null)
+            _NavCard(
+              key: const Key('account-menu-tenant-features'),
+              icon: Icons.toggle_on_outlined,
+              color: palette.color('danger'),
+              title: '${_featuresAdmin!['label'] ?? tr('Settings')}',
+              subtitle: tr("Change any tenant's features"),
+              onTap: () => _open((c) => Navigator.of(c).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) => TenantFeaturesAdminScreen(
+                          api: admin.api,
+                          path: '${_featuresAdmin!['path']}',
+                          title: '${_featuresAdmin!['label'] ?? ''}')))),
             ),
           if (_tenants.length > 1) ...[
             _Heading(tr('Workspace')),

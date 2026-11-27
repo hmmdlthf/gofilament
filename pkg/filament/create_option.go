@@ -65,12 +65,12 @@ func (p *Panel) registerCreateOptionRoutes(r *router.Router, res ResourceInterfa
 			return nil, nil, err
 		}
 		finder, ok := res.(interface {
-			FormField(name string) forms.Component
+			FormFieldFor(ctx *Context, name string) forms.Component
 		})
 		if !ok || res.NavigationItem(ctx) == nil {
 			return ctx, nil, p.apiError(c, ErrForbidden)
 		}
-		sel, ok := finder.FormField(c.Query("field")).(*forms.SelectField)
+		sel, ok := finder.FormFieldFor(ctx, c.Query("field")).(*forms.SelectField)
 		if !ok || !sel.CanCreateOption() {
 			return ctx, nil, c.JSON(http.StatusNotFound, map[string]string{"error": "This field has no create form"})
 		}

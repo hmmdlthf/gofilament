@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **One feature load per request**: panel requests carry a `features.WithMemo` request memo next to the tenant (`privacy.WithTenantID`).
 - **Flutter admin**: `/api/schema` sends the tenant's `Public` features (`features`) and `tenant_settings`; the account hub opens a **Tenant settings** screen (`TenantSettingsScreen`) with the same controls, badges, reset and field errors. Feature-hidden resources, pages, widgets, columns and actions are left out of the schema.
 - **Demo**: the shop can turn the Ship and Invoice order actions off under Tenant settings, and the Audit log is gated by a `SuperAdmin` feature.
+- **Flutter central screen**: on a panel with `TenantFeaturesAdmin`, the account hub opens **Tenant features** (`TenantFeaturesAdminScreen`): pick a tenant (from `GET <panel>/api/tenant-features`, or by key), then edit its features with a *Super admin only* badge on platform-managed ones.
+- **Gated form fields refuse their endpoints too**: option search, create-option forms and uploads look fields up with `forms.FindFieldFor` / `BaseResource.FormFieldFor(ctx, name)`, so a field hidden by a feature answers 404. `forms.FindField` without a request skips gated fields.
+- **Tenant settings with `TenantPathScoping`**: the page is also served at `<panel>/<tenant>/tenant-settings`, where the navigation links. It only uses the tenant the panel resolved and checked, never an unchecked path segment.
 - `tables.Table.WithContext`, `AllColumnNames` and `AllBulkActionNames`; `BaseResource.ColumnsFor`, `FiltersFor`, `DefaultColumnsFor`, `SelectableColumnsFor` and `BulkActionAllowed`.
 
 ### Changed

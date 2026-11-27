@@ -233,6 +233,11 @@ class _TenantSettingsScreenState extends State<TenantSettingsScreen> {
                     ? theme.colorScheme.tertiaryContainer
                     : theme.colorScheme.surfaceContainerHighest,
               ),
+              if (f['managed_by'] == 'super_admin')
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text(tr('Super admin only')),
+                ),
               if (overridden)
                 TextButton.icon(
                   key: Key('tenant-setting-reset-$key'),
