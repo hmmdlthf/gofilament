@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.46.0] - 2026-11-27
+
 ### Added
 - **Per-tenant features and settings** on GoLaravel's `pkg/features`. `Panel.Features(mgr)` adds a tenant settings page (`<panel>/tenant-settings`) and its API (`<panel>/api/tenant-settings`), built from `mgr.Definitions()` and grouped by `Group`: a toggle for `bool`, a select for `enum`, a number input with min/max for `int`, a text input for `string` and a JSON editor for `json`. Each field shows Overridden or Default and has Reset to default, and invalid values show their error on the field. Only `TenantAdmin` features are listed; the endpoints refuse `SuperAdmin` ones with 403, so a tenant can't enable a paid feature by posting its key. `TenantSettings(cfg)` sets the slug, label and who may use it (`tenant-settings.manage` with Roles).
 - **Central tenant features screen**: `Panel.TenantFeaturesAdmin(mgr, cfg)` lists tenants and edits any tenant's features, `SuperAdmin` ones included, through `features.ForTenant` (web and `<panel>/api/tenant-features/{tenant}`).
