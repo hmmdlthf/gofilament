@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'account.dart';
+import 'account_hub.dart';
 import 'controller.dart';
 import 'i18n.dart';
 
@@ -104,13 +105,14 @@ class SettingsScreen extends StatelessWidget {
                 title: Text(tr('Your account')),
                 subtitle: Text(tr('Profile, password and two-factor sign-in')),
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => AccountScreen(admin: admin))),
+                onTap: () => showAccountPage(
+                    context, (_) => AccountScreen(admin: admin)),
               ),
             ),
         ];
         return Scaffold(
-          appBar: AppBar(title: Text(tr('Settings'))),
+          appBar: AppBar(
+              leading: adaptiveLeading(context), title: Text(tr('Settings'))),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [

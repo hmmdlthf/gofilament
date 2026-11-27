@@ -18,6 +18,7 @@ import 'links.dart';
 import 'list_tools.dart';
 import 'reorder_dialog.dart';
 import 'resource_form.dart';
+import 'responsive.dart';
 import 'theme.dart';
 
 /// Lists the records of a resource: search, sort, filters, paging, inline
@@ -271,54 +272,66 @@ class _ResourceListPageState extends State<ResourceListPage> {
     }
   }
 
-  Widget _viewsMenu() {
-    Map<String, dynamic>? current;
+  Map<String, dynamic>? get _currentView {
     for (final v in _views) {
-      if ('${v['id']}' == _viewId) current = v;
+      if ('${v['id']}' == _viewId) return v;
     }
+    return null;
+  }
+
+  void _onViewSelected(String v) {
+    final current = _currentView;
+    if (v == ':all') {
+      _applyView(null);
+    } else if (v == ':save') {
+      _saveView();
+    } else if (v == ':delete' && current != null) {
+      _deleteView(current);
+    } else {
+      _applyView(_views.firstWhere((x) => '${x['id']}' == v));
+    }
+  }
+
+  List<PopupMenuEntry<String>> _viewItems() {
+    final current = _currentView;
+    return [
+      CheckedPopupMenuItem(
+          key: const Key('view-all'),
+          value: ':all',
+          checked: _viewId == null,
+          child: Text(tr('All records'))),
+      for (final v in _views)
+        CheckedPopupMenuItem(
+          key: Key('view-${v['id']}'),
+          value: '${v['id']}',
+          checked: '${v['id']}' == _viewId,
+          child: Text(
+              '${v['name']}${v['shared'] == true ? ' ${tr('(shared)')}' : ''}'),
+        ),
+      const PopupMenuDivider(),
+      PopupMenuItem(
+          key: const Key('view-save'),
+          value: ':save',
+          child: Text(tr('Save current view…'))),
+      if (current != null && current['can_delete'] == true)
+        PopupMenuItem(
+            key: const Key('view-delete'),
+            value: ':delete',
+            child: Text(tr('Delete "{name}"', {'name': current['name']}))),
+    ];
+  }
+
+  Widget _viewsMenu() {
+    final current = _currentView;
     return PopupMenuButton<String>(
       key: const Key('list-views'),
       tooltip: tr('Saved views'),
-      onSelected: (v) {
-        if (v == ':all') {
-          _applyView(null);
-        } else if (v == ':save') {
-          _saveView();
-        } else if (v == ':delete' && current != null) {
-          _deleteView(current);
-        } else {
-          _applyView(_views.firstWhere((x) => '${x['id']}' == v));
-        }
-      },
-      itemBuilder: (_) => [
-        CheckedPopupMenuItem(
-            key: const Key('view-all'),
-            value: ':all',
-            checked: _viewId == null,
-            child: Text(tr('All records'))),
-        for (final v in _views)
-          CheckedPopupMenuItem(
-            key: Key('view-${v['id']}'),
-            value: '${v['id']}',
-            checked: '${v['id']}' == _viewId,
-            child: Text(
-                '${v['name']}${v['shared'] == true ? ' ${tr('(shared)')}' : ''}'),
-          ),
-        const PopupMenuDivider(),
-        PopupMenuItem(
-            key: Key('view-save'),
-            value: ':save',
-            child: Text(tr('Save current view…'))),
-        if (current != null && current['can_delete'] == true)
-          PopupMenuItem(
-              key: const Key('view-delete'),
-              value: ':delete',
-              child: Text(tr('Delete "{name}"', {'name': current['name']}))),
-      ],
+      onSelected: _onViewSelected,
+      itemBuilder: (_) => _viewItems(),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.bookmarks_outlined),
+          const Icon(Icons.bookmarks_outlined, size: 20),
           if (current != null) ...[
             const SizedBox(width: 4),
             Text('${current['name']}', key: const Key('view-current')),
@@ -788,12 +801,13 @@ class _ResourceListPageState extends State<ResourceListPage> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 760;
-    return Padding(
-      padding: EdgeInsets.all(wide ? 20 : 12),
+    final sizes = AdminSizes.of(context);
+    final wide = !sizes.isPhone;
+    final page = Padding(
+      padding: EdgeInsets.all(sizes.pagePadding),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        _toolbar(context, wide),
-        const SizedBox(height: 12),
+        _toolbar(context),
+        SizedBox(height: sizes.gap + 2),
         if (_selected.isNotEmpty) _selectionBar(context),
         Expanded(
           child: Card(
@@ -811,58 +825,57 @@ class _ResourceListPageState extends State<ResourceListPage> {
         ),
       ]),
     );
+    if (!sizes.isPhone || !_canCreate || _showBoard) return page;
+    // phones: "New" is a floating button above the pagination bar
+    return Stack(children: [
+      Positioned.fill(child: page),
+      PositionedDirectional(
+        end: sizes.pagePadding + 12,
+        bottom: sizes.pagePadding + 60,
+        child: FloatingActionButton(
+          key: const Key('list-create'),
+          tooltip: _createLabel,
+          onPressed: () => _openForm(),
+          child: const Icon(Icons.add),
+        ),
+      ),
+    ]);
   }
 
-  Widget _toolbar(BuildContext context, bool wide) {
-    final searchField = TextField(
-      key: const Key('list-search'),
-      controller: _search,
-      onChanged: _onSearchChanged,
-      onSubmitted: (_) {
-        _debounce?.cancel();
-        _page = 1;
-        _load();
-      },
-      decoration: InputDecoration(
-        hintText: tr('Search'),
-        prefixIcon: const Icon(Icons.search, size: 20),
-        suffixIcon: _search.text.isEmpty
-            ? null
-            : IconButton(
-                tooltip: tr('Clear'),
-                icon: const Icon(Icons.close, size: 18),
-                onPressed: () {
-                  _search.clear();
-                  _page = 1;
-                  _load();
-                },
-              ),
-      ),
-    );
-
-    final filters = [for (final f in _filterDefs) _filterChip(context, f)];
-
-    final actions = <Widget>[
-      IconButton(
-          tooltip: tr('Refresh'),
-          icon: const Icon(Icons.refresh),
-          onPressed: _load),
+  /// The toolbar's secondary actions, most important first: the ones that
+  /// do not fit go under the "more" menu (on a phone, all of them).
+  List<_ToolAction> _toolActions(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return [
+      if (_advancedEnabled)
+        _ToolAction(
+          id: 'advanced-search',
+          label: tr('Advanced search'),
+          icon: Badge(
+            isLabelVisible: !_advanced.isEmpty,
+            label: Text('${_advanced.length}'),
+            child: Icon(Icons.manage_search,
+                color: _advanced.isEmpty ? null : primary),
+          ),
+          onPressed: _editAdvanced,
+        ),
+      if (_viewsEnabled)
+        _ToolAction(
+          id: 'views',
+          label: _currentView == null
+              ? tr('Saved views')
+              : '${tr('Saved views')}: ${_currentView!['name']}',
+          icon: const Icon(Icons.bookmarks_outlined),
+          menu: _viewItems,
+          onSelected: _onViewSelected,
+          inline: _viewsMenu(),
+        ),
       if (_groups.isNotEmpty)
-        PopupMenuButton<String>(
-          key: const Key('list-group'),
-          tooltip: tr('Group by'),
-          icon: Icon(Icons.segment,
-              color: _group.isEmpty
-                  ? null
-                  : Theme.of(context).colorScheme.primary),
-          onSelected: (g) {
-            setState(() {
-              _group = g;
-              _page = 1;
-            });
-            _load();
-          },
-          itemBuilder: (_) => [
+        _ToolAction(
+          id: 'group',
+          label: tr('Group by'),
+          icon: Icon(Icons.segment, color: _group.isEmpty ? null : primary),
+          menu: () => [
             CheckedPopupMenuItem(
                 key: const Key('group-none'),
                 value: '',
@@ -875,26 +888,20 @@ class _ResourceListPageState extends State<ResourceListPage> {
                   checked: _group == g,
                   child: Text(_columnLabel(g))),
           ],
-        ),
-      if (_advancedEnabled)
-        IconButton(
-          key: const Key('list-advanced-search'),
-          tooltip: tr('Advanced search'),
-          isSelected: !_advanced.isEmpty,
-          icon: Badge(
-            isLabelVisible: !_advanced.isEmpty,
-            label: Text('${_advanced.length}'),
-            child: const Icon(Icons.manage_search),
-          ),
-          onPressed: _editAdvanced,
+          onSelected: (g) {
+            setState(() {
+              _group = g;
+              _page = 1;
+            });
+            _load();
+          },
         ),
       if (_allColumns.any((c) => c['toggleable'] == true))
-        PopupMenuButton<String>(
-          key: const Key('list-columns'),
-          tooltip: tr('Columns'),
+        _ToolAction(
+          id: 'columns',
+          label: tr('Columns'),
           icon: const Icon(Icons.view_column_outlined),
-          onSelected: _toggleColumn,
-          itemBuilder: (_) => [
+          menu: () => [
             for (final c in _allColumns.where((c) => c['toggleable'] == true))
               CheckedPopupMenuItem<String>(
                 key: Key('column-toggle-${c['name']}'),
@@ -903,30 +910,52 @@ class _ResourceListPageState extends State<ResourceListPage> {
                 child: Text('${c['label'] ?? humanize('${c['name']}')}'),
               ),
           ],
+          onSelected: _toggleColumn,
         ),
       if (_hasBoard)
-        IconButton(
-          key: const Key('list-board'),
-          tooltip: _showBoard ? 'Table' : 'Board',
+        _ToolAction(
+          id: 'board',
+          label: _showBoard ? 'Table' : 'Board',
           icon: Icon(_showBoard
               ? Icons.table_rows_outlined
               : Icons.view_kanban_outlined),
           onPressed: () => setState(() => _showBoard = !_showBoard),
         ),
-      if (_reorderable)
-        IconButton(
-          key: const Key('list-reorder'),
-          tooltip: _canReorderNow
-              ? 'Reorder'
-              : tr('Clear search, filters, sorting and grouping to reorder'),
-          icon: const Icon(Icons.swap_vert),
-          onPressed: _canReorderNow && _rows.length > 1 ? _reorder : null,
+      if (_exportEnabled)
+        _ToolAction(
+          id: 'export',
+          label: tr('Export'),
+          icon: const Icon(Icons.download_outlined),
+          enabled: !_exporting,
+          menu: () => [
+            PopupMenuItem(value: 'csv', child: Text(tr('Export CSV'))),
+            PopupMenuItem(value: 'xlsx', child: Text(tr('Export Excel'))),
+          ],
+          onSelected: _export,
+          inline: PopupMenuButton<String>(
+            key: const Key('list-export'),
+            tooltip: tr('Export'),
+            enabled: !_exporting,
+            onSelected: _export,
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'csv', child: Text(tr('Export CSV'))),
+              PopupMenuItem(value: 'xlsx', child: Text(tr('Export Excel'))),
+            ],
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: _exporting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download_outlined, size: 20),
+            ),
+          ),
         ),
-      if (_viewsEnabled) _viewsMenu(),
       if (admin.can(widget.slug, 'import'))
-        IconButton(
-          key: const Key('list-import'),
-          tooltip: tr('Import'),
+        _ToolAction(
+          id: 'import',
+          label: tr('Import'),
           icon: const Icon(Icons.upload_file_outlined),
           onPressed: () async {
             final n = await showImportDialog(context,
@@ -936,69 +965,268 @@ class _ResourceListPageState extends State<ResourceListPage> {
             if (n != null && n > 0) _load();
           },
         ),
-      if (_exportEnabled)
-        PopupMenuButton<String>(
-          key: Key('list-export'),
-          tooltip: tr('Export'),
-          enabled: !_exporting,
-          onSelected: _export,
-          itemBuilder: (_) => [
-            PopupMenuItem(value: 'csv', child: Text(tr('Export CSV'))),
-            PopupMenuItem(value: 'xlsx', child: Text(tr('Export Excel'))),
-          ],
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: _exporting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.download_outlined),
-          ),
+      if (_reorderable)
+        _ToolAction(
+          id: 'reorder',
+          label: _canReorderNow
+              ? 'Reorder'
+              : tr('Clear search, filters, sorting and grouping to reorder'),
+          icon: const Icon(Icons.swap_vert),
+          enabled: _canReorderNow && _rows.length > 1,
+          onPressed: _reorder,
         ),
-      if (_canCreate) ...[
-        const SizedBox(width: 8),
-        FilledButton.icon(
-          key: const Key('list-create'),
-          onPressed: () => _openForm(),
-          icon: const Icon(Icons.add, size: 18),
-          label: Text(wide
-              ? tr('New {name}', {'name': _resource['model_name'] ?? ''}).trim()
-              : tr('New')),
-        ),
-      ],
+      _ToolAction(
+        id: 'refresh',
+        label: tr('Refresh'),
+        icon: const Icon(Icons.refresh),
+        onPressed: _load,
+      ),
     ];
+  }
 
-    if (wide) {
-      return Row(children: [
-        SizedBox(width: 300, child: searchField),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              for (final f in filters)
-                Padding(padding: const EdgeInsets.only(right: 8), child: f)
-            ]),
-          ),
-        ),
-        ...actions,
-      ]);
+  Widget _inlineAction(_ToolAction a) {
+    if (a.inline != null) return a.inline!;
+    if (a.menu != null) {
+      return PopupMenuButton<String>(
+        key: Key('list-${a.id}'),
+        tooltip: a.label,
+        enabled: a.enabled,
+        icon: a.icon,
+        onSelected: a.onSelected,
+        itemBuilder: (_) => a.menu!(),
+      );
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Row(children: [Expanded(child: searchField), ...actions]),
-      if (filters.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        SingleChildScrollView(
+    return IconButton(
+      key: Key('list-${a.id}'),
+      tooltip: a.label,
+      icon: a.icon,
+      onPressed: a.enabled ? a.onPressed : null,
+    );
+  }
+
+  final _moreKey = GlobalKey();
+
+  /// The ⋮ menu with the actions that did not fit. An action with its own
+  /// menu (group by, columns, export, views) opens it from the same spot.
+  Widget _moreMenu(List<_ToolAction> actions) {
+    return KeyedSubtree(
+      key: _moreKey,
+      child: PopupMenuButton<String>(
+        key: const Key('list-more'),
+        tooltip: tr('More'),
+        icon: const Icon(Icons.more_vert),
+        position: PopupMenuPosition.under,
+        itemBuilder: (context) => [
+          for (final a in actions)
+            PopupMenuItem<String>(
+              key: Key('list-more-${a.id}'),
+              value: a.id,
+              enabled: a.enabled,
+              child: Row(children: [
+                IconTheme.merge(
+                    data: const IconThemeData(size: 20), child: a.icon),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Text(a.label,
+                        maxLines: 1, overflow: TextOverflow.ellipsis)),
+                if (a.menu != null)
+                  const Padding(
+                    padding: EdgeInsetsDirectional.only(start: 8),
+                    child: Icon(Icons.arrow_right, size: 20),
+                  ),
+              ]),
+            ),
+        ],
+        onSelected: (id) async {
+          final a = actions.firstWhere((a) => a.id == id);
+          if (a.menu == null) {
+            a.onPressed?.call();
+            return;
+          }
+          final anchor = _moreKey.currentContext;
+          if (anchor == null) return;
+          final button = anchor.findRenderObject()! as RenderBox;
+          final overlay = Navigator.of(anchor)
+              .overlay!
+              .context
+              .findRenderObject()! as RenderBox;
+          final rect = Rect.fromPoints(
+            button.localToGlobal(Offset(0, button.size.height),
+                ancestor: overlay),
+            button.localToGlobal(button.size.bottomRight(Offset.zero),
+                ancestor: overlay),
+          );
+          final v = await showMenu<String>(
+            context: anchor,
+            position: RelativeRect.fromRect(rect, Offset.zero & overlay.size),
+            items: a.menu!(),
+          );
+          if (v != null) a.onSelected?.call(v);
+        },
+      ),
+    );
+  }
+
+  String get _createLabel =>
+      tr('New {name}', {'name': _resource['model_name'] ?? ''}).trim();
+
+  Widget _toolbar(BuildContext context) {
+    final theme = Theme.of(context);
+    final sizes = AdminSizes.of(context);
+    final searchField = SizedBox(
+      height: sizes.searchHeight,
+      child: TextField(
+        key: const Key('list-search'),
+        controller: _search,
+        onChanged: _onSearchChanged,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) {
+          _debounce?.cancel();
+          _page = 1;
+          _load();
+        },
+        style: theme.textTheme.bodyMedium,
+        textAlignVertical: TextAlignVertical.center,
+        // fill the toolbar's search height exactly
+        expands: true,
+        maxLines: null,
+        decoration: InputDecoration(
+          hintText: tr('Search'),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _search.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: tr('Clear'),
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () {
+                    _search.clear();
+                    _page = 1;
+                    _load();
+                  },
+                ),
+        ),
+      ),
+    );
+
+    final filters = [for (final f in _filterDefs) _filterChip(context, f)];
+    Widget filterRow() => SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(children: [
             for (final f in filters)
-              Padding(padding: const EdgeInsets.only(right: 8), child: f)
+              Padding(
+                  padding: EdgeInsetsDirectional.only(end: sizes.gap - 2),
+                  child: f)
           ]),
-        ),
-      ],
-    ]);
+        );
+
+    final all = _toolActions(context);
+
+    return LayoutBuilder(builder: (context, c) {
+      // which actions show as icons: all of them when they fit, otherwise
+      // the most important ones and a ⋮ menu; phones keep only ⋮
+      final slot = sizes.iconButtonSize + 4;
+      final createText =
+          sizes.isDesktop || c.maxWidth >= 720 ? _createLabel : tr('New');
+      var createWidth = 0.0;
+      if (_canCreate && !sizes.isPhone) {
+        final painter = TextPainter(
+            text: TextSpan(
+                text: createText,
+                style: theme.textTheme.labelLarge
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+            textDirection: Directionality.of(context))
+          ..layout();
+        createWidth = painter.width + 18 + 8 + 32 + sizes.gap;
+      }
+      final filtersInline = sizes.isDesktop && filters.isNotEmpty;
+      final searchWidth = sizes.isPhone
+          ? c.maxWidth * 0.6
+          : (sizes.isDesktop ? 300.0 : (c.maxWidth * 0.42).clamp(200.0, 300.0));
+      final room = c.maxWidth -
+          searchWidth -
+          sizes.gap -
+          createWidth -
+          (filtersInline ? 180 : 0);
+      final fit = sizes.isPhone ? 0 : (room / slot).floor();
+      final List<_ToolAction> inline;
+      final List<_ToolAction> overflow;
+      if (all.length <= fit || (sizes.isPhone && all.length == 1)) {
+        inline = all;
+        overflow = const [];
+      } else {
+        final n = (fit - 1).clamp(0, all.length);
+        // the n most important stay inline, the rest go under ⋮
+        final keep = all.take(n).toSet();
+        inline = [
+          for (final a in all)
+            if (keep.contains(a)) a
+        ];
+        overflow = [
+          for (final a in all)
+            if (!keep.contains(a)) a
+        ];
+      }
+      // the inline icons in a stable visual order
+      inline.sort((x, y) => _actionOrder(x.id).compareTo(_actionOrder(y.id)));
+
+      final actions = <Widget>[
+        for (final a in inline) _inlineAction(a),
+        if (overflow.isNotEmpty) _moreMenu(overflow),
+        if (_canCreate && !sizes.isPhone) ...[
+          SizedBox(width: sizes.gap),
+          SizedBox(
+            height: sizes.searchHeight,
+            child: FilledButton.icon(
+              key: const Key('list-create'),
+              onPressed: () => _openForm(),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(createText),
+            ),
+          ),
+        ],
+      ];
+
+      if (filtersInline) {
+        return Row(children: [
+          SizedBox(width: searchWidth, child: searchField),
+          SizedBox(width: sizes.gap),
+          Expanded(child: filterRow()),
+          ...actions,
+        ]);
+      }
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          if (sizes.isPhone)
+            Expanded(child: searchField)
+          else ...[
+            SizedBox(width: searchWidth, child: searchField),
+            const Spacer(),
+          ],
+          if (sizes.isPhone) const SizedBox(width: 4),
+          ...actions,
+        ]),
+        if (filters.isNotEmpty) ...[
+          SizedBox(height: sizes.gap),
+          filterRow(),
+        ],
+      ]);
+    });
   }
+
+  static const _visualOrder = [
+    'refresh',
+    'group',
+    'advanced-search',
+    'columns',
+    'board',
+    'reorder',
+    'views',
+    'import',
+    'export',
+  ];
+
+  static int _actionOrder(String id) => _visualOrder.indexOf(id);
 
   Widget _filterChip(BuildContext context, Map<String, dynamic> filter) {
     if (filter['type'] == 'refined') return _refinedChip(context, filter);
@@ -1468,6 +1696,8 @@ class _ResourceListPageState extends State<ResourceListPage> {
     final columns = _columns;
     final entries = _tableRows(columns);
     return ListView.separated(
+      // room for the floating "New" button over the last card
+      padding: EdgeInsets.only(bottom: _canCreate ? 76 : 0),
       itemCount: entries.length,
       separatorBuilder: (_, i) => entries[i].row == null &&
               (i + 1 >= entries.length || entries[i + 1].row == null)
@@ -1765,4 +1995,33 @@ class _SaveViewDialogState extends State<_SaveViewDialog> {
               child: Text(tr('Save'))),
         ],
       );
+}
+
+/// A list toolbar action: an icon button, or an icon with its own menu.
+class _ToolAction {
+  const _ToolAction({
+    required this.id,
+    required this.label,
+    required this.icon,
+    this.onPressed,
+    this.menu,
+    this.onSelected,
+    this.enabled = true,
+    this.inline,
+  });
+
+  /// Key suffix: the inline button is `list-<id>`, its ⋮ entry
+  /// `list-more-<id>`.
+  final String id;
+  final String label;
+  final Widget icon;
+  final VoidCallback? onPressed;
+
+  /// Items of the action's own menu (group by, columns, ...).
+  final List<PopupMenuEntry<String>> Function()? menu;
+  final ValueChanged<String>? onSelected;
+  final bool enabled;
+
+  /// A custom inline widget (e.g. the export button's progress).
+  final Widget? inline;
 }

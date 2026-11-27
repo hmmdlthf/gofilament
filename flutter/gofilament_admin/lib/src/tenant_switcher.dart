@@ -6,8 +6,11 @@ import 'i18n.dart';
 
 /// The topbar tenant menu: the current tenant, and the others to switch to.
 class TenantSwitcher extends StatefulWidget {
-  const TenantSwitcher({super.key, required this.admin});
+  const TenantSwitcher({super.key, required this.admin, this.compact = false});
   final AdminController admin;
+
+  /// Icon only, the tenant's name in the tooltip (tablets).
+  final bool compact;
 
   @override
   State<TenantSwitcher> createState() => _TenantSwitcherState();
@@ -58,7 +61,7 @@ class _TenantSwitcherState extends State<TenantSwitcher> {
         orElse: () => _tenants.first)['name'];
     return PopupMenuButton<String>(
       key: const Key('tenant-menu'),
-      tooltip: tr('Switch tenant'),
+      tooltip: widget.compact ? '$name' : tr('Switch tenant'),
       position: PopupMenuPosition.under,
       onSelected: _switch,
       itemBuilder: (_) => [
@@ -70,15 +73,19 @@ class _TenantSwitcherState extends State<TenantSwitcher> {
             child: Text('${t['name']}'),
           ),
       ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.apartment_outlined, size: 18),
-          const SizedBox(width: 6),
-          Text('$name', key: const Key('tenant-current')),
-          const Icon(Icons.arrow_drop_down),
-        ]),
-      ),
+      child: widget.compact
+          ? const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(Icons.apartment_outlined, size: 21))
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.apartment_outlined, size: 18),
+                const SizedBox(width: 6),
+                Text('$name', key: const Key('tenant-current')),
+                const Icon(Icons.arrow_drop_down),
+              ]),
+            ),
     );
   }
 }

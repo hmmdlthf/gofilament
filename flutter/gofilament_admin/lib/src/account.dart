@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'i18n.dart';
 
+import 'account_hub.dart';
 import 'api.dart';
 import 'controller.dart';
 import 'links.dart';
@@ -394,7 +395,8 @@ class _AccountScreenState extends State<AccountScreen> {
       ]);
     }
     return Scaffold(
-      appBar: AppBar(title: Text(tr('Your account'))),
+      appBar: AppBar(
+          leading: adaptiveLeading(context), title: Text(tr('Your account'))),
       body: body,
     );
   }

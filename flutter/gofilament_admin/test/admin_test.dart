@@ -74,7 +74,9 @@ void main() {
 
       await tester.tap(find.byKey(const Key('account-menu')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Sign out'));
+      await tester.tap(find.byKey(const Key('account-menu-logout')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm-sign-out')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('login-submit')), findsOneWidget);
     });

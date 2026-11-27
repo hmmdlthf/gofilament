@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'responsive.dart';
+
 /// The panel's colour palettes (primary, gray, success, danger, warning, info,
 /// accent, ...), each with the shades 50..950, as sent by the server.
 @immutable
@@ -86,9 +88,47 @@ Color? parseColor(String hex) {
   return v == null || h.length != 8 ? null : Color(v);
 }
 
-/// Builds the Material theme from the panel palettes.
+/// Font sizes per layout: (bodyLarge, bodyMedium, bodySmall, titleLarge,
+/// titleMedium, titleSmall, labelLarge, labelMedium, labelSmall).
+const _fontSizes = <AdminFormFactor, List<double>>{
+  AdminFormFactor.phone: [15, 14, 12, 19, 16, 14, 14, 12, 11],
+  AdminFormFactor.tablet: [15, 14, 12.5, 20, 16, 14, 14, 12, 11],
+  AdminFormFactor.desktop: [14, 13.5, 12, 20, 15, 13.5, 13.5, 12, 11],
+};
+
+TextTheme _sizedText(TextTheme t, AdminFormFactor f) {
+  final s = _fontSizes[f]!;
+  TextStyle? z(TextStyle? style, double size) =>
+      style?.copyWith(fontSize: size);
+  return t.copyWith(
+    bodyLarge: z(t.bodyLarge, s[0]),
+    bodyMedium: z(t.bodyMedium, s[1]),
+    bodySmall: z(t.bodySmall, s[2]),
+    titleLarge: z(t.titleLarge, s[3]),
+    titleMedium: z(t.titleMedium, s[4]),
+    titleSmall: z(t.titleSmall, s[5]),
+    labelLarge: z(t.labelLarge, s[6]),
+    labelMedium: z(t.labelMedium, s[7]),
+    labelSmall: z(t.labelSmall, s[8]),
+  );
+}
+
+/// Builds the Material theme from the panel palettes, sized for
+/// [formFactor] (see [AdminSizes]).
 ThemeData buildAdminTheme(AdminPalette palette, Brightness brightness,
-    {String? fontFamily}) {
+    {String? fontFamily,
+    AdminFormFactor formFactor = AdminFormFactor.desktop}) {
+  final sizes = AdminSizes.forFormFactor(formFactor);
+  final font = (fontFamily == null || fontFamily.isEmpty) ? null : fontFamily;
+  final baseText = _sizedText(
+      ThemeData(useMaterial3: true, brightness: brightness, fontFamily: font)
+          .textTheme,
+      formFactor);
+  // vertical padding that makes a single-line field sizes.controlHeight tall
+  final fieldFont = _fontSizes[formFactor]![0];
+  final fieldPad = ((sizes.controlHeight - fieldFont * 1.45) / 2)
+      .clamp(6.0, 14.0)
+      .toDouble();
   final dark = brightness == Brightness.dark;
   final primary = palette.color('primary', dark ? 500 : 600);
   final accent = palette.color('accent', dark ? 500 : 600);
@@ -125,22 +165,54 @@ ThemeData buildAdminTheme(AdminPalette palette, Brightness brightness,
         dark ? palette.color('gray', 700) : palette.color('gray', 200),
   );
 
-  final radius = BorderRadius.circular(10);
+  final radius = BorderRadius.circular(sizes.radius);
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
     colorScheme: scheme,
-    fontFamily: (fontFamily == null || fontFamily.isEmpty) ? null : fontFamily,
+    fontFamily: font,
+    textTheme: baseText,
+    visualDensity: VisualDensity.standard,
+    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     scaffoldBackgroundColor: background,
     dividerColor: outline,
     dividerTheme: DividerThemeData(color: outline, thickness: 1, space: 1),
-    extensions: [palette],
+    extensions: [palette, sizes],
     appBarTheme: AppBarTheme(
       backgroundColor: surface,
       foregroundColor: text,
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
+      toolbarHeight: sizes.topBarHeight,
+      titleTextStyle: baseText.titleMedium
+          ?.copyWith(fontWeight: FontWeight.w600, color: text),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: Size.square(sizes.iconButtonSize),
+        fixedSize: Size.square(sizes.iconButtonSize),
+        padding: EdgeInsets.zero,
+        iconSize: sizes.iconSize,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      dense: formFactor == AdminFormFactor.desktop,
+      contentPadding: EdgeInsets.symmetric(horizontal: sizes.pagePadding),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: primary,
+      foregroundColor: Colors.white,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
     ),
     cardTheme: CardThemeData(
       color: surface,
@@ -155,7 +227,12 @@ ThemeData buildAdminTheme(AdminPalette palette, Brightness brightness,
       isDense: true,
       filled: true,
       fillColor: dark ? palette.color('gray', 950) : Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: fieldPad),
+      prefixIconConstraints:
+          BoxConstraints(minWidth: sizes.controlHeight, minHeight: 20),
+      suffixIconConstraints:
+          BoxConstraints(minWidth: sizes.controlHeight, minHeight: 20),
+      hintStyle: TextStyle(color: muted, fontSize: fieldFont),
       border: OutlineInputBorder(
           borderRadius: radius, borderSide: BorderSide(color: outline)),
       enabledBorder: OutlineInputBorder(
@@ -166,16 +243,28 @@ ThemeData buildAdminTheme(AdminPalette palette, Brightness brightness,
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 44),
+        minimumSize: Size(0, sizes.controlHeight),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: radius),
-        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        textStyle: baseText.labelLarge?.copyWith(fontWeight: FontWeight.w600),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 44),
+        minimumSize: Size(0, sizes.controlHeight),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(borderRadius: radius),
         side: BorderSide(color: outline),
+        textStyle: baseText.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: Size(0, sizes.controlHeight),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(borderRadius: radius),
       ),
     ),
     dialogTheme: DialogThemeData(
@@ -189,7 +278,8 @@ ThemeData buildAdminTheme(AdminPalette palette, Brightness brightness,
           fontSize: 12,
           color: muted,
           letterSpacing: 0.4),
-      dataTextStyle: TextStyle(fontSize: 13.5, color: text),
+      dataTextStyle:
+          TextStyle(fontSize: _fontSizes[formFactor]![1], color: text),
       headingRowHeight: 44,
       dataRowMinHeight: 48,
       dataRowMaxHeight: 56,

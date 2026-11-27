@@ -22,6 +22,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('account-menu')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('hub-language')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('language-ar')));
     await tester.pumpAndSettle();
     expect(api.locale, 'ar');
@@ -40,5 +42,6 @@ void main() {
     await tester.tap(find.byKey(const Key('account-menu')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('language-ar')), findsNothing);
+    expect(find.byKey(const Key('hub-language')), findsNothing);
   });
 }

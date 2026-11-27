@@ -19,7 +19,8 @@ Future<void> _openSettings(WidgetTester tester, AdminApi api) async {
 }
 
 Brightness _brightness(WidgetTester tester) =>
-    Theme.of(tester.element(find.byKey(const Key('settings-theme')))).brightness;
+    Theme.of(tester.element(find.byKey(const Key('settings-theme'))))
+        .brightness;
 
 void main() {
   testWidgets('settings switch the theme, including back to the system one',
@@ -64,13 +65,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(await api.readPreference('sidebar_mode'), 'icons');
 
-    await tester.pageBack();
+    // settings open as a dialog on a desktop
+    await tester.tap(find.byType(CloseButton));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('sidebar-icons')), findsOneWidget);
   });
 
-  testWidgets('sections the panel does not offer are left out',
-      (tester) async {
+  testWidgets('sections the panel does not offer are left out', (tester) async {
     await _openSettings(tester, FakePanel().api());
     expect(find.byKey(const Key('settings-theme')), findsOneWidget);
     expect(find.byKey(const Key('settings-sidebar')), findsNothing);

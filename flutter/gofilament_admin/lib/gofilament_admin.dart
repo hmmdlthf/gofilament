@@ -30,6 +30,7 @@ export 'src/notifications.dart';
 export 'src/relations.dart';
 export 'src/resource_form.dart';
 export 'src/resource_list.dart';
+export 'src/responsive.dart';
 export 'src/roles_screen.dart';
 export 'src/session_store.dart';
 export 'src/shell.dart';

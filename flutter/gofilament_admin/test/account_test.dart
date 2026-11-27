@@ -145,6 +145,7 @@ void main() {
 
     // Two-factor: set up (asks the password), confirm, see recovery codes.
     await tester.ensureVisible(find.byKey(const Key('two-factor-setup')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('two-factor-setup')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('confirm-password')), 'pw');
@@ -153,7 +154,13 @@ void main() {
     expect(calls.last['enable'], {'current_password': 'pw'});
     expect(find.text('JBSWY3DPEHPK3PXP'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('two-factor-code')), '654321');
+    // the snackbar from the password change would cover the button
+    ScaffoldMessenger.of(
+            tester.element(find.byKey(const Key('two-factor-code'))))
+        .removeCurrentSnackBar();
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('two-factor-confirm')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('two-factor-confirm')));
     await tester.pumpAndSettle();
     expect(calls.last['confirm'], {'code': '654321'});
@@ -163,6 +170,7 @@ void main() {
 
     // Turn it off.
     await tester.ensureVisible(find.byKey(const Key('two-factor-disable')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('two-factor-disable')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const Key('confirm-password')), 'pw');

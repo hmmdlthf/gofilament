@@ -6,6 +6,7 @@ import 'components.dart';
 import 'account.dart';
 import 'controller.dart';
 import 'login.dart';
+import 'responsive.dart';
 import 'shell.dart';
 import 'theme.dart';
 
@@ -72,6 +73,17 @@ class _GoFilamentAdminState extends State<GoFilamentAdmin> {
     _admin.start();
   }
 
+  /// Themes built so far, keyed by what they depend on, so resizing the
+  /// window only rebuilds a theme when the layout changes.
+  final _themes = <Object, ThemeData>{};
+
+  ThemeData _theme(Brightness brightness, AdminFormFactor formFactor) {
+    final key = (_admin.palette, _admin.fontFamily, brightness, formFactor);
+    if (_themes.length > 12) _themes.clear();
+    return _themes[key] ??= buildAdminTheme(_admin.palette, brightness,
+        fontFamily: _admin.fontFamily, formFactor: formFactor);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -84,19 +96,24 @@ class _GoFilamentAdminState extends State<GoFilamentAdmin> {
             fontFamily: _admin.fontFamily),
         darkTheme: buildAdminTheme(_admin.palette, Brightness.dark,
             fontFamily: _admin.fontFamily),
-        builder: (context, child) => Directionality(
-            textDirection: _admin.isRtl ? TextDirection.rtl : TextDirection.ltr,
-            child: child!),
+        builder: (context, child) => Theme(
+          // the same theme sized for this window: phone, tablet or desktop
+          data:
+              _theme(Theme.of(context).brightness, AdminFormFactor.of(context)),
+          child: Directionality(
+              textDirection:
+                  _admin.isRtl ? TextDirection.rtl : TextDirection.ltr,
+              child: child!),
+        ),
         home: switch (_admin.stage) {
           AdminStage.loading => const _Splash(),
           AdminStage.failed => _Failure(
               message: _admin.error ?? tr('Something went wrong'),
               onRetry: _admin.start),
-          AdminStage.signedOut =>
-            LoginScreen(
-                admin: _admin,
-                demoLogin: widget.demoLogin,
-                demoLogins: widget.demoLogins),
+          AdminStage.signedOut => LoginScreen(
+              admin: _admin,
+              demoLogin: widget.demoLogin,
+              demoLogins: widget.demoLogins),
           AdminStage.signedIn => AdminShell(admin: _admin),
           AdminStage.verifyEmail => VerifyEmailScreen(admin: _admin),
         },

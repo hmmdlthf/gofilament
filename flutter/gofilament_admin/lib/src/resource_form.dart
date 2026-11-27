@@ -2,6 +2,7 @@ import 'dart:async';
 import 'i18n.dart';
 
 import 'package:flutter/material.dart';
+import 'responsive.dart';
 import 'package:flutter/services.dart';
 
 import 'api.dart';
@@ -26,7 +27,7 @@ Future<bool?> showResourceForm(
   String? title,
   Map<String, dynamic>? action,
 }) {
-  final wide = MediaQuery.sizeOf(context).width >= 760;
+  final wide = AdminFormFactor.of(context) != AdminFormFactor.phone;
   final form = ResourceForm(
       admin: admin,
       slug: slug,
@@ -378,6 +379,7 @@ class _ResourceFormState extends State<ResourceForm> {
 
   @override
   Widget build(BuildContext context) {
+    final phone = AdminSizes.of(context).isPhone;
     final theme = Theme.of(context);
     final model = widget.title ??
         '${widget.admin.resource(widget.slug)?['model_name'] ?? ''}';
@@ -404,7 +406,7 @@ class _ResourceFormState extends State<ResourceForm> {
       body = Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: EdgeInsets.all(phone ? 16 : 20),
           shrinkWrap: true,
           children: [
             if (_saveError != null)
@@ -460,72 +462,96 @@ class _ResourceFormState extends State<ResourceForm> {
       );
     }
 
+    final cancel = OutlinedButton(
+      onPressed: () => Navigator.of(context).pop(false),
+      child: Text(_locked ? 'Close' : 'Cancel'),
+    );
+    final save = !_locked && _payload != null
+        ? FilledButton(
+            key: const Key('form-save'),
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : Text(_isAction
+                    ? '${widget.action!['label'] ?? 'Run'}'
+                    : (_isEdit ? tr('Save changes') : 'Create')),
+          )
+        : null;
+
     return Material(
       color: theme.colorScheme.surface,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 8, 12),
-          child: Row(children: [
-            Expanded(
-              child: Text(title.trim(),
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-            ),
-            if (_isEdit &&
-                !_isRelation &&
-                !_isAction &&
-                widget.admin.can(widget.slug, 'history'))
-              IconButton(
-                key: const Key('form-history'),
-                tooltip: tr('History'),
-                icon: const Icon(Icons.history),
-                onPressed: () => showRecordHistory(context,
-                    api: widget.admin.api, slug: widget.slug, id: widget.id!),
-              ),
-            IconButton(
-              key: const Key('form-close'),
-              tooltip: tr('Close'),
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-          ]),
-        ),
-        if (_isAction &&
-            '${widget.action!['modal_description'] ?? ''}'.isNotEmpty)
+      child: SafeArea(
+        // full-screen on a phone: keep clear of the status bar and home bar
+        top: phone,
+        bottom: phone,
+        left: phone,
+        right: phone,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Text('${widget.action!['modal_description']}',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          ),
-        const Divider(),
-        Flexible(child: body),
-        const Divider(),
-        Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(_locked ? 'Close' : 'Cancel'),
-            ),
-            if (!_locked && _payload != null) ...[
-              const SizedBox(width: 10),
-              FilledButton(
-                key: const Key('form-save'),
-                onPressed: _saving ? null : _save,
-                child: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text(_isAction
-                        ? '${widget.action!['label'] ?? 'Run'}'
-                        : (_isEdit ? tr('Save changes') : 'Create')),
+            padding: phone
+                ? const EdgeInsets.fromLTRB(16, 6, 4, 6)
+                : const EdgeInsets.fromLTRB(20, 12, 8, 12),
+            child: Row(children: [
+              Expanded(
+                child: Text(title.trim(),
+                    maxLines: phone ? 1 : 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: (phone
+                            ? theme.textTheme.titleMedium
+                                ?.copyWith(fontSize: 17)
+                            : theme.textTheme.titleLarge)
+                        ?.copyWith(fontWeight: FontWeight.w700)),
               ),
-            ],
-          ]),
-        ),
-      ]),
+              if (_isEdit &&
+                  !_isRelation &&
+                  !_isAction &&
+                  widget.admin.can(widget.slug, 'history'))
+                IconButton(
+                  key: const Key('form-history'),
+                  tooltip: tr('History'),
+                  icon: const Icon(Icons.history),
+                  onPressed: () => showRecordHistory(context,
+                      api: widget.admin.api, slug: widget.slug, id: widget.id!),
+                ),
+              IconButton(
+                key: const Key('form-close'),
+                tooltip: tr('Close'),
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(false),
+              ),
+            ]),
+          ),
+          if (_isAction &&
+              '${widget.action!['modal_description'] ?? ''}'.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text('${widget.action!['modal_description']}',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ),
+          const Divider(),
+          Flexible(child: body),
+          const Divider(),
+          Padding(
+            padding: EdgeInsets.all(phone ? 12 : 14),
+            child: phone
+                ? Row(children: [
+                    Expanded(child: cancel),
+                    if (save != null) ...[
+                      const SizedBox(width: 10),
+                      Expanded(flex: 2, child: save),
+                    ],
+                  ])
+                : Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                    cancel,
+                    if (save != null) ...[const SizedBox(width: 10), save],
+                  ]),
+          ),
+        ]),
+      ),
     );
   }
 

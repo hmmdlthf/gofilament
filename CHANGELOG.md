@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Flutter admin sized for phones, tablets and desktops**: one set of breakpoints (`AdminFormFactor`: phone under 600px, tablet under 1024px, desktop) and per-layout sizes (`AdminSizes`: top bar, control and search heights, icon buttons, padding, font sizes) carried by the theme. `buildAdminTheme` takes a `formFactor`, and the app rebuilds its theme when the window crosses a breakpoint. Inputs, buttons and icon buttons are no longer phone-tall on every screen.
+- **Account hub**: the top bar avatar opens a page (on phones) or a dialog (tablets and desktops) with the signed-in user, Your account, Settings, Roles, the workspace (tenant), appearance, language and sign out (with a confirmation). Settings and Your account open the same way. `showAdaptivePage`, `showAdaptiveSheet` and `AdaptiveDialog` are exported.
+
+### Changed
+- **Flutter list toolbar**: secondary actions (group by, columns, views, export, import, reorder, refresh) show as icons while they fit and go under a ⋮ menu when they don't. On phones the search field fills the row next to ⋮, and New is a floating button. Range, refined and advanced-search filters open as bottom sheets on phones.
+- **Flutter top bar** is 56px on phones and keeps only the menu, title, notifications, search and avatar; the tenant switcher is an icon on tablets, and the theme toggle shows on desktops (all are in the account hub).
+- **Flutter forms on phones** respect the safe area and put Cancel / Save full width along the bottom.
+
 ## [v1.44.0] - 2026-11-26
 
 ### Added

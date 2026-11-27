@@ -346,7 +346,9 @@ void main() {
     tester.view.physicalSize = const Size(420, 1400);
     await tester.pumpAndSettle();
     expect(find.byType(DataTable), findsNothing);
-    expect(find.byKey(const Key('list-group')), findsOneWidget);
+    // phones keep the secondary actions under ⋮
+    expect(find.byKey(const Key('list-group')), findsNothing);
+    expect(find.byKey(const Key('list-more')), findsOneWidget);
     expect(
         find.byKey(const Key('group-card-Status: draft (1)')), findsOneWidget);
     expect(find.text('Subtotal'), findsNWidgets(2));

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'i18n.dart';
 
 import 'package:flutter/material.dart';
+
+import 'responsive.dart';
 import 'package:flutter/rendering.dart';
 
 // Refined filters, advanced search and resizable columns for the resource
@@ -17,10 +19,10 @@ Future<Set<String>?> showRefinedFilterDialog(
   bool multiple = true,
 }) {
   final chosen = {...selected};
-  return showDialog<Set<String>>(
-    context: context,
+  return showAdaptiveSheet<Set<String>>(
+    context,
     builder: (context) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
+      builder: (context, setState) => AdaptiveDialog(
         title: Text(label),
         content: SizedBox(
           width: 360,
@@ -207,8 +209,8 @@ Future<AdvancedSearch?> showAdvancedSearchDialog(
   if (search.rules.isEmpty && fields.isNotEmpty) {
     search.rules.add(AdvancedRule(fields.keys.first));
   }
-  return showDialog<AdvancedSearch>(
-    context: context,
+  return showAdaptiveSheet<AdvancedSearch>(
+    context,
     builder: (context) => StatefulBuilder(builder: (context, setState) {
       Widget rule(int i) {
         final r = search.rules[i];
@@ -264,7 +266,7 @@ Future<AdvancedSearch?> showAdvancedSearchDialog(
         );
       }
 
-      return AlertDialog(
+      return AdaptiveDialog(
         title: Text(tr('Advanced search')),
         content: SizedBox(
           width: 620,
@@ -465,9 +467,9 @@ Future<String?> showRangeFilterDialog(
         ),
       );
 
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
+  return showAdaptiveSheet<String>(
+    context,
+    builder: (context) => AdaptiveDialog(
       title: Text(label),
       content: Wrap(spacing: 12, runSpacing: 12, children: [
         field('range-from', dates ? 'From' : 'Min', from),

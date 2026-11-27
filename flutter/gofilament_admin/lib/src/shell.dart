@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'i18n.dart';
 
-import 'account.dart';
+import 'account_hub.dart';
 import 'controller.dart';
 import 'global_search.dart';
 import 'dashboard.dart';
 import 'icons.dart';
 import 'login.dart';
 import 'notifications.dart';
-import 'roles_screen.dart';
-import 'settings.dart';
+import 'responsive.dart';
 import 'tenant_switcher.dart';
 import 'resource_list.dart';
 import 'theme.dart';
@@ -247,7 +246,7 @@ class _AdminShellState extends State<AdminShell> {
         if (mounted) setState(_restoreFromLocation);
       });
     }
-    final wide = MediaQuery.sizeOf(context).width >= 1000;
+    final wide = AdminFormFactor.of(context) == AdminFormFactor.desktop;
     final mode = wide ? admin.sidebarMode : 'expanded';
     final modes = admin.sidebarOptions;
     final next = modes[(modes.indexOf(mode) + 1) % modes.length];
@@ -261,7 +260,7 @@ class _AdminShellState extends State<AdminShell> {
     final sidebar = sidebarFor(compact: false);
 
     return Scaffold(
-      drawer: wide ? null : Drawer(width: 280, child: SafeArea(child: sidebar)),
+      drawer: wide ? null : Drawer(width: 288, child: SafeArea(child: sidebar)),
       body: SafeArea(
         child: Row(
           children: [
@@ -489,12 +488,17 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final sizes = AdminSizes.of(context);
     final name = '${admin.user['name'] ?? admin.user['login'] ?? ''}';
-    final initial = name.isEmpty ? '?' : name[0].toUpperCase();
+    // phones keep the bar to what is used all the time; the tenant and the
+    // theme live in the account hub there
+    final showThemeToggle = sizes.isDesktop &&
+        admin.brand['theme_mode'] != 'dark' &&
+        admin.brand['theme_mode'] != 'light';
 
     return Container(
-      height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: sizes.topBarHeight,
+      padding: EdgeInsets.symmetric(horizontal: sizes.isPhone ? 4 : 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(bottom: BorderSide(color: theme.dividerColor)),
@@ -521,15 +525,19 @@ class _TopBar extends StatelessWidget {
             }),
             onPressed: onToggleSidebar,
           ),
-        const SizedBox(width: 4),
+        SizedBox(width: sizes.isPhone ? 4 : 8),
         Expanded(
           child: Text(title,
+              key: const Key('topbar-title'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleMedium
+              style: (sizes.isPhone
+                      ? theme.textTheme.titleMedium
+                      : theme.textTheme.titleLarge?.copyWith(fontSize: 18))
                   ?.copyWith(fontWeight: FontWeight.w600)),
         ),
-        if (admin.hasTenancy) TenantSwitcher(admin: admin),
+        if (admin.hasTenancy && !sizes.isPhone)
+          TenantSwitcher(admin: admin, compact: sizes.isTablet),
         if (admin.schema['notifications'] == true)
           NotificationBell(api: admin.api),
         if (onSearch != null)
@@ -539,8 +547,7 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.search),
             onPressed: onSearch,
           ),
-        if (admin.brand['theme_mode'] != 'dark' &&
-            admin.brand['theme_mode'] != 'light')
+        if (showThemeToggle)
           IconButton(
             tooltip: theme.brightness == Brightness.dark
                 ? tr('Light mode')
@@ -551,99 +558,19 @@ class _TopBar extends StatelessWidget {
             onPressed: () => admin.toggleTheme(theme.brightness),
           ),
         const SizedBox(width: 4),
-        PopupMenuButton<String>(
-          key: const Key('account-menu'),
-          tooltip: tr('Account'),
-          position: PopupMenuPosition.under,
-          onSelected: (v) {
-            if (v == 'logout') admin.logout();
-            if (v.startsWith('locale:')) admin.setLanguage(v.substring(7));
-            if (v == 'roles') {
-              Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) => RolesScreen(api: admin.api)));
-            }
-            if (v == 'account') {
-              Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) => AccountScreen(admin: admin)));
-            }
-            if (v == 'settings') {
-              Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (_) => SettingsScreen(admin: admin)));
-            }
-          },
-          itemBuilder: (_) => [
-            PopupMenuItem<String>(
-              enabled: false,
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface)),
-                    if ('${admin.user['email'] ?? ''}'.isNotEmpty)
-                      Text('${admin.user['email']}',
-                          style: theme.textTheme.bodySmall),
-                  ]),
-            ),
-            const PopupMenuDivider(),
-            if (admin.schema['manage_roles'] == true)
-              PopupMenuItem<String>(
-                key: Key('account-menu-roles'),
-                value: 'roles',
-                child: Row(children: [
-                  Icon(Icons.admin_panel_settings_outlined, size: 18),
-                  SizedBox(width: 10),
-                  Text(tr('Roles'))
-                ]),
-              ),
-            if (admin.hasAccountScreen)
-              PopupMenuItem<String>(
-                key: Key('account-menu-profile'),
-                value: 'account',
-                child: Row(children: [
-                  Icon(Icons.manage_accounts_outlined, size: 18),
-                  SizedBox(width: 10),
-                  Text(tr('Your account'))
-                ]),
-              ),
-            PopupMenuItem<String>(
-              key: Key('account-menu-settings'),
-              value: 'settings',
-              child: Row(children: [
-                Icon(Icons.settings_outlined, size: 18),
-                SizedBox(width: 10),
-                Text(tr('Settings'))
-              ]),
-            ),
-            for (final l in admin.languages.entries)
-              CheckedPopupMenuItem<String>(
-                key: Key('language-${l.key}'),
-                value: 'locale:${l.key}',
-                checked: l.key == admin.locale,
-                child: Text(l.value),
-              ),
-            if (admin.languages.isNotEmpty) const PopupMenuDivider(),
-            PopupMenuItem<String>(
-              value: 'logout',
-              child: Row(children: [
-                Icon(Icons.logout, size: 18),
-                SizedBox(width: 10),
-                Text(tr('Sign out'))
-              ]),
-            ),
-          ],
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: CircleAvatar(
-              radius: 17,
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: theme.colorScheme.onPrimary,
-              child: Text(initial,
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
+        Tooltip(
+          message: name.isEmpty ? tr('Account') : name,
+          child: InkResponse(
+            key: const Key('account-menu'),
+            radius: 22,
+            onTap: () => showAccountHub(context, admin),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: UserAvatar(admin: admin, radius: sizes.isPhone ? 16 : 17),
             ),
           ),
         ),
+        SizedBox(width: sizes.isPhone ? 4 : 0),
       ]),
     );
   }
