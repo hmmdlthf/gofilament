@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.46.1] - 2026-11-27
+
 ### Security
 - **`Context.Tenant()` fails closed.** It used to fall back to the raw `:tenant` path segment (and to a tenant left in the request context) when the panel had refused that tenant, because no `TenantLoader` entry matched or `CanAccessTenant` said no. Code trusting it could then act on another tenant: `/admin/initech/...` worked for a user outside `initech`. It now returns only the tenant the panel resolved and checked (or `CurrentTenant` / `SetTenant` set); a refused or unknown tenant gives `""`, and the request context's `privacy` tenant is cleared too, so ORM queries scoped by it fail closed as well. On a panel without `Tenancy`, the tenant set by middleware (`privacy.WithTenantID`) is still used as before.
 - New `Context.RequestedTenant()` returns the raw, unchecked key (path, cookie, header, subdomain or middleware) for display or redirects only.
