@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-
-	"github.com/golaravel/golaravel/pkg/privacy"
 )
 
 // Tenant represents an organization, team, or workspace entity in a multi-tenant application.
@@ -167,6 +165,9 @@ func (p *Panel) ResolveTenant(ctx *Context) Tenant {
 	if p.tenantConfig == nil || !p.tenantConfig.Enabled {
 		return nil
 	}
+	// What upstream middleware put in the request context is only a
+	// candidate, like a cookie: remember it before clearTenant drops it.
+	ctx.upstreamTenant()
 	ctx.clearTenant() // a guess made before the user was known does not count
 
 	// 1. Explicit resolver callback
@@ -177,45 +178,7 @@ func (p *Panel) ResolveTenant(ctx *Context) Tenant {
 		}
 	}
 
-	// 2. Check route param :tenant
-	var tenantKey string
-	if p.tenantConfig.PathScoping {
-		tenantKey = ctx.Param("tenant")
-	}
-
-	// 3. Check Cookie
-	if tenantKey == "" && p.tenantConfig.CookieName != "" && ctx.Request != nil {
-		if cookie, err := ctx.Request.Cookie(p.tenantConfig.CookieName); err == nil && cookie.Value != "" {
-			tenantKey = cookie.Value
-		}
-	}
-
-	// 4. Check HTTP Header
-	if tenantKey == "" && p.tenantConfig.HeaderName != "" && ctx.Request != nil {
-		tenantKey = ctx.Header(p.tenantConfig.HeaderName)
-	}
-
-	// 5. Check Subdomain
-	if tenantKey == "" && p.tenantConfig.DomainScoping != "" && ctx.Request != nil {
-		host := ctx.Request.Host
-		if idx := strings.IndexByte(host, ':'); idx != -1 {
-			host = host[:idx]
-		}
-		base := strings.ToLower(strings.TrimPrefix(p.tenantConfig.DomainScoping, "."))
-		if strings.HasSuffix(strings.ToLower(host), "."+base) {
-			sub := strings.TrimSuffix(strings.ToLower(host), "."+base)
-			if sub != "" && sub != "www" {
-				tenantKey = sub
-			}
-		}
-	}
-
-	// 6. Check existing context / GoLaravel privacy context
-	if tenantKey == "" && ctx.Request != nil {
-		if tid, ok := privacy.TenantFromContext(ctx.Request.Context()); ok && tid != "" {
-			tenantKey = tid
-		}
-	}
+	tenantKey := p.requestedTenantKey(ctx)
 
 	// 7. With a TenantLoader only the user's tenants count: the requested
 	// one, else the first.
@@ -245,6 +208,55 @@ func (p *Panel) ResolveTenant(ctx *Context) Tenant {
 		return item
 	}
 	return nil
+}
+
+// tenancyEnabled reports whether the panel resolves tenants itself.
+func (p *Panel) tenancyEnabled() bool {
+	return p != nil && p.tenantConfig != nil && p.tenantConfig.Enabled
+}
+
+// requestedTenantKey is the tenant key the request names, unchecked:
+// path, then cookie, header, subdomain and upstream middleware.
+func (p *Panel) requestedTenantKey(ctx *Context) string {
+	var tenantKey string
+	// 1. Check route param :tenant
+	if p.tenantConfig.PathScoping {
+		tenantKey = ctx.Param("tenant")
+	}
+
+	// 2. Check Cookie
+	if tenantKey == "" && p.tenantConfig.CookieName != "" && ctx.Request != nil {
+		if cookie, err := ctx.Request.Cookie(p.tenantConfig.CookieName); err == nil && cookie.Value != "" {
+			tenantKey = cookie.Value
+		}
+	}
+
+	// 3. Check HTTP Header
+	if tenantKey == "" && p.tenantConfig.HeaderName != "" && ctx.Request != nil {
+		tenantKey = ctx.Header(p.tenantConfig.HeaderName)
+	}
+
+	// 4. Check Subdomain
+	if tenantKey == "" && p.tenantConfig.DomainScoping != "" && ctx.Request != nil {
+		host := ctx.Request.Host
+		if idx := strings.IndexByte(host, ':'); idx != -1 {
+			host = host[:idx]
+		}
+		base := strings.ToLower(strings.TrimPrefix(p.tenantConfig.DomainScoping, "."))
+		if strings.HasSuffix(strings.ToLower(host), "."+base) {
+			sub := strings.TrimSuffix(strings.ToLower(host), "."+base)
+			if sub != "" && sub != "www" {
+				tenantKey = sub
+			}
+		}
+	}
+
+	// 5. Tenant set upstream in the GoLaravel privacy context
+	if tenantKey == "" {
+		tenantKey = ctx.upstreamTenant()
+	}
+
+	return tenantKey
 }
 
 // tenantAllowed returns the tenant key if the user may switch to it.

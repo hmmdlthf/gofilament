@@ -865,13 +865,18 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		if !sc.staff {
 			filter.UserKey = sc.key
 		}
-		if p.GetSupportScope() == "tenant_admin" || p.hasTenantScoping {
-			if tid := ctx.Tenant(); tid != "" {
-				filter.TenantID = tid
-			}
+		superAdmin := p.GetSupportScope() == "super_admin"
+		scoped := p.GetSupportScope() == "tenant_admin" || p.hasTenantScoping
+		if scoped {
+			filter.TenantID = ctx.Tenant() // only a tenant the panel allowed
 		}
-		if reqTenant := c.Query("tenant_id"); reqTenant != "" && (p.GetSupportScope() == "super_admin" || filter.TenantID == "") {
+		if reqTenant := c.Query("tenant_id"); reqTenant != "" && (superAdmin || !scoped) {
 			filter.TenantID = reqTenant
+		}
+		if scoped && !superAdmin && sc.staff && filter.TenantID == "" {
+			// No allowed tenant: an empty filter would list every tenant's
+			// tickets.
+			return c.JSON(http.StatusOK, map[string]any{"tickets": []any{}, "total": 0, "scope": p.GetSupportScope()})
 		}
 
 		tickets, err := gosupport.GetDefaultStore().ListTickets(c.Request.Context(), filter)

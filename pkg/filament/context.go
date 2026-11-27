@@ -79,25 +79,46 @@ func (c *Context) User() auth.Authenticatable {
 	return nil
 }
 
-// Tenant returns the current tenant identifier if multi-tenancy is active.
+// Tenant returns the active tenant: the one the panel resolved and checked
+// (a TenantLoader match, CanAccessTenant, CurrentTenant) or SetTenant set.
+// It fails closed: a tenant named in the path, cookie, header or subdomain
+// that the panel refused is never returned, so code that authorizes or
+// scopes data by Tenant() cannot be pointed at another tenant. Use
+// RequestedTenant for the raw, unchecked key.
+//
+// On a panel without tenancy it is the tenant trusted middleware put in the
+// request context (privacy.WithTenantID), if any.
 func (c *Context) Tenant() string {
+	if c == nil {
+		return ""
+	}
 	if c.tenant != "" {
 		return c.tenant
 	}
+	if c.panel.tenancyEnabled() {
+		return ""
+	}
 	if c.Request != nil {
-		if tid, ok := privacy.TenantFromContext(c.Request.Context()); ok && tid != "" {
-			c.tenant = tid
+		if tid, ok := privacy.TenantFromContext(c.Request.Context()); ok {
 			return tid
 		}
 	}
-	// Check query, route param or session
-	if t := c.Param("tenant"); t != "" {
-		return t
+	return ""
+}
+
+// RequestedTenant returns the tenant key the request asked for (path,
+// cookie, header, subdomain or upstream middleware) whether or not the
+// panel allowed it. It is unchecked: use it only for display or to build a
+// redirect, never to authorize or scope data — that is Tenant().
+func (c *Context) RequestedTenant() string {
+	if c == nil {
+		return ""
 	}
-	if t, ok := c.Get("current_tenant"); ok {
-		if s, ok := t.(string); ok {
-			return s
-		}
+	if c.panel.tenancyEnabled() {
+		return c.panel.requestedTenantKey(c)
+	}
+	if c.Context != nil {
+		return c.Param("tenant")
 	}
 	return ""
 }
@@ -112,10 +133,38 @@ func (c *Context) TenantRecord() Tenant {
 	return nil
 }
 
+const ctxUpstreamTenant = "filament_upstream_tenant"
+
+// upstreamTenant is the tenant middleware put in the request context before
+// the panel resolved one, remembered for the whole request (clearTenant and
+// setTenantInstance overwrite the context value).
+func (c *Context) upstreamTenant() string {
+	if c.Context == nil {
+		return ""
+	}
+	if v, ok := c.Get(ctxUpstreamTenant); ok {
+		s, _ := v.(string)
+		return s
+	}
+	var tid string
+	if c.Request != nil {
+		tid, _ = privacy.TenantFromContext(c.Request.Context())
+	}
+	c.Set(ctxUpstreamTenant, tid)
+	return tid
+}
+
 func (c *Context) clearTenant() {
 	c.tenant = ""
 	c.Set("current_tenant", "")
 	c.Set("filament_tenant_record", nil)
+	// Nor may a tenant left in the request context (by middleware, or an
+	// earlier resolution) keep scoping queries the panel has not allowed.
+	if c.Request != nil {
+		if _, ok := privacy.TenantFromContext(c.Request.Context()); ok {
+			c.Request = c.Request.WithContext(privacy.WithTenantID(c.Request.Context(), ""))
+		}
+	}
 }
 
 func (c *Context) setTenantInstance(t Tenant) {

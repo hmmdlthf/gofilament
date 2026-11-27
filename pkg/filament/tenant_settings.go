@@ -156,7 +156,7 @@ func (p *Panel) canManageTenantFeatures(ctx *Context) bool {
 // the user may open.
 func (p *Panel) featureNavigation(ctx *Context, basePrefix, currentPath string) []*NavigationItem {
 	var out []*NavigationItem
-	if p.canManageTenantSettings(ctx) && verifiedTenant(ctx) != "" {
+	if p.canManageTenantSettings(ctx) && ctx.Tenant() != "" {
 		c := p.tenantSettings
 		u := basePrefix + "/" + c.slug()
 		out = append(out, &NavigationItem{
@@ -547,7 +547,7 @@ func (p *Panel) tenantScope(c *gcontext.Context) (*Context, contextLike, feature
 	if !p.canManageTenantSettings(ctx) {
 		return ctx, nil, featureScope{}, p.featureDenied(c, api, http.StatusForbidden, "You may not change this tenant's settings.")
 	}
-	tenant := verifiedTenant(ctx)
+	tenant := ctx.Tenant()
 	if tenant == "" {
 		return ctx, nil, featureScope{}, p.featureDenied(c, api, http.StatusForbidden, "Choose a tenant first.")
 	}
@@ -679,7 +679,7 @@ func (p *Panel) mountTenantSettingsAPI(r *router.Router) {
 		if err != nil {
 			return p.featureFailure(ctx, true, err)
 		}
-		body := map[string]any{"tenant": verifiedTenant(ctx), "groups": featureGroups(items)}
+		body := map[string]any{"tenant": ctx.Tenant(), "groups": featureGroups(items)}
 		if len(errs) > 0 {
 			body["errors"] = errs
 			body["message"] = "Some settings were not saved."
@@ -733,7 +733,7 @@ func tenantName(ctx *Context) string {
 	if t := ctx.TenantRecord(); t != nil && t.GetTenantName() != "" {
 		return t.GetTenantName()
 	}
-	return verifiedTenant(ctx)
+	return ctx.Tenant()
 }
 
 // decodeFeatureValues reads {"values": {key: value}} from a JSON body.
