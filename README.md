@@ -549,6 +549,51 @@ panel := filament.NewPanel("admin").
 
 ---
 
+## 🎛️ Per-Tenant Features & Settings
+
+GoLaravel's [`pkg/features`](https://github.com/hmmdlthf/golaravel/blob/main/docs/tenant-features-and-settings.md) gives each tenant its own value for features and settings whose defaults live in code. GoFilament builds a settings page from them and hides whatever a tenant doesn't have:
+
+```go
+// app/features/features.go
+var (
+    RecurringInvoices = features.Bool("invoices.recurring", false).
+        Label("Recurring invoices").Group("Billing").
+        ManagedBy(features.SuperAdmin) // sold per plan: tenants can't turn it on
+    TaxMode = features.Enum("tax.mode", "inclusive", "inclusive", "exclusive", "none").
+        Label("Tax mode").Group("Billing") // the tenant's own choice
+)
+
+mgr, _ := features.New(features.Options{DB: db})
+_ = mgr.Migrate(ctx)
+_ = mgr.Register(RecurringInvoices, TaxMode)
+
+on := filament.FeatureEnabled(RecurringInvoices)
+
+panel := filament.NewPanel("admin").
+    Tenancy(...).
+    Features(mgr). // adds <panel>/tenant-settings and <panel>/api/tenant-settings
+    Resource(filament.NewResource[*Invoice]("recurring-invoices").RequiresFeature(on))
+
+// The same Condition gates every kind of item:
+tables.Action[*Invoice]("repeat").RequiresFeature(on)
+tables.TextColumn[*Invoice]("interval").RequiresFeature(on)
+forms.Select("interval").RequiresFeature(on)
+widgets.NewStatsOverviewWidget(mrr).RequiresFeature(on)
+filament.FlutterPage("pos", "Point of sale").RequiresFeature(on)
+&filament.NavigationItem{Label: "Plans", Feature: on} // from a custom page's NavigationItem
+filament.FeatureIs(TaxMode, "exclusive") // FeatureIn, FeatureDisabled, AllOf, AnyOf
+```
+
+- **Tenant settings page**: every `TenantAdmin` feature, grouped by `Group`: a toggle for `bool`, a select for `enum`, a number input with min/max for `int`, a text input for `string` and a JSON editor for `json`. Each field shows **Overridden** or **Default** and has **Reset to default**. Invalid values show their error on the field. The Flutter admin opens the same settings from the account hub. Configure the page with `TenantSettings(filament.TenantSettingsConfig{...})`. With `Roles`, only users with `tenant-settings.manage` may use it.
+- **SuperAdmin features stay with the platform**: they never appear on the tenant's page, and its web and API endpoints answer 403 to any attempt to set or reset them.
+- **Central screen**: `central.TenantFeaturesAdmin(mgr, filament.TenantFeaturesAdminConfig{Tenants: listTenants})` lists tenants at `<panel>/tenant-features` and edits one tenant's features, `SuperAdmin` ones included, through `features.ForTenant`. The Flutter admin has the same screen in the account hub.
+- **Hidden means refused**: a resource or page whose feature is off disappears from the navigation, the API schema, `resource_meta` and global search, and every web and API URL under it answers 404. Gated actions can't be run, and gated form fields are dropped by validation.
+- **Fails closed**: with no tenant or a failed lookup, every condition is false.
+- **One load per request**: panel requests carry the tenant (`privacy.WithTenantID`) and a request memo (`features.WithMemo`), so all the checks of a request read the tenant's values once.
+- **Flutter**: `/api/schema` sends the tenant's `Public` features as `features`, and `tenant_settings` when the user may change them.
+
+---
+
 ## 🌐 Multi-Language Localization & Right-to-Left (RTL)
 
 GoFilament integrates natively with GoLaravel v1.1.0's translation architecture (`pkg/translation`), offering seamless multi-language administration with automatic Right-to-Left (RTL) layout switching:

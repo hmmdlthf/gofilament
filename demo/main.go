@@ -54,6 +54,8 @@ func newPanel(id, path string) *filament.Panel {
 		AuthValidator(validateLogin).
 		TokenValidator(validateToken).
 		LoginThrottle(10, time.Minute).
+		Middleware(withDemoTenant).
+		Features(featureMgr). // Account → Tenant settings
 		Roles(roleStore, filament.RolesConfig{
 			FindUsers: func(ctx *filament.Context, query string) ([]filament.UserRef, error) {
 				var out []filament.UserRef
@@ -68,7 +70,8 @@ func newPanel(id, path string) *filament.Panel {
 	p.Resource(activitylog.EnableAuditLog(customerResource()))
 	p.Resource(activitylog.EnableAuditLog(productResource()))
 	p.Resource(activitylog.EnableAuditLog(categoryResource()))
-	p.Resource(activitylog.NewActivityResource().NavigationGroup("System").NavigationIcon("heroicon-history"))
+	p.Resource(activitylog.NewActivityResource().NavigationGroup("System").NavigationIcon("heroicon-history").
+		RequiresFeature(hasAudit))
 	return p
 }
 
@@ -143,6 +146,7 @@ func resetLoop(ctx context.Context) {
 			return
 		case <-time.After(time.Until(nextReset())):
 			resetStore(time.Now())
+			resetFeatures()
 			log.Print("demo data reset")
 		}
 	}

@@ -143,7 +143,7 @@ func (rm *BaseRelationManager[T]) Table(fn ...func(t *tables.Table[T]) *tables.T
 // GetTable returns the configured table instance.
 func (rm *BaseRelationManager[T]) GetTable() *tables.Table[T] {
 	if rm.tableBuilder != nil {
-		return rm.tableBuilder(rm.tableDef)
+		return rm.tableBuilder(tables.New[T]())
 	}
 	return rm.tableDef
 }
@@ -284,6 +284,7 @@ func (rm *BaseRelationManager[T]) Render(ctx *Context, parentBasePath, parentID 
 	if rm.tableBuilder != nil {
 		tbl = rm.tableBuilder(tbl)
 	}
+	tbl.WithContext(ctx.GoContext())
 	if rm.idExtractor != nil {
 		tbl.RecordID(rm.idExtractor)
 	}
@@ -463,6 +464,12 @@ func (rm *BaseRelationManager[T]) DescribeForm(ctx *Context) []forms.Node {
 // FormField returns a field of the relation's form by name.
 func (rm *BaseRelationManager[T]) FormField(name string) forms.Component {
 	return forms.FindField(rm.formComponents(), name)
+}
+
+// FormFieldFor is FormField for a request (fields gated out for ctx are
+// not found).
+func (rm *BaseRelationManager[T]) FormFieldFor(ctx *Context, name string) forms.Component {
+	return forms.FindFieldFor(ctx.GoContext(), rm.formComponents(), name)
 }
 
 // GetAPISchema returns schema metadata for REST/Flutter integration.

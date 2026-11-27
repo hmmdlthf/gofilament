@@ -7,6 +7,7 @@ import (
 
 	"github.com/golaravel/golaravel/pkg/auth"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
+	"github.com/golaravel/golaravel/pkg/features"
 	"github.com/golaravel/golaravel/pkg/privacy"
 	_ "github.com/golaravel/golaravel/pkg/translation"
 )
@@ -23,6 +24,13 @@ func NewContext(gc *gcontext.Context, p *Panel) *Context {
 	ctx := &Context{
 		Context: gc,
 		panel:   p,
+	}
+	// One feature load per request, however many checks: the memo lives in
+	// the request context, so every Context built for this request shares it.
+	if gc != nil && gc.Request != nil {
+		if mc := features.WithMemo(gc.Request.Context()); mc != gc.Request.Context() {
+			gc.Request = gc.Request.WithContext(mc)
+		}
 	}
 	if p != nil {
 		p.resolveLocale(ctx)

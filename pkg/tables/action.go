@@ -26,6 +26,7 @@ type TableAction[T any] struct {
 	formBuilder    func(f *forms.Form) *forms.Form
 	authorize      func(ctx context.Context, record T) bool
 	successMessage string
+	gate           func(ctx context.Context) bool
 }
 
 func Action[T any](name string) *TableAction[T] {
@@ -214,6 +215,7 @@ type BulkActionDef struct {
 	color                string
 	requiresConfirmation bool
 	formats              []string
+	gate                 func(ctx context.Context) bool
 }
 
 func BulkAction(name string) *BulkActionDef {

@@ -1,6 +1,7 @@
 package tables
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"strings"
@@ -27,6 +28,7 @@ type BaseColumn[T any] struct {
 	filterOptions          map[string]string
 	valueFunc              func(record T) any
 	summaries              []Summary
+	gate                   func(ctx context.Context) bool
 }
 
 func (c *BaseColumn[T]) GetName() string {

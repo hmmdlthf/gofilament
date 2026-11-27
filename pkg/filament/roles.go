@@ -276,6 +276,7 @@ func (p *Panel) AllPermissions() map[string]string {
 			out[res.Slug()+"."+a.key] = a.label + " " + strings.ToLower(name)
 		}
 	}
+	p.featurePermissions(out)
 	if p.roles != nil {
 		for k, v := range p.roles.cfg.Permissions {
 			out[k] = v

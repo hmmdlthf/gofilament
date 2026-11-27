@@ -156,6 +156,16 @@ func (r *BaseResource[T]) FormField(name string) forms.Component {
 	return forms.FindField(r.formBuilder(forms.New()).GetSchema(), name)
 }
 
+// FormFieldFor is FormField for a request: fields hidden by a feature gate
+// for ctx are not found, so their option search, uploads and create-option
+// forms are refused too.
+func (r *BaseResource[T]) FormFieldFor(ctx *Context, name string) forms.Component {
+	if r.formBuilder == nil {
+		return nil
+	}
+	return forms.FindFieldFor(ctx.GoContext(), r.formBuilder(forms.New()).GetSchema(), name)
+}
+
 // Meta describes the resource's actions and what the current user may do.
 func (r *BaseResource[T]) Meta(ctx *Context) ResourceMeta {
 	m := ResourceMeta{
@@ -171,7 +181,7 @@ func (r *BaseResource[T]) Meta(ctx *Context) ResourceMeta {
 		},
 	}
 	if r.tableBuilder != nil {
-		m.Table = r.tableBuilder(tables.New[T]()).Meta()
+		m.Table = r.table(ctx).Meta()
 		for _, a := range m.Table.HeaderActions {
 			if a.Name == "import" {
 				m.Abilities["import"] = m.Abilities["create"]
@@ -218,7 +228,7 @@ func (p *Panel) decorateSchema(ctx *Context, schema map[string]any) {
 
 	meta := make(map[string]ResourceMeta, len(p.resources))
 	for _, res := range p.resources {
-		if res.NavigationItem(ctx) == nil {
+		if res.NavigationItem(ctx) == nil || !gateAllows(ctx, res) {
 			continue
 		}
 		if d, ok := res.(interface {
@@ -315,7 +325,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 				DescribeForm(ctx *Context) []forms.Node
 				Meta(ctx *Context) ResourceMeta
 				RecordAbilities(ctx *Context, id string) (any, map[string]bool, error)
-				FormField(name string) forms.Component
+				FormFieldFor(ctx *Context, name string) forms.Component
 			})
 			if !ok {
 				return c.JSON(http.StatusNotImplemented, map[string]string{"error": "Form not available"})
@@ -352,7 +362,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 				for _, n := range ns {
 					if n.Kind == "field" && n.Remote {
 						if v, ok := state[n.Name]; ok && v != nil {
-							if sel, ok := describer.FormField(n.Name).(*forms.SelectField); ok {
+							if sel, ok := describer.FormFieldFor(ctx, n.Name).(*forms.SelectField); ok {
 								val := formatScalar(v)
 								labels[n.Name] = sel.OptionLabel(ctx.GoContext(), val)
 							}
@@ -392,7 +402,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 				return err
 			}
 			finder, ok := res.(interface {
-				FormField(name string) forms.Component
+				FormFieldFor(ctx *Context, name string) forms.Component
 				Meta(ctx *Context) ResourceMeta
 			})
 			if !ok {
@@ -402,7 +412,7 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 			if res.NavigationItem(ctx) == nil {
 				return p.apiError(c, ErrForbidden)
 			}
-			sel, ok := finder.FormField(c.Query("field")).(*forms.SelectField)
+			sel, ok := finder.FormFieldFor(ctx, c.Query("field")).(*forms.SelectField)
 			if !ok {
 				return c.JSON(http.StatusNotFound, map[string]string{"error": "Unknown field"})
 			}
@@ -464,7 +474,7 @@ func withRelationParent(ctx *Context, parentID string) {
 // relationFormer is implemented by relation managers that can describe their form.
 type relationFormer interface {
 	DescribeForm(ctx *Context) []forms.Node
-	FormField(name string) forms.Component
+	FormFieldFor(ctx *Context, name string) forms.Component
 	HandleFind(ctx *Context, parentID, childID string) (any, error)
 }
 
@@ -513,7 +523,7 @@ func (p *Panel) registerRelationClientRoutes(r *router.Router, res ResourceInter
 				for _, n := range ns {
 					if n.Kind == "field" && n.Remote {
 						if v, ok := state[n.Name]; ok && v != nil {
-							if sel, ok := former.FormField(n.Name).(*forms.SelectField); ok {
+							if sel, ok := former.FormFieldFor(ctx, n.Name).(*forms.SelectField); ok {
 								labels[n.Name] = sel.OptionLabel(ctx.GoContext(), formatScalar(v))
 							}
 						}
@@ -556,7 +566,7 @@ func (p *Panel) registerRelationClientRoutes(r *router.Router, res ResourceInter
 				return p.apiErrorStatus(c, err, http.StatusNotFound)
 			}
 			withRelationParent(ctx, c.Param("id"))
-			sel, ok := former.FormField(c.Query("field")).(*forms.SelectField)
+			sel, ok := former.FormFieldFor(ctx, c.Query("field")).(*forms.SelectField)
 			if !ok {
 				return c.JSON(http.StatusNotFound, map[string]string{"error": "Unknown field"})
 			}

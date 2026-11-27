@@ -86,7 +86,7 @@ func storeOnDisk(ctx *Context, f UploadedFile) (string, string, error) {
 // file.
 func (p *Panel) registerUploadRoute(r *router.Router, res ResourceInterface, resPath string, preflight gcontext.HandlerFunc) {
 	finder, ok := res.(interface {
-		FormField(name string) forms.Component
+		FormFieldFor(ctx *Context, name string) forms.Component
 	})
 	if !ok {
 		return
@@ -101,7 +101,7 @@ func (p *Panel) registerUploadRoute(r *router.Router, res ResourceInterface, res
 		if res.NavigationItem(ctx) == nil {
 			return p.apiError(c, ErrForbidden)
 		}
-		field, ok := finder.FormField(c.Query("field")).(*forms.FileUploadField)
+		field, ok := finder.FormFieldFor(ctx, c.Query("field")).(*forms.FileUploadField)
 		if !ok {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "Unknown file field"})
 		}

@@ -23,6 +23,7 @@ import (
 	"github.com/golaravel/golaravel/pkg/auth"
 	"github.com/golaravel/golaravel/pkg/broadcast"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
+	"github.com/golaravel/golaravel/pkg/features"
 	"github.com/golaravel/golaravel/pkg/flutter"
 	"github.com/golaravel/golaravel/pkg/golaravel"
 	"github.com/golaravel/golaravel/pkg/router"
@@ -159,6 +160,9 @@ type Panel struct {
 	localeLabels        map[string]string
 	localeFlags         map[string]string
 	translations        map[string]map[string]string
+	featureMgr          *features.Manager
+	tenantSettings      *TenantSettingsConfig
+	featuresAdmin       *TenantFeaturesAdminConfig
 }
 
 // NewPanel creates a new Panel with sensible defaults.
@@ -973,6 +977,12 @@ func (p *Panel) AuthorizeAccess(c *gcontext.Context) (*Context, error) {
 		return ctx, denied(c.String(http.StatusForbidden, "403 Forbidden: Panel access denied"))
 	}
 
+	// A resource or page hidden by a feature refuses direct URL and API
+	// access too, not just its menu entry.
+	if p.featureBlocked(ctx, reqPath) {
+		return ctx, p.refuseFeature(ctx)
+	}
+
 	return ctx, nil
 }
 
@@ -1079,9 +1089,12 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 
 	// 2. Resource items
 	for _, res := range p.resources {
+		if !gateAllows(ctx, res) {
+			continue
+		}
 		item := res.NavigationItem(ctx)
 		if item != nil {
-			if item.Visible == nil || item.Visible(ctx) {
+			if (item.Visible == nil || item.Visible(ctx)) && item.Feature.Allows(ctx) {
 				if item.URL == "" {
 					item.URL = fmt.Sprintf("%s/%s", basePrefix, res.Slug())
 				}
@@ -1093,9 +1106,12 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 
 	// 3. Custom page items
 	for _, pg := range p.pages {
+		if !gateAllows(ctx, pg) {
+			continue
+		}
 		item := pg.NavigationItem(ctx)
 		if item != nil {
-			if item.Visible == nil || item.Visible(ctx) {
+			if (item.Visible == nil || item.Visible(ctx)) && item.Feature.Allows(ctx) {
 				if item.URL == "" {
 					item.URL = fmt.Sprintf("%s/%s", basePrefix, pg.Slug())
 				}
@@ -1104,6 +1120,8 @@ func (p *Panel) BuildNavigation(ctx *Context) []NavigationGroup {
 			}
 		}
 	}
+
+	allItems = append(allItems, p.featureNavigation(ctx, basePrefix, currentPath)...)
 
 	// Roles screen for users who manage roles
 	if p.canManageRoles(ctx) {
@@ -1489,6 +1507,9 @@ func (p *Panel) Mount(r *router.Router) {
 	for _, pg := range p.pages {
 		pg.RegisterRoutes(p, r)
 	}
+
+	// 5. Tenant settings page and the central tenant features screen
+	p.mountFeatureRoutes(r)
 }
 
 // Register mounts the panel onto a GoLaravel Engine.
@@ -1773,7 +1794,7 @@ func (p *Panel) searchAll(ctx *Context, query string) ([]GlobalSearchGroup, []Gl
 	// 2. Search Resources
 	var resourceGroups []GlobalSearchGroup
 	for _, res := range p.resources {
-		if res.IsGloballySearchable() {
+		if res.IsGloballySearchable() && gateAllows(ctx, res) {
 			matches := res.SearchGlobal(ctx, query)
 			if len(matches) > 0 {
 				if p.globalSearchFuzzy {

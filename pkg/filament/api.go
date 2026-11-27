@@ -323,7 +323,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		var resourceDTOs []resourceDTO
 		for _, res := range p.resources {
 			item := res.NavigationItem(ctx)
-			if item != nil {
+			if item != nil && gateAllows(ctx, res) {
 				var relsDTO []relationMetaDTO
 				for _, rel := range res.GetRelations() {
 					relsDTO = append(relsDTO, relationMetaDTO{
@@ -333,19 +333,31 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 					})
 				}
 				var filtersDTO []tables.FilterDTO
-				if hf, ok := res.(interface{ GetFilters() []tables.FilterDTO }); ok {
+				if hf, ok := res.(interface {
+					FiltersFor(ctx *Context) []tables.FilterDTO
+				}); ok {
+					filtersDTO = hf.FiltersFor(ctx)
+				} else if hf, ok := res.(interface{ GetFilters() []tables.FilterDTO }); ok {
 					filtersDTO = hf.GetFilters()
 				}
 				var columnsDTO []tables.ColumnDTO
-				if hc, ok := res.(interface{ GetColumns() []tables.ColumnDTO }); ok {
+				if hc, ok := res.(interface {
+					ColumnsFor(ctx *Context) []tables.ColumnDTO
+				}); ok {
+					columnsDTO = hc.ColumnsFor(ctx)
+				} else if hc, ok := res.(interface{ GetColumns() []tables.ColumnDTO }); ok {
 					columnsDTO = hc.GetColumns()
 				}
 				var defaultCols []string
-				if hdc, ok := res.(interface{ GetDefaultColumns() []string }); ok {
+				if hdc, ok := res.(interface{ DefaultColumnsFor(ctx *Context) []string }); ok {
+					defaultCols = hdc.DefaultColumnsFor(ctx)
+				} else if hdc, ok := res.(interface{ GetDefaultColumns() []string }); ok {
 					defaultCols = hdc.GetDefaultColumns()
 				}
 				var selectableCols []string
-				if hsc, ok := res.(interface{ GetSelectableColumns() []string }); ok {
+				if hsc, ok := res.(interface{ SelectableColumnsFor(ctx *Context) []string }); ok {
+					selectableCols = hsc.SelectableColumnsFor(ctx)
+				} else if hsc, ok := res.(interface{ GetSelectableColumns() []string }); ok {
 					selectableCols = hsc.GetSelectableColumns()
 				}
 				var advSearchEnabled bool
@@ -514,6 +526,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			},
 		}
 
+		p.featureSchema(ctx, schema)
 		p.decorateSchema(ctx, schema)
 		return c.JSON(http.StatusOK, schema)
 	})
@@ -1195,6 +1208,9 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		p.registerResourceAPI(res, apiPrefix, r)
 	}
 
+	// Tenant settings and the central tenant features screen
+	p.mountFeatureAPI(r)
+
 	// Mount App Update Manager routes under this panel if configured
 	if p.appUpdateManager != nil {
 		p.appUpdateManager.RegisterRoutes(r, apiPrefix+"/app-update")
@@ -1523,6 +1539,11 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 
 		data := parseRequestData(c)
 		action := fmt.Sprintf("%v", data["bulk_action"])
+		if g, ok := res.(interface {
+			BulkActionAllowed(ctx *Context, name string) bool
+		}); ok && !g.BulkActionAllowed(ctx, action) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "This bulk action is not available"})
+		}
 
 		var ids []string
 		if rawIDs, ok := data["selected_ids[]"]; ok {

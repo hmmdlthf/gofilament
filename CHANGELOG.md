@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Per-tenant features and settings** on GoLaravel's `pkg/features`. `Panel.Features(mgr)` adds a tenant settings page (`<panel>/tenant-settings`) and its API (`<panel>/api/tenant-settings`), built from `mgr.Definitions()` and grouped by `Group`: a toggle for `bool`, a select for `enum`, a number input with min/max for `int`, a text input for `string` and a JSON editor for `json`. Each field shows Overridden or Default and has Reset to default, and invalid values show their error on the field. Only `TenantAdmin` features are listed; the endpoints refuse `SuperAdmin` ones with 403, so a tenant can't enable a paid feature by posting its key. `TenantSettings(cfg)` sets the slug, label and who may use it (`tenant-settings.manage` with Roles).
+- **Central tenant features screen**: `Panel.TenantFeaturesAdmin(mgr, cfg)` lists tenants and edits any tenant's features, `SuperAdmin` ones included, through `features.ForTenant` (web and `<panel>/api/tenant-features/{tenant}`).
+- **Feature gates**: `filament.FeatureEnabled`, `FeatureDisabled`, `FeatureIs`, `FeatureIn`, `AllOf` and `AnyOf` build a `filament.Condition`, and `RequiresFeature(cond)` gates resources, Flutter pages (and custom pages implementing `FeatureGated`), widgets, table row/header/bulk actions, table columns, and form fields, sections and grids. `NavigationItem.Feature` gates a custom item. A gated-out resource or page also answers 404 to every web and API URL under it; gated actions can't be run, gated columns aren't exported or editable, and gated form values are dropped by validation. Conditions fail closed: no tenant or a failed lookup hides the item.
+- **One feature load per request**: panel requests carry a `features.WithMemo` request memo next to the tenant (`privacy.WithTenantID`).
+- **Flutter admin**: `/api/schema` sends the tenant's `Public` features (`features`) and `tenant_settings`; the account hub opens a **Tenant settings** screen (`TenantSettingsScreen`) with the same controls, badges, reset and field errors. Feature-hidden resources, pages, widgets, columns and actions are left out of the schema.
+- **Demo**: the shop can turn the Ship and Invoice order actions off under Tenant settings, and the Audit log is gated by a `SuperAdmin` feature.
+- **Flutter central screen**: on a panel with `TenantFeaturesAdmin`, the account hub opens **Tenant features** (`TenantFeaturesAdminScreen`): pick a tenant (from `GET <panel>/api/tenant-features`, or by key), then edit its features with a *Super admin only* badge on platform-managed ones.
+- **Gated form fields refuse their endpoints too**: option search, create-option forms and uploads look fields up with `forms.FindFieldFor` / `BaseResource.FormFieldFor(ctx, name)`, so a field hidden by a feature answers 404. `forms.FindField` without a request skips gated fields.
+- **Tenant settings with `TenantPathScoping`**: the page is also served at `<panel>/<tenant>/tenant-settings`, where the navigation links. It only uses the tenant the panel resolved and checked, never an unchecked path segment.
+- `tables.Table.WithContext`, `AllColumnNames` and `AllBulkActionNames`; `BaseResource.ColumnsFor`, `FiltersFor`, `DefaultColumnsFor`, `SelectableColumnsFor` and `BulkActionAllowed`.
+
+### Changed
+- **Requires GoLaravel v1.19.0**, the release that ships `pkg/features`.
+- `BaseRelationManager.GetTable` builds a fresh table on each call instead of reusing one shared instance.
+
+### Fixed
+- Missing Arabic, German, Spanish and French translations for six account hub strings ("Workspace", "Signed in", ...), which failed `TestUITranslationsCoverTheFlutterApp`.
+
 ## [v1.45.0] - 2026-11-27
 
 ### Added

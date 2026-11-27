@@ -148,6 +148,7 @@ type BaseResource[T any] struct {
 	canDeleteAny      func(ctx *Context) bool
 	canRestore        func(ctx *Context, id string) bool
 	canForceDelete    func(ctx *Context, id string) bool
+	featureGate       Condition
 
 	// Global Search
 	globallySearchable  bool
@@ -454,6 +455,46 @@ func (r *BaseResource[T]) SearchGlobal(ctx *Context, query string) []GlobalSearc
 	return results
 }
 
+// RequiresFeature makes the resource available only while cond holds for
+// the request's tenant:
+//
+//	filament.NewResource[Invoice]("recurring-invoices").
+//		RequiresFeature(filament.FeatureEnabled(appfeatures.RecurringInvoices))
+//
+// While it does not, the resource is left out of the navigation, the API
+// schema and global search, and every web and API request under its URL
+// gets 404.
+func (r *BaseResource[T]) RequiresFeature(cond Condition) *BaseResource[T] {
+	r.featureGate = cond
+	return r
+}
+
+// BulkActionAllowed reports whether a bulk action the table declares is
+// available to the request: false when its feature gate fails. Names the
+// table does not declare are left to the usual permission checks.
+func (r *BaseResource[T]) BulkActionAllowed(ctx *Context, name string) bool {
+	tbl := r.table(ctx)
+	if tbl == nil {
+		return true
+	}
+	declared := false
+	for _, n := range tbl.AllBulkActionNames() { // before GetBulkActions drops gated ones
+		declared = declared || n == name
+	}
+	if !declared {
+		return true
+	}
+	for _, b := range tbl.GetBulkActions() {
+		if b.GetName() == name {
+			return true
+		}
+	}
+	return false
+}
+
+// FeatureGate returns the condition set with RequiresFeature (nil if none).
+func (r *BaseResource[T]) FeatureGate() Condition { return r.featureGate }
+
 // Authorization methods
 func (r *BaseResource[T]) CanViewAny(fn func(ctx *Context) bool) *BaseResource[T] {
 	r.canViewAny = fn
@@ -650,12 +691,16 @@ func (r *BaseResource[T]) IsTabsEnabled() bool {
 	return false
 }
 
-func (r *BaseResource[T]) GetFilters() []tables.FilterDTO {
-	if r.tableBuilder == nil {
+func (r *BaseResource[T]) GetFilters() []tables.FilterDTO { return r.FiltersFor(nil) }
+
+// FiltersFor returns the filter metadata for a request: filters built from
+// feature-gated columns are left out when the feature is off (always, for
+// a nil ctx).
+func (r *BaseResource[T]) FiltersFor(ctx *Context) []tables.FilterDTO {
+	tbl := r.table(ctx)
+	if tbl == nil {
 		return nil
 	}
-	tbl := tables.New[T]()
-	tbl = r.tableBuilder(tbl)
 	withTrashedFilter(r, tbl)
 	var dtos []tables.FilterDTO
 	for _, f := range tbl.GetFilters() {
@@ -688,12 +733,15 @@ func (r *BaseResource[T]) AdvancedSearch(cols ...string) *BaseResource[T] {
 }
 
 // GetColumns returns the ColumnDTO metadata for this resource's table.
-func (r *BaseResource[T]) GetColumns() []tables.ColumnDTO {
-	if r.tableBuilder == nil {
+func (r *BaseResource[T]) GetColumns() []tables.ColumnDTO { return r.ColumnsFor(nil) }
+
+// ColumnsFor returns the column metadata for a request, without the
+// columns whose feature gate fails (all gated columns for a nil ctx).
+func (r *BaseResource[T]) ColumnsFor(ctx *Context) []tables.ColumnDTO {
+	tbl := r.table(ctx)
+	if tbl == nil {
 		return nil
 	}
-	tbl := tables.New[T]()
-	tbl = r.tableBuilder(tbl)
 	if len(r.defaultColumns) > 0 {
 		tbl.DefaultColumns(r.defaultColumns...)
 	}
@@ -707,29 +755,59 @@ func (r *BaseResource[T]) GetColumns() []tables.ColumnDTO {
 }
 
 // GetDefaultColumns returns the default column names for this resource.
-func (r *BaseResource[T]) GetDefaultColumns() []string {
+func (r *BaseResource[T]) GetDefaultColumns() []string { return r.DefaultColumnsFor(nil) }
+
+// DefaultColumnsFor is GetDefaultColumns without feature-gated columns that
+// are off for the request.
+func (r *BaseResource[T]) DefaultColumnsFor(ctx *Context) []string {
+	tbl := r.table(ctx)
 	if len(r.defaultColumns) > 0 {
-		return r.defaultColumns
+		return visibleColumnNames(tbl, r.defaultColumns)
 	}
-	if r.tableBuilder == nil {
+	if tbl == nil {
 		return nil
 	}
-	tbl := tables.New[T]()
-	tbl = r.tableBuilder(tbl)
 	return tbl.GetDefaultColumns()
 }
 
 // GetSelectableColumns returns the selectable column names for this resource.
-func (r *BaseResource[T]) GetSelectableColumns() []string {
+func (r *BaseResource[T]) GetSelectableColumns() []string { return r.SelectableColumnsFor(nil) }
+
+// SelectableColumnsFor is GetSelectableColumns without feature-gated
+// columns that are off for the request.
+func (r *BaseResource[T]) SelectableColumnsFor(ctx *Context) []string {
+	tbl := r.table(ctx)
 	if len(r.selectableColumns) > 0 {
-		return r.selectableColumns
+		return visibleColumnNames(tbl, r.selectableColumns)
 	}
-	if r.tableBuilder == nil {
+	if tbl == nil {
 		return nil
 	}
-	tbl := tables.New[T]()
-	tbl = r.tableBuilder(tbl)
 	return tbl.GetSelectableColumns()
+}
+
+// visibleColumnNames keeps the names that are columns of tbl (after its
+// feature gates) or that tbl does not know at all (configured names that
+// are not columns are passed through unchanged, as before).
+func visibleColumnNames[T any](tbl *tables.Table[T], names []string) []string {
+	if tbl == nil {
+		return names
+	}
+	all := map[string]bool{}
+	for _, c := range tbl.AllColumnNames() { // before GetColumns drops gated ones
+		all[c] = true
+	}
+	shown := map[string]bool{}
+	for _, c := range tbl.GetColumns() {
+		shown[c.GetName()] = true
+	}
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if shown[n] || !all[n] {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // GetAdvancedSearchableColumns returns the advanced searchable column names for this resource.
@@ -981,6 +1059,9 @@ func (r *BaseResource[T]) checkIsTrashed(record T) bool {
 }
 
 func (r *BaseResource[T]) NavigationItem(ctx *Context) *NavigationItem {
+	if !r.featureGate.Allows(ctx) {
+		return nil
+	}
 	if r.canViewAny != nil && !r.canViewAny(ctx) {
 		return nil
 	}
@@ -1285,6 +1366,7 @@ func (r *BaseResource[T]) handleList(ctx *Context, basePath string) error {
 	if r.tableBuilder != nil {
 		tbl = r.tableBuilder(tbl)
 	}
+	tbl.WithContext(ctx.GoContext())
 	if r.idExtractor != nil {
 		tbl.RecordID(r.idExtractor)
 	}
@@ -1706,6 +1788,9 @@ func (r *BaseResource[T]) handleBulk(ctx *Context, basePath string) error {
 	_ = ctx.Request.ParseForm()
 	action := ctx.Request.PostFormValue("bulk_action")
 	selectedIDs := ctx.Request.PostForm["selected_ids[]"]
+	if !r.BulkActionAllowed(ctx, action) {
+		return ctx.String(http.StatusNotFound, "404 Not Found: this bulk action is not available")
+	}
 
 	// Only deleting needs the delete permission (export, edit and restore
 	// have their own checks).
@@ -1890,7 +1975,7 @@ func (r *BaseResource[T]) InvokeExport(ctx *Context, format string, filterIDs []
 	var headers []string
 	var columns []tables.ColumnRenderer[T]
 	if r.tableBuilder != nil {
-		tbl = r.tableBuilder(tables.New[T]())
+		tbl = r.table(ctx)
 		only := map[string]bool{}
 		for _, c := range strings.Split(ctx.Query("columns"), ",") {
 			if c = strings.TrimSpace(c); c != "" {
@@ -2448,7 +2533,7 @@ func (r *BaseResource[T]) InvokeCellUpdate(ctx *Context, id, column string, valu
 	}
 	// Only editable table columns can be changed inline. A resource without
 	// a table but with its own OnCellUpdate handler decides by itself.
-	editable, options := r.editableColumn(column)
+	editable, options := r.editableColumn(ctx, column)
 	if !editable && (r.tableBuilder != nil || r.onCellUpdate == nil) {
 		return ErrColumnNotEditable
 	}

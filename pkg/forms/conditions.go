@@ -112,6 +112,9 @@ func stateGetter(state map[string]any) Get {
 // renderChild renders a component, wrapped so the panel script can show
 // and hide it when it has a Condition.
 func renderChild(ctx context.Context, c Component, state map[string]any, errors map[string]string) string {
+	if !gateAllows(ctx, c) {
+		return ""
+	}
 	out := c.Render(ctx, state, errors)
 	cond := conditionOf(c)
 	if cond == nil {

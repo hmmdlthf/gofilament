@@ -16,6 +16,7 @@ import (
 func testApp(t *testing.T) http.Handler {
 	t.Helper()
 	resetStore(time.Now())
+	resetFeatures()
 	app := golaravel.New()
 	fsys := fstest.MapFS{"index.html": {Data: []byte(`<html><head><base href="/"></head></html>`)}}
 	if err := newPanel("admin", "/admin").FlutterFS(fsys).Register(app); err != nil {
@@ -310,5 +311,58 @@ func TestProductCategoryCanBeCreatedFromTheSelect(t *testing.T) {
 	// warehouse staff may not create categories: no create entry, and refused
 	if rec := call(t, h, "POST", "/admin/api/resources/products/form/options/create?field=category", staff, `{"name":"Toys"}`); rec.Code != http.StatusForbidden {
 		t.Fatalf("staff create: %d", rec.Code)
+	}
+}
+
+func orderActions(t *testing.T, h http.Handler, token string) string {
+	t.Helper()
+	rec := call(t, h, "GET", "/admin/api/schema", token, "")
+	var out struct {
+		Meta map[string]struct {
+			Table struct {
+				Actions []struct {
+					Name string `json:"name"`
+				} `json:"actions"`
+			} `json:"table"`
+		} `json:"resource_meta"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, a := range out.Meta["orders"].Table.Actions {
+		names = append(names, a.Name)
+	}
+	return strings.Join(names, ",")
+}
+
+func TestTenantSettingsToggleOrderActions(t *testing.T) {
+	h := testApp(t)
+	t.Cleanup(resetFeatures)
+	admin := login(t, h, "admin@example.com")
+	staff := login(t, h, "warehouse@example.com")
+
+	rec := call(t, h, "GET", "/admin/api/tenant-settings", admin, "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"orders.shipping"`) || strings.Contains(rec.Body.String(), `"audit.log"`) {
+		t.Fatalf("settings: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := call(t, h, "GET", "/admin/api/tenant-settings", staff, ""); rec.Code != http.StatusForbidden {
+		t.Fatalf("staff may not change settings: %d", rec.Code)
+	}
+	if got := orderActions(t, h, admin); !strings.Contains(got, "ship") || !strings.Contains(got, "invoice") {
+		t.Fatalf("actions before: %s", got)
+	}
+	if rec := call(t, h, "PUT", "/admin/api/tenant-settings", admin, `{"values":{"orders.shipping":false}}`); rec.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := orderActions(t, h, admin); strings.Contains(got, "ship") || !strings.Contains(got, "invoice") {
+		t.Fatalf("actions after turning shipping off: %s", got)
+	}
+	// The audit log is the platform's to turn off, not the shop's.
+	if rec := call(t, h, "PUT", "/admin/api/tenant-settings", admin, `{"values":{"audit.log":false}}`); rec.Code != http.StatusForbidden {
+		t.Fatalf("SuperAdmin feature: %d", rec.Code)
+	}
+	if rec := call(t, h, "GET", "/admin/api/resources/activity-logs", admin, ""); rec.Code != http.StatusOK {
+		t.Fatalf("audit log: %d", rec.Code)
 	}
 }

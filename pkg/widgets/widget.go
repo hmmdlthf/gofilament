@@ -7,6 +7,7 @@ import (
 // BaseWidget provides common sorting and grid layout properties.
 type BaseWidget struct {
 	visible func(ctx *filament.Context) bool
+	gate    filament.Condition
 	id         string
 	sort       int
 	columnSpan int
@@ -22,7 +23,16 @@ func (w *BaseWidget) VisibleWhen(fn func(ctx *filament.Context) bool) *BaseWidge
 
 // CanView reports whether the widget is shown to the request's user.
 func (w *BaseWidget) CanView(ctx *filament.Context) bool {
-	return w.visible == nil || w.visible(ctx)
+	return w.gate.Allows(ctx) && (w.visible == nil || w.visible(ctx))
+}
+
+// RequiresFeature shows the widget (and serves its data) only while cond
+// holds for the request's tenant:
+//
+//	w.RequiresFeature(filament.FeatureEnabled(appfeatures.RecurringInvoices))
+func (w *BaseWidget) RequiresFeature(cond filament.Condition) *BaseWidget {
+	w.gate = cond
+	return w
 }
 
 func (w *BaseWidget) ID() string {

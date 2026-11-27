@@ -34,7 +34,7 @@ func (p *Panel) canCreateIn(ctx *Context, slug string) bool {
 	target, ok := p.resourceBySlug(slug).(interface {
 		Meta(ctx *Context) ResourceMeta
 	})
-	return ok && target.Meta(ctx).Abilities["create"]
+	return ok && gateAllows(ctx, target) && target.Meta(ctx).Abilities["create"]
 }
 
 // filterCreateOptions drops the create entry of selects whose target
@@ -65,12 +65,12 @@ func (p *Panel) registerCreateOptionRoutes(r *router.Router, res ResourceInterfa
 			return nil, nil, err
 		}
 		finder, ok := res.(interface {
-			FormField(name string) forms.Component
+			FormFieldFor(ctx *Context, name string) forms.Component
 		})
 		if !ok || res.NavigationItem(ctx) == nil {
 			return ctx, nil, p.apiError(c, ErrForbidden)
 		}
-		sel, ok := finder.FormField(c.Query("field")).(*forms.SelectField)
+		sel, ok := finder.FormFieldFor(ctx, c.Query("field")).(*forms.SelectField)
 		if !ok || !sel.CanCreateOption() {
 			return ctx, nil, c.JSON(http.StatusNotFound, map[string]string{"error": "This field has no create form"})
 		}

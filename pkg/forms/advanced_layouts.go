@@ -73,6 +73,9 @@ func (s *SplitComponent) Render(ctx context.Context, state map[string]any, error
 	var body strings.Builder
 	body.WriteString(`<div style="display: flex; gap: 1.25rem; flex-wrap: wrap;">`)
 	for _, comp := range s.schema {
+		if !gateAllows(ctx, comp) {
+			continue
+		}
 		body.WriteString(fmt.Sprintf(`<div style="flex: 1; min-width: 16rem;">%s</div>`, comp.Render(ctx, state, errors)))
 	}
 	body.WriteString(`</div>`)
@@ -386,6 +389,9 @@ func (w *WizardComponent) Render(ctx context.Context, state map[string]any, erro
 		stepNum := i + 1
 		var stepBody strings.Builder
 		for _, comp := range step.schema {
+			if !gateAllows(ctx, comp) {
+				continue
+			}
 			stepBody.WriteString(comp.Render(ctx, state, errors))
 		}
 
@@ -637,6 +643,9 @@ func (r *RepeaterComponent) Render(ctx context.Context, state map[string]any, er
 	for i, itemData := range items {
 		var rowBody strings.Builder
 		for _, comp := range r.schema {
+			if !gateAllows(ctx, comp) {
+				continue
+			}
 			rowBody.WriteString(comp.Render(ctx, itemData, errors))
 		}
 
@@ -692,6 +701,9 @@ func (r *RepeaterComponent) Render(ctx context.Context, state map[string]any, er
 	// Build template for dynamically added rows
 	var tmplBody strings.Builder
 	for _, comp := range r.schema {
+		if !gateAllows(ctx, comp) {
+			continue
+		}
 		tmplBody.WriteString(comp.Render(ctx, make(map[string]any), nil))
 	}
 	scopedTmpl := scopeFieldNames(tmplBody.String(), r.name, "__INDEX__")

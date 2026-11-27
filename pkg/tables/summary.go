@@ -152,6 +152,7 @@ func (t *Table[T]) SetTotals(s Summaries) *Table[T] { t.totals = s; return t }
 
 // SummarizedColumns returns the columns with aggregates.
 func (t *Table[T]) SummarizedColumns() map[string][]Summary {
+	t.applyGates()
 	out := map[string][]Summary{}
 	for _, col := range t.columns {
 		if s, ok := any(col).(interface{ GetSummaries() []Summary }); ok && len(s.GetSummaries()) > 0 {

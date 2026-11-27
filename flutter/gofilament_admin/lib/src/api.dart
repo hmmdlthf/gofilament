@@ -656,6 +656,29 @@ class AdminApi {
       _send('DELETE', '/roles/bindings',
           {'user': userId, 'role': role, 'panel': panel, 'tenant': tenant});
 
+  /// The tenant's settings (Panel.Features), at [path] from the schema's
+  /// tenant_settings.path: {tenant, groups: [{name, features: [{key, type,
+  /// label, description, options, min, max, default, value, overridden}]}]}.
+  Future<Map<String, dynamic>> tenantSettings(String path) async =>
+      _map(await _get(path));
+
+  /// Saves changed settings. A 422 ApiException carries the messages per
+  /// key in body['errors']; valid values are saved regardless.
+  Future<Map<String, dynamic>> saveTenantSettings(
+          String path, Map<String, dynamic> values) async =>
+      _map(await _send('PUT', path, {'values': values}));
+
+  /// The central tenant features screen's tenants (Panel.TenantFeaturesAdmin
+  /// at [path]): {tenants: [{key, name}], free_entry}. Each tenant's
+  /// features are at '[path]/{key}', in the tenantSettings shape.
+  Future<Map<String, dynamic>> tenantFeatureTenants(String path) async =>
+      _map(await _get(path));
+
+  /// Puts one setting back to its default.
+  Future<Map<String, dynamic>> resetTenantSetting(
+          String path, String key) async =>
+      _map(await _send('DELETE', '$path/${Uri.encodeComponent(key)}'));
+
   /// The user's tenants: {active_tenant, tenants: [{key, name, avatar}]}.
   Future<Map<String, dynamic>> tenants() async => _map(await _get('/tenants'));
 

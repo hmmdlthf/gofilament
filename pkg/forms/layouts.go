@@ -16,6 +16,7 @@ type SectionComponent struct {
 	collapsible bool
 	schema      []Component
 	visibleWhen *Condition
+	gate        func(ctx context.Context) bool
 }
 
 func Section(heading string) *SectionComponent {
@@ -90,6 +91,7 @@ type GridComponent struct {
 	columns     int
 	schema      []Component
 	visibleWhen *Condition
+	gate        func(ctx context.Context) bool
 }
 
 func Grid(columns int) *GridComponent {
@@ -193,6 +195,9 @@ func (t *TabsComponent) Render(ctx context.Context, state map[string]any, errors
 		// Render tab content
 		var tabBody strings.Builder
 		for _, comp := range tab.schema {
+			if !gateAllows(ctx, comp) {
+				continue
+			}
 			tabBody.WriteString(comp.Render(ctx, state, errors))
 		}
 		display := "block"
