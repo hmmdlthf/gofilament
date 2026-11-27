@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tables.Table.WithContext`, `AllColumnNames` and `AllBulkActionNames`; `BaseResource.ColumnsFor`, `FiltersFor`, `DefaultColumnsFor`, `SelectableColumnsFor` and `BulkActionAllowed`.
 
 ### Changed
-- **Requires GoLaravel with `pkg/features`**. Until that release is out, `go.mod` replaces GoLaravel with a local checkout (marked TODO).
+- **Requires GoLaravel v1.19.0**, the release that ships `pkg/features`.
 - `BaseRelationManager.GetTable` builds a fresh table on each call instead of reusing one shared instance.
 
 ### Fixed
