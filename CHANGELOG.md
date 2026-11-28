@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.47.0] - 2026-11-28
+
+### Added
+- **Filament-style file field options**:
+  - `Visibility("private" | "public")`, `MinSize`, `MinFiles`, `StoreFileNamesIn` and `GetUploadedFileNameUsing`;
+  - `Downloadable`, `Openable`, `Reorderable`, `AppendFiles` and `KeepReplacedFiles`;
+  - `ImageResizeTargetWidth` / `ImageResizeTargetHeight`, `ImageResizeMode` and `ImageCropAspectRatio`.
+  - The options are included in the form schema the Flutter app reads.
+- **Image crop and resize on upload**, for PNG, JPEG and still GIFs. Images are never enlarged.
+- **File links for clients**:
+  - the record endpoint returns `files` (`value`, `url` and `name` per file field), with signed links on private disks;
+  - list rows carry image column links in `row_meta[id].images`;
+  - `ImageColumn.Disk(name)` and `tables.StorageURL`.
+- **`filament.PruneTemporaryUploads(disk, olderThan)`**. Uploads also prune their disk hourly.
+- **Flutter file fields rebuilt**:
+  - **Uploading:** each file shows its upload progress and can be cancelled. Failed uploads can be retried, and saving waits until uploads finish or failures are dealt with.
+  - **Limits:** size and file-count limits are checked before a file is sent.
+  - **Images:** a thumbnail grid with a full-size preview that you can zoom. Avatar fields show a round picture.
+  - **Stored files:** they show their real names, plus Download and Open buttons (`Downloadable` / `Openable`). Multiple-file fields can be reordered (`Reorderable`), and `AppendFiles` puts new files last.
+  - **Adding files:** phones get a Camera button for image fields (`image_picker`), and desktop and web accept files dropped onto the field (`desktop_drop`).
+  - **Cropping:** images are cropped to `ImageCropAspectRatio` before upload (`crop_your_image`). Avatars crop square.
+  - **Links:** edit forms and image cells use the links the server sends, so files on private disks show through signed links.
+  - **Setup:** iOS apps need `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` in `Info.plist` for the camera.
+- **The edit form payload includes `files`** with links to the stored files.
+
+### Changed
+- **Uploads are stored for good only when the record is saved.**
+  - The upload endpoint stores picked files in `tmp-uploads/` on the field's disk and returns a `tmp:` value.
+  - Saving through the API moves them into the field's `Directory`.
+  - Values that weren't uploaded to that field, and aren't already on the record, are refused with 422.
+  - When a save fails, the files go back to the temporary area.
+  - Files removed from a field, or replaced, are deleted after the save. `KeepReplacedFiles()` keeps them.
+  - Panels using `UploadsUsing` are not affected.
+  - The HTML panel's forms don't use this yet.
+- **The upload endpoint allows files up to 64 MB**, regardless of the app-wide body limit (it uses `middleware.MaxBodySize`).
+- **golaravel v1.22.0** (from v1.21.0), for uploads, file serving and storage fakes.
+- **The demo and the example app call `app.ServeStorage()`.**
+- **Demo uploads.**
+  - Products have photo galleries, shrunk to 1200px wide; the first eight have sample photos.
+  - Customers have round avatars, cropped square.
+  - Products have private PDF spec sheets, shown through signed links.
+  - Files are kept in a temporary folder that is wiped at every hourly reset. The sandbox still caps requests at 1 MB.
+
 ## [v1.46.2] - 2026-11-27
 
 ### Changed
