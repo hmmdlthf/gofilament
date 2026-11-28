@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'api.dart' show imageLinksKey;
 import 'components.dart';
 import 'controller.dart';
 import 'format.dart';
@@ -88,7 +89,10 @@ Widget adminCell(
           !format.contains('3:');
       return Text(dateOnly ? formatDateOnly(value) : formatDateTime(value));
     case 'image':
-      final url = displayValue(value);
+      final links = row[imageLinksKey];
+      final url = links is Map && links[name] != null
+          ? '${links[name]}'
+          : displayValue(value);
       if (url.isEmpty) return const SizedBox.shrink();
       return ClipRRect(
         borderRadius:

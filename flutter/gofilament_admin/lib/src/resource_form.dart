@@ -946,8 +946,10 @@ class _ResourceFormState extends State<ResourceForm> {
         value: _values[name],
         enabled: enabled,
         required: required && !(_isEdit && _values[name] != null),
-        upload: (filename, bytes) =>
-            widget.admin.api.upload(widget.slug, name, filename, bytes),
+        files: _payload?.files[name] ?? const [],
+        upload: (filename, bytes, {onProgress, cancel}) => widget.admin.api
+            .upload(widget.slug, name, filename, bytes,
+                onProgress: onProgress, cancel: cancel),
         onChanged: (v) => _values[name] = v,
       );
     }

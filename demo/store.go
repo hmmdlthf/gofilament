@@ -32,20 +32,25 @@ var errDemoLimit = errors.New("the demo holds at most 2,000 records per table; i
 
 // Product is a catalog item; its variants and barcodes are relation managers.
 type Product struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	SKU       string     `json:"sku"`
-	Brand     string     `json:"brand"`
-	Category  string     `json:"category"`
-	Price     float64    `json:"price"`
-	Cost      float64    `json:"cost"`
-	Stock     int        `json:"stock"`
-	Status    string     `json:"status"` // active, draft, archived
-	Featured  bool       `json:"featured"`
-	Rating    float64    `json:"rating"`
-	Summary   string     `json:"summary"`
-	CreatedAt time.Time  `json:"created_at"`
-	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	SKU      string  `json:"sku"`
+	Brand    string  `json:"brand"`
+	Category string  `json:"category"`
+	Price    float64 `json:"price"`
+	Cost     float64 `json:"cost"`
+	Stock    int     `json:"stock"`
+	Status   string  `json:"status"` // active, draft, archived
+	Featured bool    `json:"featured"`
+	Rating   float64 `json:"rating"`
+	Summary  string  `json:"summary"`
+	// Images are photo paths on the demo-public disk; SpecSheet is a PDF on
+	// the private disk, SpecSheetName its original file name.
+	Images        []string   `json:"images"`
+	SpecSheet     string     `json:"spec_sheet"`
+	SpecSheetName string     `json:"spec_sheet_name"`
+	CreatedAt     time.Time  `json:"created_at"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty"`
 }
 
 // Category groups products. Its id is its name, which products store.
@@ -87,6 +92,7 @@ type Customer struct {
 	VIP         bool       `json:"vip"`
 	OrdersCount int        `json:"orders_count"`
 	TotalSpent  float64    `json:"total_spent"`
+	Avatar      string     `json:"avatar"`
 	CreatedAt   time.Time  `json:"created_at"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
 }
@@ -327,6 +333,12 @@ func convert(old, v any) any {
 	case bool:
 		return s == "1" || s == "true" || s == "on" || s == "yes"
 	case string, nil:
+		switch v.(type) {
+		case []string, []any, map[string]string:
+			if old == nil { // empty list or map field (file fields)
+				return v
+			}
+		}
 		if v == nil {
 			return ""
 		}

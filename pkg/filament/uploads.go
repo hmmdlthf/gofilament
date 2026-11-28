@@ -1,18 +1,24 @@
 package filament
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	gcontext "github.com/golaravel/golaravel/pkg/context"
+	"github.com/golaravel/golaravel/pkg/middleware"
 	"github.com/golaravel/golaravel/pkg/router"
 	"github.com/golaravel/golaravel/pkg/storage"
 
@@ -37,10 +43,13 @@ func (f UploadedFile) Open() (io.ReadCloser, error) { return f.header.Open() }
 // (a path or key your handlers understand) and, optionally, a URL to show it.
 type UploadHandler func(ctx *Context, f UploadedFile) (value, url string, err error)
 
-// UploadsUsing stores the files of FileUpload / ImageUpload fields sent by
-// API clients (the Flutter app). Without it, fields with a Disk(...) are
-// stored on that golaravel storage disk under Directory(...) with a random
-// name; other fields refuse uploads.
+// UploadsUsing replaces how FileUpload / ImageUpload files are stored.
+// Without it, files go to a temporary area of the field's disk when they
+// are picked and move into Directory(...) when the record is saved (see
+// the uploads section of the docs); files removed from a field are
+// deleted on save. With it, fn stores each file and the field keeps the
+// value fn returns as is: nothing is moved, checked against the record or
+// deleted.
 func (p *Panel) UploadsUsing(fn UploadHandler) *Panel {
 	p.uploadHandler = fn
 	return p
@@ -48,7 +57,22 @@ func (p *Panel) UploadsUsing(fn UploadHandler) *Panel {
 
 const maxUploadBytes = 64 << 20 // hard cap when a field has no MaxSize
 
-var unsafeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+// TemporaryUploadsDir is where picked files wait on their field's disk
+// until the record is saved. Files older than TemporaryUploadsTTL are
+// pruned from local disks; on S3 and other disks add a lifecycle rule for
+// this prefix.
+const TemporaryUploadsDir = "tmp-uploads"
+
+// TemporaryUploadsTTL is how long an unsaved upload is kept.
+var TemporaryUploadsTTL = 24 * time.Hour
+
+// tmpToken prefixes the field value of a file that is not saved yet.
+const tmpToken = "tmp:"
+
+var (
+	unsafeName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+	tmpKey     = regexp.MustCompile(`^[0-9a-f]{32}(\.[a-z0-9]{1,10})?$`)
+)
 
 func randomName() string {
 	b := make([]byte, 16)
@@ -56,34 +80,154 @@ func randomName() string {
 	return hex.EncodeToString(b)
 }
 
-// storeOnDisk is the default UploadHandler for fields with a Disk.
-func storeOnDisk(ctx *Context, f UploadedFile) (string, string, error) {
-	disk := f.Field.GetDisk()
+// safeFileName turns a client file name into one safe to store.
+func safeFileName(name string) string {
+	name = path.Base(strings.ReplaceAll(name, `\`, "/"))
+	name = strings.Trim(unsafeName.ReplaceAllString(name, "_"), "._")
+	if name == "" {
+		return "file"
+	}
+	if len(name) > 120 {
+		ext := filepath.Ext(name)
+		if len(ext) > 11 {
+			ext = ""
+		}
+		name = name[:120-len(ext)] + ext
+	}
+	return name
+}
+
+func tmpPath(resource, field, key string) string {
+	return path.Join(TemporaryUploadsDir, safeFileName(resource), safeFileName(field), key)
+}
+
+// pendingUpload is a parsed tmp: field value.
+type pendingUpload struct {
+	key      string // random hex + "." + extension
+	original string // the client's file name
+}
+
+func parsePending(v string) (pendingUpload, bool) {
+	rest, ok := strings.CutPrefix(v, tmpToken)
+	if !ok {
+		return pendingUpload{}, false
+	}
+	key, name, _ := strings.Cut(rest, "/")
+	if !tmpKey.MatchString(key) {
+		return pendingUpload{}, false
+	}
+	orig, err := url.PathUnescape(name)
+	if err != nil {
+		orig = ""
+	}
+	return pendingUpload{key: key, original: path.Base(strings.ReplaceAll(orig, `\`, "/"))}, true
+}
+
+func (u pendingUpload) ext() string {
+	_, ext, _ := strings.Cut(u.key, ".")
+	return ext
+}
+
+// checkUploadedFile applies the field's size and type rules to a file.
+func checkUploadedFile(field *forms.FileUploadField, f *storage.UploadedFile) error {
+	limit := int64(maxUploadBytes)
+	if f.Size() > limit {
+		return &forms.ValidationError{Errors: map[string]string{field.GetName(): "The file is too large."}}
+	}
+	if msg := field.CheckUpload(f.ClientOriginalName(), f.MimeType(), f.Size()); msg != "" {
+		return &forms.ValidationError{Errors: map[string]string{field.GetName(): msg}}
+	}
+	return nil
+}
+
+// stageUpload checks a file against its field and stores it in the
+// temporary area of the field's disk. It returns the tmp: value the form
+// keeps until the record is saved, and a URL to preview the file.
+func stageUpload(resource string, field *forms.FileUploadField, f *storage.UploadedFile) (value, previewURL string, err error) {
+	if err := checkUploadedFile(field, f); err != nil {
+		return "", "", err
+	}
+	disk := field.GetDisk()
 	if disk == "" {
 		return "", "", &endpointError{status: http.StatusNotImplemented, msg: "Uploads are not configured for this field"}
 	}
-	name := randomName() + strings.ToLower(filepath.Ext(f.Filename))
-	if f.Field.PreservesFilenames() {
-		clean := unsafeName.ReplaceAllString(filepath.Base(f.Filename), "_")
-		name = randomName()[:8] + "/" + clean
+	d := storage.Disk(disk)
+	if d == nil {
+		return "", "", storage.ErrDiskNotFound
 	}
-	dst := path.Join(strings.Trim(f.Field.GetDirectory(), "/"), name)
-	r, err := f.Open()
+	key := randomName()
+	if ext := f.Extension(); ext != "" {
+		key += "." + ext
+	}
+	dst := tmpPath(resource, field.GetName(), key)
+
+	rd, err := f.Open()
 	if err != nil {
 		return "", "", err
 	}
-	defer r.Close()
-	d := storage.Disk(disk)
-	if err := d.PutReader(dst, r); err != nil {
+	defer rd.Close()
+	var body io.Reader = rd
+	if processed, ok := processImage(field, f.MimeType(), rd); ok {
+		body = bytes.NewReader(processed)
+	} else if _, err := rd.Seek(0, io.SeekStart); err != nil {
 		return "", "", err
 	}
-	return dst, d.URL(dst), nil
+	if err := d.PutReader(dst, body); err != nil {
+		return "", "", err
+	}
+	go pruneTemporaryUploads(disk)
+	preview, _ := storage.DisplayURL(dst, time.Hour, disk)
+	return tmpToken + key + "/" + url.PathEscape(f.ClientOriginalName()), preview, nil
+}
+
+var lastPrune sync.Map // disk name -> time.Time
+
+// pruneTemporaryUploads deletes unsaved uploads older than
+// TemporaryUploadsTTL from a local or in-memory disk, at most once an
+// hour per disk.
+func pruneTemporaryUploads(disk string) {
+	now := time.Now()
+	if v, ok := lastPrune.Load(disk); ok && now.Sub(v.(time.Time)) < time.Hour {
+		return
+	}
+	lastPrune.Store(disk, now)
+	PruneTemporaryUploads(disk, TemporaryUploadsTTL)
+}
+
+// PruneTemporaryUploads deletes files in TemporaryUploadsDir of the disk
+// that are older than olderThan, and returns how many it removed. It
+// works on local and in-memory disks; others can't be listed, so give
+// them a lifecycle rule instead. Uploads also prune their disk hourly.
+func PruneTemporaryUploads(disk string, olderThan time.Duration) int {
+	cutoff := time.Now().Add(-olderThan)
+	removed := 0
+	switch d := storage.Disk(disk).(type) {
+	case *storage.LocalDriver:
+		root := filepath.Join(d.Root(), TemporaryUploadsDir)
+		_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || info.ModTime().After(cutoff) {
+				return nil
+			}
+			if os.Remove(p) == nil {
+				removed++
+			}
+			return nil
+		})
+	case *storage.MemoryDriver:
+		for _, p := range d.Files(TemporaryUploadsDir) {
+			if t, err := d.LastModified(p); err == nil && t.Before(cutoff) {
+				_ = d.Delete(p)
+				removed++
+			}
+		}
+	}
+	return removed
 }
 
 // registerUploadRoute mounts POST <resource>/uploads?field=<name> (multipart
 // "file"): it checks the user may see the resource, that the field is a file
 // field of its form, and the field's size and type rules, then stores the
-// file.
+// file (see UploadsUsing).
 func (p *Panel) registerUploadRoute(r *router.Router, res ResourceInterface, resPath string, preflight gcontext.HandlerFunc) {
 	finder, ok := res.(interface {
 		FormFieldFor(ctx *Context, name string) forms.Component
@@ -92,7 +236,9 @@ func (p *Panel) registerUploadRoute(r *router.Router, res ResourceInterface, res
 		return
 	}
 	r.OPTIONS(resPath+"/uploads", preflight)
-	r.POST(resPath+"/uploads", func(c *gcontext.Context) error {
+	// the engine's app-wide body cap (32 MiB by default) would cut uploads
+	// short of the fields' own limits
+	r.POST(resPath+"/uploads", middleware.MaxBodySize(maxUploadBytes+1<<20), func(c *gcontext.Context) error {
 		p.setCorsHeaders(c)
 		ctx, err := p.AuthorizeAccess(c)
 		if err != nil {
@@ -105,9 +251,11 @@ func (p *Panel) registerUploadRoute(r *router.Router, res ResourceInterface, res
 		if !ok {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "Unknown file field"})
 		}
-		limit := int64(maxUploadBytes)
-		c.Request.Body = http.MaxBytesReader(&c.Response, c.Request.Body, limit+1<<20)
 		if err := c.Request.ParseMultipartForm(8 << 20); err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				return p.apiError(c, &forms.ValidationError{Errors: map[string]string{field.GetName(): "The file is too large."}})
+			}
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Send the file as multipart form data (field \"file\")"})
 		}
 		defer func() {
@@ -115,40 +263,38 @@ func (p *Panel) registerUploadRoute(r *router.Router, res ResourceInterface, res
 				_ = c.Request.MultipartForm.RemoveAll()
 			}
 		}()
-		files := c.Request.MultipartForm.File["file"]
+		files := c.Files("file")
 		if len(files) != 1 {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Send exactly one file"})
 		}
-		fh := files[0]
-		if fh.Size > limit {
-			return p.apiError(c, &forms.ValidationError{Errors: map[string]string{field.GetName(): "The file is too large."}})
-		}
-		sniff := make([]byte, 512)
-		rd, err := fh.Open()
-		if err != nil {
-			return p.apiError(c, err)
-		}
-		n, _ := io.ReadFull(rd, sniff)
-		rd.Close()
-		contentType := http.DetectContentType(sniff[:n])
-		if msg := field.CheckUpload(fh.Filename, contentType, fh.Size); msg != "" {
-			return p.apiError(c, &forms.ValidationError{Errors: map[string]string{field.GetName(): msg}})
-		}
-
+		f := files[0]
 		withSelf(ctx)
-		up := UploadedFile{Resource: res.Slug(), Field: field, Filename: fh.Filename, Size: fh.Size, ContentType: contentType, header: fh}
-		store := p.uploadHandler
-		if store == nil {
-			store = storeOnDisk
-		}
-		value, url, err := store(ctx, up)
-		if err != nil {
-			var coded interface{ StatusCode() int }
-			if errors.As(err, &coded) {
+
+		if p.uploadHandler != nil {
+			if err := checkUploadedFile(field, f); err != nil {
 				return p.apiError(c, err)
 			}
-			return p.apiErrorStatus(c, errors.New("The file could not be stored"), http.StatusInternalServerError)
+			up := UploadedFile{Resource: res.Slug(), Field: field, Filename: f.ClientOriginalName(), Size: f.Size(), ContentType: f.MimeType(), header: f.Header()}
+			value, u, err := p.uploadHandler(ctx, up)
+			if err != nil {
+				return p.uploadError(c, err)
+			}
+			return c.JSON(http.StatusCreated, map[string]any{"value": value, "url": u, "name": f.ClientOriginalName()})
 		}
-		return c.JSON(http.StatusCreated, map[string]any{"value": value, "url": url, "name": fh.Filename})
+
+		value, u, err := stageUpload(res.Slug(), field, f)
+		if err != nil {
+			return p.uploadError(c, err)
+		}
+		return c.JSON(http.StatusCreated, map[string]any{"value": value, "url": u, "name": f.ClientOriginalName()})
 	})
+}
+
+func (p *Panel) uploadError(c *gcontext.Context, err error) error {
+	var coded interface{ StatusCode() int }
+	var verr *forms.ValidationError
+	if errors.As(err, &coded) || errors.As(err, &verr) {
+		return p.apiError(c, err)
+	}
+	return p.apiErrorStatus(c, errors.New("The file could not be stored"), http.StatusInternalServerError)
 }

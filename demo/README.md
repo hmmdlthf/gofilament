@@ -13,6 +13,9 @@ One Go binary serves both the app and the panel API it reads, at `/admin`.
 - **Categories**: the product form's category select can create a missing
   category on the spot (`CreateOptionFrom("categories")`)
 - **Customers** and the **Audit log**
+- **Uploads**: product photo galleries (shrunk to 1200px), round customer
+  avatars cropped square in the app, and private PDF spec sheets shown only
+  through signed links that expire
 - **Dashboard**: stats with trends, a revenue chart (7/30/90 days), orders by
   status, and sales by category
 - **Roles**: *Admin* can do everything; *Warehouse staff* see only products and
@@ -29,7 +32,7 @@ One Go binary serves both the app and the panel API it reads, at `/admin`.
 | Accounts | `admin@example.com` / `demo`, `warehouse@example.com` / `demo`. The login screen has a one-click button for each; there is no sign-up |
 | Data | In memory. Every hour it goes back to the same generated sample (`seed.go`): 40 products, 120 customers and about 90 days of orders. Each table is capped at 2,000 rows |
 | Abuse limits | Per IP: 300 requests a minute, of which 40 may be writes. Bodies are capped at 1 MB, and logins are throttled |
-| Side effects | None: no mail (no sign-up or password reset), no payments, no file uploads |
+| Side effects | No mail (no sign-up or password reset) and no payments. Uploads (product photos, customer avatars, PDF spec sheets) accept images and PDFs under 1 MB and are kept in a temporary folder that is wiped at every reset |
 | Search engines | `X-Robots-Tag: noindex` on everything |
 
 ## Running it locally

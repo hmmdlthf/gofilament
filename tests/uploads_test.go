@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/golaravel/golaravel/pkg/auth"
@@ -85,11 +86,12 @@ func TestUploadsToTheFieldsDisk(t *testing.T) {
 		t.Fatalf("upload: %d %v", code, out)
 	}
 	value := fmt.Sprint(out["value"])
-	if filepath.Dir(value) != "photos" || filepath.Ext(value) != ".png" {
-		t.Fatalf("stored under the field's directory with a random name: %q", value)
+	key, name, _ := strings.Cut(strings.TrimPrefix(value, "tmp:"), "/")
+	if !strings.HasPrefix(value, "tmp:") || filepath.Ext(key) != ".png" || name != "a.png" {
+		t.Fatalf("a picked file waits as a tmp: value with a random key: %q", value)
 	}
-	if _, err := os.Stat(filepath.Join(dir, value)); err != nil {
-		t.Fatalf("file not stored: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "tmp-uploads", "items", "photo", key)); err != nil {
+		t.Fatalf("file not staged: %v", err)
 	}
 	if code, out := upload(t, app, "photo", "good", "a.png", []byte("just text")); code != 422 {
 		t.Fatalf("an image field refuses non-images (by content): %d %v", code, out)

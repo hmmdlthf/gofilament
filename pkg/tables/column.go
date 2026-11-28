@@ -6,6 +6,8 @@ import (
 	"html"
 	"strings"
 	"time"
+
+	"github.com/golaravel/golaravel/pkg/storage"
 )
 
 // BaseColumn defines shared attributes for table columns.
@@ -524,6 +526,7 @@ type ImageColumnDef[T any] struct {
 	BaseColumn[T]
 	isCircular bool
 	size       string
+	disk       string
 }
 
 func ImageColumn[T any](name string) *ImageColumnDef[T] {
@@ -568,14 +571,71 @@ func (c *ImageColumnDef[T]) Circular(circ ...bool) *ImageColumnDef[T] {
 	return c
 }
 
-func (c *ImageColumnDef[T]) RenderCell(record T, rawValue any) string {
-	url := ""
+// Disk sets the storage disk the column's paths are on ("public" by
+// default). Values that are already URLs are shown as they are; paths
+// get a plain URL on a public disk and a signed, short-lived one on a
+// private disk.
+func (c *ImageColumnDef[T]) Disk(d string) *ImageColumnDef[T] {
+	c.disk = d
+	return c
+}
+
+// GetDisk returns the column's storage disk.
+func (c *ImageColumnDef[T]) GetDisk() string {
+	if c.disk == "" {
+		return "public"
+	}
+	return c.disk
+}
+
+// ImageURL returns the URL to show for a record's value ("" when empty).
+// Multiple values (a gallery) show the first.
+func (c *ImageColumnDef[T]) ImageURL(record T, rawValue any) string {
 	if c.valueFunc != nil {
 		rawValue = c.valueFunc(record)
 	}
-	if rawValue != nil {
-		url = fmt.Sprintf("%v", rawValue)
+	return StorageURL(c.GetDisk(), firstValue(rawValue))
+}
+
+func firstValue(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case []string:
+		if len(x) > 0 {
+			return x[0]
+		}
+		return ""
+	case []any:
+		if len(x) > 0 && x[0] != nil {
+			return fmt.Sprint(x[0])
+		}
+		return ""
 	}
+	return fmt.Sprint(v)
+}
+
+// StorageURLTTL is how long signed links to files on private disks last.
+var StorageURLTTL = 30 * time.Minute
+
+// StorageURL returns a URL for a stored file: value itself when it is
+// already a URL (http(s):// or starting with "/"), a plain URL on a
+// public disk and a signed one on a private disk.
+func StorageURL(disk, value string) string {
+	if value == "" || strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "data:") {
+		return value
+	}
+	u, err := storage.DisplayURL(value, StorageURLTTL, disk)
+	if err != nil {
+		return ""
+	}
+	return u
+}
+
+func (c *ImageColumnDef[T]) RenderCell(record T, rawValue any) string {
+	url := c.ImageURL(record, rawValue)
 	if url == "" {
 		return `<div style="width: 2.25rem; height: 2.25rem; border-radius: 9999px; background-color: var(--gray-200);"></div>`
 	}

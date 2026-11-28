@@ -1788,6 +1788,7 @@ func main() {
 
 	// 3. Initialize GoLaravel Default App
 	app := golaravel.Default()
+	app.ServeStorage() // uploaded files at /storage/...
 
 	// 4. Build Admin Panel in Flutter Multiplatform Engine Mode
 	adminPanel := filament.NewPanel("admin").

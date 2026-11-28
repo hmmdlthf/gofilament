@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"math/rand"
 	"strings"
 	"time"
@@ -142,6 +143,14 @@ func seedCatalog(r *rand.Rand, now time.Time) {
 			}
 		}
 		p.Stock = stock
+		p.Images = []string{}
+		if i < 8 { // sample photos for the first products
+			hues := []color.RGBA{{79, 70, 229, 255}, {14, 165, 233, 255}, {16, 185, 129, 255}, {245, 158, 11, 255},
+				{239, 68, 68, 255}, {168, 85, 247, 255}, {236, 72, 153, 255}, {20, 184, 166, 255}}
+			if photo := productPhoto(i+1, hues[i]); photo != "" {
+				p.Images = []string{photo}
+			}
+		}
 		if i == 9 {
 			p.DeletedAt = ptr(now.Add(-36 * time.Hour)) // one product in the trash
 		}

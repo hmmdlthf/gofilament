@@ -61,6 +61,7 @@ func productResource() *filament.BaseResource[*Product] {
 	res.Table(func(t *tables.Table[*Product]) *tables.Table[*Product] {
 		return t.Toggleable(true).
 			Columns(
+				tables.ImageColumn[*Product]("images").Label("Photo").Disk(publicDisk),
 				tables.TextColumn[*Product]("name").Label("Product").Weight("bold").Searchable().Sortable(),
 				tables.TextColumn[*Product]("sku").Label("SKU").Copyable().Searchable(),
 				tables.BadgeColumn[*Product]("category").Label("Category").Sortable(),
@@ -97,6 +98,17 @@ func productResource() *filament.BaseResource[*Product] {
 						CreateOptionFrom("categories").Required(),
 				),
 				forms.Textarea("summary").Label("Summary"),
+			),
+			forms.Section("Media").Schema(
+				// Photos are shrunk to 1200px wide; uploads are wiped at each reset.
+				forms.ImageUpload("images").Label("Photos").Disk(publicDisk).Directory("products").
+					Multiple().MaxFiles(4).MaxSize(900).ImageResizeTargetWidth(1200).
+					AcceptedFileTypes("image/png", "image/jpeg", "image/webp").
+					HelperText("PNG, JPEG or WebP, up to 4 photos."),
+				// A private file: only reachable through short-lived signed links.
+				forms.FileUpload("spec_sheet").Label("Spec sheet (PDF)").Disk(privateDisk).Directory("spec-sheets").
+					AcceptedFileTypes("application/pdf").MaxSize(900).
+					StoreFileNamesIn("spec_sheet_name").Downloadable().Openable(),
 			),
 			forms.Section("Pricing and stock").Schema(
 				forms.Grid(3).Schema(
@@ -542,6 +554,7 @@ func customerResource() *filament.BaseResource[*Customer] {
 	res.Table(func(t *tables.Table[*Customer]) *tables.Table[*Customer] {
 		return t.Toggleable(true).
 			Columns(
+				tables.ImageColumn[*Customer]("avatar").Label("Photo").Circular().Disk(publicDisk),
 				tables.TextColumn[*Customer]("name").Label("Name").Weight("bold").Searchable().Sortable(),
 				tables.TextColumn[*Customer]("email").Label("Email").Copyable().Searchable(),
 				tables.TextColumn[*Customer]("city").Label("City").Sortable(),
@@ -561,14 +574,18 @@ func customerResource() *filament.BaseResource[*Customer] {
 			BulkActions(tables.ExportBulkAction(), tables.DeleteBulkAction())
 	})
 	res.Form(func(f *forms.Form) *forms.Form {
-		return f.Schema(forms.Section("Customer").Schema(forms.Grid(2).Schema(
-			forms.TextInput("name").Label("Name").Required(),
-			forms.TextInput("email").Label("Email").Email().Required(),
-			forms.TextInput("phone").Label("Phone"),
-			forms.TextInput("city").Label("City"),
-			forms.TextInput("country").Label("Country"),
-			forms.Toggle("vip").Label("VIP"),
-		)))
+		return f.Schema(forms.Section("Customer").Schema(
+			forms.ImageUpload("avatar").Label("Photo").Avatar().Disk(publicDisk).Directory("avatars").
+				ImageCropAspectRatio("1:1").ImageResizeTargetWidth(256).MaxSize(900).
+				AcceptedFileTypes("image/png", "image/jpeg", "image/webp"),
+			forms.Grid(2).Schema(
+				forms.TextInput("name").Label("Name").Required(),
+				forms.TextInput("email").Label("Email").Email().Required(),
+				forms.TextInput("phone").Label("Phone"),
+				forms.TextInput("city").Label("City"),
+				forms.TextInput("country").Label("Country"),
+				forms.Toggle("vip").Label("VIP"),
+			)))
 	})
 	res.OnList(func(ctx *filament.Context, search, sortCol, sortDir string, page, perPage int, filters map[string]string) ([]*Customer, int, error) {
 		mu.RLock()

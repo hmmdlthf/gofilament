@@ -635,8 +635,8 @@ Other available layout containers include:
 | `forms.DatePicker(name)` | `.Format("2006-01-02")`, `.MinDate(...)`, `.MaxDate(...)` | Date selection |
 | `forms.DateTimePicker(name)` | `.Format("2006-01-02 15:04:05")` | Date and time picker |
 | `forms.TimePicker(name)` | `.Format("15:04")` | Time selection |
-| `forms.FileUpload(name)` | `.Disk("s3")`, `.Directory("path")`, `.MaxFiles(n)`, `.AcceptedFileTypes(...)` | Secure file upload |
-| `forms.ImageUpload(name)` | Same as FileUpload + image preview cropping | Image upload |
+| `forms.FileUpload(name)` | `.Disk("s3")`, `.Directory("path")`, `.Visibility("private")`, `.Multiple()`, `.MaxFiles(n)`, `.AcceptedFileTypes(...)`, `.MaxSize(kb)` and more (see [File uploads](#file-uploads)) | Secure file upload |
+| `forms.ImageUpload(name)` | Same as FileUpload, plus `.Avatar()`, `.ImageCropAspectRatio("16:9")`, `.ImageResizeTargetWidth(px)` | Image upload |
 | `forms.RichEditor(name)` | `.ToolbarButtons(...)` | WYSIWYG HTML rich text editor |
 | `forms.MarkdownEditor(name)` | `.PreviewMode()` | Markdown editor with split preview |
 | `forms.TagsInput(name)` | `.Separator(",")`, `.Suggestions(...)` | Tag list input |
@@ -644,6 +644,57 @@ Other available layout containers include:
 | `forms.KeyValue(name)` | `.KeyLabel(...)`, `.ValueLabel(...)` | Key-value dictionary editor |
 | `forms.CodeEditor(name)` | `.Language("json")` | Monospace code editor with syntax highlighting |
 | `forms.Hidden(name)` | `.Default(val)` | Hidden input field |
+
+### File uploads
+
+`FileUpload` and `ImageUpload` work like Filament's. Files are stored on a [golaravel storage disk](https://github.com/hmmdlthf/golaravel/blob/master/docs/cloud-storage-and-s3.md), `public` by default.
+
+```go
+forms.ImageUpload("avatar").Avatar().Directory("avatars").
+    ImageCropAspectRatio("1:1").ImageResizeTargetWidth(512)
+
+forms.FileUpload("attachments").Visibility("private").Directory("contracts").
+    Multiple().MaxFiles(5).MaxSize(10_240).AcceptedFileTypes("application/pdf").
+    StoreFileNamesIn("attachment_names").Downloadable().Openable().Reorderable()
+```
+
+**How a file is saved (Flutter app and API clients):**
+
+1. **Pick.** The app sends each file to `POST <resource>/uploads?field=<name>` as soon as it is picked.
+   - The field's size and type rules are checked against the file's bytes.
+   - Images are cropped and resized here.
+   - The file waits in `tmp-uploads/` on the field's disk, and the response gives the form a `tmp:` value and a preview URL.
+2. **Save.** When the record is saved, `tmp:` values move into the field's `Directory` under random names, and your create or update handler gets the stored paths.
+   - Any other value must already be on the record, so a client can't point a field at some other file.
+   - If your handler fails, the files go back to the temporary area and the form can be sent again.
+3. **Clean up.** Once the save succeeds, files that were removed from the field, or replaced, are deleted. `KeepReplacedFiles()` keeps them.
+4. **Unsaved uploads** older than 24 hours (`filament.TemporaryUploadsTTL`) are pruned from local disks. On S3 and other disks, add a lifecycle rule for `tmp-uploads/`.
+
+**Field options:**
+
+| Option | Effect |
+|---|---|
+| `Disk(name)` / `Visibility("private" \| "public")` | Where files go. `private` uses the `local` disk, so files are reachable only through signed links that expire. |
+| `Directory(dir)` | The folder inside the disk. |
+| `MaxSize(kb)` / `MinSize(kb)` | Size limits, checked on upload. |
+| `Multiple()`, `MaxFiles(n)`, `MinFiles(n)` | Several files per field. |
+| `AcceptedFileTypes(...)` | MIME types (`application/pdf`), wildcards (`image/*`) or extensions (`.csv`), checked against the file's content. |
+| `StoreFileNamesIn(field)` | Keeps the original names: a string, or a path → name map for `Multiple`. |
+| `GetUploadedFileNameUsing(fn)` / `PreserveFilenames()` | Name stored files yourself, or keep the client's name in a random folder. |
+| `AppendFiles()`, `Reorderable()` | New files go last; users can reorder. |
+| `Downloadable()`, `Openable()` | Buttons for stored files. |
+| `ImageCropAspectRatio(r)`, `ImageResizeTargetWidth/Height(px)`, `ImageResizeMode("contain" \| "cover" \| "force")` | Crop and shrink PNG, JPEG and still GIF images. Other formats are stored as sent. Images are never enlarged. |
+| `KeepReplacedFiles()` | Don't delete removed files. |
+
+**Links to files:**
+
+- The record endpoint returns `files`: each file field's `value`, `url` and `name`. On a private disk the `url` is a signed link, valid for 30 minutes (`tables.StorageURLTTL`).
+- `tables.ImageColumn(...).Disk("public")` turns stored paths into links. List rows carry them in `row_meta[id].images`. Values that are already URLs are shown as they are.
+- Call `app.ServeStorage()` so golaravel serves the `/storage/...` links.
+
+`panel.UploadsUsing(fn)` replaces all of this with your own storage. The field then keeps whatever value `fn` returns, and nothing is moved or deleted.
+
+The save step applies to file fields of the resource form, outside repeaters. Relation-manager forms, and files inside repeaters, keep the values as sent.
 
 ### Live Reactivity & Dynamic Micro-Swaps
 

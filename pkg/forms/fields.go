@@ -116,12 +116,12 @@ func (f *BaseField) formatLabel() string {
 
 type TextInputField struct {
 	BaseField
-	inputType string // text, email, password, number, tel, url
-	minLength int
-	maxLength int
-	prefix    string
-	suffix    string
-	hashOnSave bool
+	inputType   string // text, email, password, number, tel, url
+	minLength   int
+	maxLength   int
+	prefix      string
+	suffix      string
+	hashOnSave  bool
 	uniqueTable string
 	uniqueCol   string
 }
@@ -296,7 +296,12 @@ func (f *TextInputField) Render(ctx context.Context, state map[string]any, error
 </div>`,
 		colClass,
 		f.name, html.EscapeString(f.formatLabel()),
-		func() string { if f.required { return `<span style="color:#ef4444;">*</span>` }; return "" }(),
+		func() string {
+			if f.required {
+				return `<span style="color:#ef4444;">*</span>`
+			}
+			return ""
+		}(),
 		f.inputType, f.name, f.name, html.EscapeString(val), html.EscapeString(f.placeholder),
 		reqAttr, disAttr, liveAttr,
 		errHTML, helperHTML,
@@ -634,6 +639,22 @@ type FileUploadField struct {
 	maxFiles          int
 	imagePreview      bool
 	preserveFilenames bool
+
+	diskSet         bool
+	minSize         int64 // in KB
+	minFiles        int
+	fileNamesIn     string
+	fileNameUsing   func(original string) string
+	downloadable    bool
+	openable        bool
+	reorderable     bool
+	appendFiles     bool
+	keepReplaced    bool
+	resizeWidth     int
+	resizeHeight    int
+	resizeMode      string
+	cropAspectRatio string
+	cropAspectFloat float64
 }
 
 func FileUpload(name string) *FileUploadField {
@@ -658,6 +679,7 @@ func ImageUpload(name string) *FileUploadField {
 
 func (f *FileUploadField) Disk(d string) *FileUploadField {
 	f.disk = d
+	f.diskSet = true
 	return f
 }
 

@@ -1696,6 +1696,14 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 					out["version"] = ver
 				}
 			}
+			if rf, ok := res.(interface {
+				RecordFiles(ctx *Context, record any) map[string][]FileInfo
+			}); ok {
+				// links (signed on private disks) and names of stored files
+				if files := rf.RecordFiles(ctx, record); len(files) > 0 {
+					out["files"] = files
+				}
+			}
 			return c.JSON(http.StatusOK, out)
 		}
 

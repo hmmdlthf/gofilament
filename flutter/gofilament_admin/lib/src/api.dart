@@ -4,6 +4,7 @@ import 'i18n.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'format.dart' show recordId;
 import 'session_store.dart';
 
 /// An error answered by the panel API. [message] is safe to show to the user.
@@ -64,7 +65,12 @@ class FormPayload {
     required this.abilities,
     required this.optionLabels,
     this.version,
+    this.files = const {},
   });
+
+  /// The stored files of each file field (edit forms): links to show and
+  /// download them, signed on private disks.
+  final Map<String, List<StoredFile>> files;
 
   /// The record's version (Versioned resources): sent back as `_version`
   /// on save so the server can refuse to overwrite a newer change.
@@ -78,6 +84,28 @@ class FormPayload {
 
   bool get isEdit => mode == 'edit';
 }
+
+/// Row key under which list rows carry their image column links.
+const imageLinksKey = '_images';
+
+/// A file stored for a file field: the field value, a link to show or
+/// download it, and its display name.
+class StoredFile {
+  const StoredFile({required this.value, required this.name, this.url});
+
+  factory StoredFile.fromJson(Map m) => StoredFile(
+        value: '${m['value']}',
+        name: '${m['name'] ?? '${m['value']}'.split('/').last}',
+        url: m['url'] == null || '${m['url']}'.isEmpty ? null : '${m['url']}',
+      );
+
+  final String value;
+  final String name;
+  final String? url;
+}
+
+/// Reports upload progress: bytes sent and the total.
+typedef UploadProgress = void Function(int sent, int total);
 
 /// A choice of a select field.
 class FieldOption {
@@ -370,6 +398,11 @@ class AdminApi {
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
     final meta = _map(data['row_meta']);
+    // image columns hold storage paths; the server sends their links
+    for (final row in rows) {
+      final images = _map(_map(meta[recordId(row)])['images']);
+      if (images.isNotEmpty) row[imageLinksKey] = images;
+    }
     return ListPage(
       rows: rows,
       total: (data['total'] as num?)?.toInt() ?? rows.length,
@@ -379,8 +412,8 @@ class AdminApi {
       ..rowMeta = meta.map((k, v) => MapEntry(k, _map(v)))
       ..summaries = _map(data['summaries']).map((col, v) => MapEntry(col,
           _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toDouble() : 0.0))))
-      ..facets = _map(data['facets']).map((col, v) => MapEntry(col,
-          _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toInt() : 0))));
+      ..facets = _map(data['facets']).map((col, v) => MapEntry(
+          col, _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toInt() : 0))));
   }
 
   /// One record, as the resource's Go type serializes it.
@@ -401,8 +434,15 @@ class AdminApi {
       optionLabels:
           _map(data['option_labels']).map((k, v) => MapEntry(k, '$v')),
       version: data['version'] == null ? null : '${data['version']}',
+      files: _files(data['files']),
     );
   }
+
+  static Map<String, List<StoredFile>> _files(dynamic raw) =>
+      _map(raw).map((field, list) => MapEntry(field, [
+            if (list is List)
+              for (final f in list.whereType<Map>()) StoredFile.fromJson(f)
+          ]));
 
   /// The form that creates a missing option of select [field]
   /// (`create_option` in the field's schema).
@@ -443,10 +483,14 @@ class AdminApi {
 
   /// Uploads one file for the file field [field] of a resource form;
   /// returns `{value, url, name}` (value is what the field keeps).
+  /// [onProgress] follows the bytes sent; completing [cancel] aborts the
+  /// upload (it then fails with http.RequestAbortedException).
   Future<Map<String, dynamic>> upload(
-      String slug, String field, String filename, Uint8List bytes) async {
-    final req = http.MultipartRequest(
-        'POST', _uri('/resources/$slug/uploads', {'field': field}))
+      String slug, String field, String filename, Uint8List bytes,
+      {UploadProgress? onProgress, Future<void>? cancel}) async {
+    final req = _ProgressMultipartRequest(
+        'POST', _uri('/resources/$slug/uploads', {'field': field}),
+        onProgress: onProgress, abortTrigger: cancel)
       ..headers.addAll({
         'Accept': 'application/json',
         if (isAuthenticated) 'Authorization': 'Bearer $token',
@@ -828,4 +872,30 @@ class AdminApi {
   /// Authenticated request with a JSON body against a custom panel endpoint.
   Future<dynamic> send(String method, String path, [Object? body]) =>
       _send(method, path, body);
+}
+
+/// A multipart request that reports how much of its body was sent.
+class _ProgressMultipartRequest extends http.MultipartRequest
+    with http.Abortable {
+  _ProgressMultipartRequest(super.method, super.url,
+      {this.onProgress, this.abortTrigger});
+
+  final UploadProgress? onProgress;
+
+  @override
+  final Future<void>? abortTrigger;
+
+  @override
+  http.ByteStream finalize() {
+    final stream = super.finalize();
+    final report = onProgress;
+    if (report == null) return stream;
+    final total = contentLength;
+    var sent = 0;
+    return http.ByteStream(stream.map((chunk) {
+      sent += chunk.length;
+      report(sent, total);
+      return chunk;
+    }));
+  }
 }

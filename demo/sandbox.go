@@ -15,8 +15,11 @@ import (
 //   - each client IP gets a request budget per minute, smaller for writes;
 //   - nothing is indexed by search engines.
 //
-// There are no uploads (no file fields), no mail (no password reset or
-// sign-up) and no payment gateway; data resets every hour (seed.go).
+// Uploads (product photos, customer avatars, PDF spec sheets) are images
+// and PDFs only, at most 1 MB a request, kept in a temporary folder that
+// is wiped at every reset (uploads.go). There is no mail (no password
+// reset or sign-up) and no payment gateway; data resets every hour
+// (seed.go).
 
 const (
 	maxBody       = 1 << 20 // 1 MB per request

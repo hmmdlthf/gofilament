@@ -79,6 +79,9 @@ class FakePanel {
   /// Extra items form fields, item columns and dashboard widgets (custom
   /// component tests).
   List<Map<String, dynamic>> extraFormFields = [];
+
+  /// `files` of the edit form payload: stored file links per field.
+  Map<String, List<Map<String, dynamic>>> formFiles = {};
   List<Map<String, dynamic>> extraColumns = [];
   List<Map<String, dynamic>> extraWidgets = [];
   List<Map<String, dynamic>> extraFilters = [];
@@ -177,7 +180,8 @@ class FakePanel {
     final authed = req.headers['Authorization'] == 'Bearer token-1';
     final extra = extraRoutes['${req.method} $path'];
     if (extra != null && authed) {
-      final body = extra(req);
+      var body = extra(req);
+      if (body is Future) body = (await body) as Object;
       return _json(body, extraStatus['${req.method} $path'] ?? 200);
     }
 
@@ -700,6 +704,7 @@ class FakePanel {
       'option_labels': {'supplier_id': 'Agasthi Traders'},
       'abilities': {'view': true, 'update': true, 'delete': canDelete},
       if (itemVersion != null) 'version': '$itemVersion',
+      if (formFiles.isNotEmpty) 'files': formFiles,
     });
   }
 

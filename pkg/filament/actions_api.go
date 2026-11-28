@@ -101,6 +101,12 @@ func (r *BaseResource[T]) RowMeta(ctx *Context, records any) map[string]map[stri
 		if links != nil {
 			meta["links"] = links
 		}
+		if tbl != nil {
+			// image columns hold storage paths; clients need links
+			if urls := tbl.ImageURLs(rec); urls != nil {
+				meta["images"] = urls
+			}
+		}
 		if r.versionOf != nil {
 			meta["version"] = r.versionOf(rec)
 		}

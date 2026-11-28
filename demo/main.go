@@ -77,6 +77,8 @@ func newPanel(id, path string) *filament.Panel {
 
 func buildApp() (http.Handler, error) {
 	app := golaravel.New()
+	// serve uploaded files: public ones directly, private ones via signed links
+	app.ServeStorage()
 
 	fsys, flutterBuilt := flutterBuild()
 	if flutterBuilt {
@@ -103,6 +105,9 @@ func buildApp() (http.Handler, error) {
 }
 
 func main() {
+	if err := setupUploads(); err != nil {
+		log.Fatalf("demo: uploads: %v", err)
+	}
 	resetStore(time.Now())
 	handler, err := buildApp()
 	if err != nil {
@@ -145,6 +150,7 @@ func resetLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Until(nextReset())):
+			resetUploads()
 			resetStore(time.Now())
 			resetFeatures()
 			log.Print("demo data reset")

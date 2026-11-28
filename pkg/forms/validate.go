@@ -322,6 +322,9 @@ func (v *validator) check(c Component, b *BaseField, val any) string {
 		if f.maxFiles > 0 && len(list) > f.maxFiles {
 			return fmt.Sprintf("%s may not have more than %d files.", label, f.maxFiles)
 		}
+		if f.minFiles > 0 && len(list) > 0 && len(list) < f.minFiles {
+			return fmt.Sprintf("%s needs at least %d files.", label, f.minFiles)
+		}
 	case *CustomField:
 		if f.rule != nil {
 			return f.rule(v.ctx, val)

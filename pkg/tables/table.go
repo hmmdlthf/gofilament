@@ -492,6 +492,25 @@ func (t *Table[T]) extractRecordID(record T) string {
 }
 
 // GetColumns returns the configured columns.
+// ImageURLs returns the URL of each image column for a record, keyed by
+// column name (columns without a value are left out).
+func (t *Table[T]) ImageURLs(rec T) map[string]string {
+	var out map[string]string
+	for _, col := range t.columns {
+		ic, ok := col.(*ImageColumnDef[T])
+		if !ok {
+			continue
+		}
+		if u := ic.ImageURL(rec, t.extractFieldValue(rec, col.GetName())); u != "" {
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[col.GetName()] = u
+		}
+	}
+	return out
+}
+
 func (t *Table[T]) GetColumns() []ColumnRenderer[T] {
 	t.applyGates()
 	return t.columns

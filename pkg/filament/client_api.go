@@ -385,6 +385,13 @@ func (p *Panel) registerClientRoutes(r *router.Router) {
 					out["version"] = ver
 				}
 			}
+			if rf, ok := res.(interface {
+				RecordFiles(ctx *Context, record any) map[string][]FileInfo
+			}); ok {
+				if files := rf.RecordFiles(ctx, record); len(files) > 0 {
+					out["files"] = files
+				}
+			}
 			return c.JSON(http.StatusOK, out)
 		})
 

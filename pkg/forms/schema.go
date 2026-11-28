@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 	"strings"
+
+	"github.com/golaravel/golaravel/pkg/storage"
 )
 
 // Option is one choice of a select, radio or checkbox list.
@@ -81,6 +83,24 @@ type Node struct {
 	Accept   []string `json:"accept,omitempty"`
 	MaxFiles int      `json:"max_files,omitempty"`
 	MaxSize  int64    `json:"max_size,omitempty"`
+	MinSize  int64    `json:"min_size,omitempty"`
+	MinFiles int      `json:"min_files,omitempty"`
+	// Downloadable / Openable show buttons for stored files; Reorderable
+	// lets users reorder a multiple field; AppendFiles adds new files last.
+	Downloadable bool `json:"downloadable,omitempty"`
+	Openable     bool `json:"openable,omitempty"`
+	Reorderable  bool `json:"reorderable,omitempty"`
+	AppendFiles  bool `json:"append_files,omitempty"`
+	// Avatar draws an image field as a round picture.
+	Avatar bool `json:"avatar,omitempty"`
+	// CropAspectRatio ("16:9") asks clients to let users crop images to
+	// that ratio before uploading; ImageResizeWidth/Height are the size the
+	// server shrinks images to.
+	CropAspectRatio   string `json:"crop_aspect_ratio,omitempty"`
+	ImageResizeWidth  int    `json:"image_resize_width,omitempty"`
+	ImageResizeHeight int    `json:"image_resize_height,omitempty"`
+	// Private is true when files are only reachable through signed links.
+	Private bool `json:"private,omitempty"`
 
 	// misc field settings
 	Language   string   `json:"language,omitempty"`
@@ -190,6 +210,11 @@ func describe(ctx context.Context, c Component) (Node, bool) {
 		}
 		n := baseNode(&f.BaseField, typ)
 		n.Accept, n.MaxFiles, n.MaxSize, n.Multiple = f.accepted, f.maxFiles, f.maxSize, f.multiple
+		n.MinSize, n.MinFiles = f.minSize, f.minFiles
+		n.Downloadable, n.Openable, n.Reorderable, n.AppendFiles = f.downloadable, f.openable, f.reorderable, f.appendFiles
+		n.Avatar, n.CropAspectRatio = f.isAvatar, f.cropAspectRatio
+		n.ImageResizeWidth, n.ImageResizeHeight = f.resizeWidth, f.resizeHeight
+		n.Private = storage.Visibility(f.disk) != storage.VisibilityPublic
 		return n, true
 	case *TagsInputField:
 		n := baseNode(&f.BaseField, "tags")

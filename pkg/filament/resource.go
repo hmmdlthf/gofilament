@@ -2351,7 +2351,13 @@ func (r *BaseResource[T]) InvokeCreate(ctx *Context, data map[string]any) error 
 	if err != nil {
 		return err
 	}
-	if err := r.onCreate(ctx, data); err != nil {
+	files, err := r.resolveFiles(ctx, nil, data)
+	if err != nil {
+		return err
+	}
+	err = r.onCreate(ctx, data)
+	files.finish(err == nil)
+	if err != nil {
 		return err
 	}
 	// Handlers report the new id with SetCreatedID or by putting "id" in
@@ -2381,7 +2387,13 @@ func (r *BaseResource[T]) InvokeUpdate(ctx *Context, id string, data map[string]
 	if err != nil {
 		return err
 	}
-	return r.onUpdate(ctx, id, data)
+	files, err := r.resolveFiles(ctx, r.oldRecordFor(ctx, id), data)
+	if err != nil {
+		return err
+	}
+	err = r.onUpdate(ctx, id, data)
+	files.finish(err == nil)
+	return err
 }
 
 func (r *BaseResource[T]) InvokeDelete(ctx *Context, id string) error {
