@@ -143,6 +143,7 @@ type Panel struct {
 	corsAllowOriginFunc func(origin string) bool
 	resources           []ResourceInterface
 	pages               []PageInterface
+	workflowMaps        []*WorkflowMap
 	endpoints           []*ClientEndpoint
 	loginLimit          *loginThrottle
 	uploadHandler       UploadHandler
@@ -1515,6 +1516,9 @@ func (p *Panel) Mount(r *router.Router) {
 // Register mounts the panel onto a GoLaravel Engine.
 func (p *Panel) Register(app *golaravel.Engine) error {
 	if err := p.ValidateTranslations(); err != nil {
+		return err
+	}
+	if err := p.ValidateWorkflowMaps(); err != nil {
 		return err
 	}
 	p.Mount(app.Router)

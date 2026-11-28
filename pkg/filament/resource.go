@@ -104,6 +104,7 @@ type BaseResource[T any] struct {
 	navIcon                   string
 	navSort                   int
 	navBadge                  func(ctx *Context) string
+	mapTasks                  []*MapTask
 	formBuilder               func(form *forms.Form) *forms.Form
 	tableBuilder              func(table *tables.Table[T]) *tables.Table[T]
 	defaultColumns            []string

@@ -255,6 +255,20 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 		return c.JSON(http.StatusOK, out)
 	})
 
+	// Workflow map: blocks, tasks and arrows the signed-in user may open.
+	r.GET(apiPrefix+"/maps/:id", func(c *gcontext.Context) error {
+		p.setCorsHeaders(c)
+		ctx, err := p.AuthorizeAccess(c)
+		if err != nil {
+			return err
+		}
+		m, ok := p.BuildWorkflowMap(ctx, c.Param("id"))
+		if !ok {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Not found"})
+		}
+		return c.JSON(http.StatusOK, m)
+	})
+
 	// 1. Panel Schema Endpoint
 	r.GET(apiPrefix+"/schema", func(c *gcontext.Context) error {
 		p.setCorsHeaders(c)
@@ -494,6 +508,7 @@ func (p *Panel) RegisterAPIRoutes(r *router.Router) {
 			"active_tenant":         activeTenantKey,
 			"tenants":               tenantsDTO,
 			"navigation":            navDTOs,
+			"workflow_maps":         p.workflowMapsFor(ctx),
 			"resources":             resourceDTOs,
 			"widgets_count":         len(p.widgets),
 			"widgets":               p.EvaluateWidgetDTOs(ctx),

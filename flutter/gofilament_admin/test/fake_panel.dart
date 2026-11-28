@@ -117,6 +117,9 @@ class FakePanel {
   /// Read after the route runs, so a route can set its own status.
   Map<String, int> extraStatus = {};
 
+  /// The schema's workflow_maps entries (filament.WorkflowMap).
+  List<Map<String, dynamic>> workflowMaps = [];
+
   /// The schema's tenant_settings entry (Panel.Features), if any.
   Map<String, dynamic>? tenantSettings;
 
@@ -750,6 +753,7 @@ class FakePanel {
         'manage_roles': manageRoles,
         if (tenantSettings != null) 'tenant_settings': tenantSettings,
         if (featuresAdmin != null) 'tenant_features_admin': featuresAdmin,
+        'workflow_maps': workflowMaps,
         'notifications': notificationsOn,
         'saved_views': savedViews,
         'background_jobs': backgroundJobs,

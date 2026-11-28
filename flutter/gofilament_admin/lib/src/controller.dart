@@ -137,6 +137,16 @@ class AdminController extends ChangeNotifier {
         listed.any((p) => p is Map && p['id'] == page.id);
   }
 
+  /// The workflow maps the signed-in user can see (schema `workflow_maps`).
+  List<Map<String, dynamic>> get workflowMaps => _maps(schema['workflow_maps']);
+
+  Map<String, dynamic>? workflowMap(String id) {
+    for (final m in workflowMaps) {
+      if (m['id'] == id) return m;
+    }
+    return null;
+  }
+
   bool can(String slug, String ability) {
     final a = resourceMeta(slug)['abilities'];
     return a is Map && a[ability] == true;

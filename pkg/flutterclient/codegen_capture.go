@@ -209,7 +209,7 @@ func asList(v any) []any {
 // always provides them.
 var volatileSchemaKeys = []string{
 	"widgets", "widgets_count", "tenants", "active_tenant", "app_update",
-	"currency", "export",
+	"currency", "export", "workflow_maps",
 }
 
 // sanitizeSchema strips per-user and per-request data from a schema payload.

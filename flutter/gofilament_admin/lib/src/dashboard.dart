@@ -6,6 +6,7 @@ import 'chart.dart';
 import 'components.dart';
 import 'controller.dart';
 import 'dashboard_widgets.dart';
+import 'workflow_map.dart';
 
 /// The panel dashboard: the widgets registered on the server.
 class DashboardPage extends StatefulWidget {
@@ -122,11 +123,23 @@ class _DashboardPageState extends State<DashboardPage> {
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 20),
+          for (final m in widget.admin.workflowMaps)
+            if (m['on_dashboard'] == true && widget.onOpen != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: WorkflowMapPage(
+                    key: ValueKey('dashboard-map-${m['id']}'),
+                    admin: widget.admin,
+                    id: '${m['id']}',
+                    onOpen: widget.onOpen!,
+                    card: true),
+              ),
           DashboardGrid(
             widgets: _sorted(_widgets!),
             builder: (w) => _widget(w),
           ),
-          if (_widgets!.isEmpty)
+          if (_widgets!.isEmpty &&
+              !widget.admin.workflowMaps.any((m) => m['on_dashboard'] == true))
             Padding(
               padding: const EdgeInsets.only(top: 40),
               child: Center(

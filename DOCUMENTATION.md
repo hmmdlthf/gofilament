@@ -17,6 +17,7 @@
    - [Dual-Engine Switching](#dual-engine-switching)
    - [Navigation, Groups, Badges & Collapsible Sidebars](#navigation-groups-badges--collapsible-sidebars)
    - [Mobile Navigation & Bottom Navigation Bar](#mobile-navigation--bottom-navigation-bar)
+   - [Workflow Maps](#workflow-maps)
    - [App Versioning & Hot Update Detection](#app-versioning--hot-update-detection)
    - [Customizable Pre-Flutter Loading Screen](#customizable-pre-flutter-loading-screen)
    - [Global Search Configuration](#global-search-configuration)
@@ -250,6 +251,74 @@ adminPanel.
     // filament.AccountNavBottomBar: Dedicated bottom bar tab opening full account hub
     AccountNavPlacement(filament.AccountNavHeader)
 ```
+
+### Workflow Maps
+
+A workflow map draws an area of the app as **blocks of tasks joined by arrows**, in the order the
+work happens: *Create invoices → Receive payments → Record deposits*. Every task opens its
+screen. Newcomers see what comes after what; everyone gets one place to start from.
+
+The panel declares the map and its blocks. Resources and pages place themselves in it, the way they
+pick a navigation group:
+
+```go
+adminPanel.WorkflowMap(filament.NewWorkflowMap("home").
+    Label("Workflow").Icon("route").NavigationSort(0).
+    OnDashboard().                                    // also at the top of the dashboard
+    Block(filament.MapBlock("suppliers", "Suppliers").At(0, 0).Span(3, 1).Icon("truck")).
+    Block(filament.MapBlock("customers", "Customers").At(0, 1).Span(3, 1).Icon("users")).
+    Block(filament.MapBlock("banking", "Banking").At(3, 0).Span(1, 2).Icon("building-library")).
+    // a task no resource owns: a page or a link
+    Task(filament.NewMapTask("till", "customers", "Sale at the till").Page("pos").LeadsTo("deposits")).
+    Link("statements", "receipts"))                   // an arrow between two declared tasks
+
+invoices.OnMap("home", "customers").
+    Label("Create invoices").Icon("document-text").Sort(1).
+    Opens(filament.MapCreate).                        // the New form (MapList, the default: the list)
+    LeadsTo("receipts", "statements")                 // solid arrows: what comes next
+
+invoices.OnMap("home", "customers").ID("statements").Label("Statements") // a second task, same resource
+
+receipts.OnMap("home", "customers").Label("Receive payments").Cell(3, 0).
+    Badge(func(ctx *filament.Context) string { return "2" })
+
+timesheets.OnMap("home", "employees").Feeds("invoices") // dashed arrow: "is used by"
+```
+
+| Builder | |
+|---|---|
+| `NewWorkflowMap(id)` | `Label`, `Icon`, `NavigationGroup` (`""` = top, by the dashboard), `NavigationSort`, `OnDashboard()` |
+| `MapBlock(id, label)` | `At(col, row)` and `Span(cols, rows)` on the map's grid; `Icon`, `Color` (a palette role), `TaskColumns(n)`. Blocks without `At` go one per row under the others |
+| `res.OnMap(map, block)` | returns the task: `ID` (default: the slug), `Label` (default: plural name), `Icon` (default: menu icon), `Sort`, `Cell(col, row)` inside the block, `Opens(MapList \| MapCreate)`, `LeadsTo(ids...)`, `Feeds(ids...)`, `Badge(fn)`, `Visible(fn)` |
+| `NewMapTask(id, block, label)` | the same, opening `Page(id)` or `URL(u)`; add it with `map.Task(...)` |
+| `map.Link(from, to)` / `map.Feed(from, to)` | arrows between tasks no single declaration owns |
+
+**Each user sees only what they may open.** A resource task shows when the resource's navigation
+item does (permissions with `CanViewAny`, `RequiresFeature`). `MapCreate` opens the list instead
+for users who may view but not create. A page task follows the page's visibility. Arrows to hidden
+tasks and blocks left empty are dropped, and a map with nothing to open is not listed at all.
+
+**Mistakes stop start-up.** `Panel.Register` fails on a task in an unknown block, an arrow to an
+unknown task, the same task id twice, a resource on an unknown map, or a task that opens nothing.
+
+**API.** `/api/schema` lists the maps the user can see as `workflow_maps`
+(`[{id, label, icon, group, sort, on_dashboard}]`). It is left out of the generated schema
+snapshot, because it depends on the user. `GET /api/maps/{id}` returns:
+
+```json
+{"id": "home", "label": "Workflow",
+ "blocks": [{"id": "customers", "label": "Customers", "icon": "users", "col": 0, "row": 1, "cols": 3, "rows": 1}],
+ "tasks":  [{"id": "receipts", "block": "customers", "label": "Receive payments", "col": 3, "row": 0, "badge": "2",
+             "open": {"kind": "resource", "slug": "receipts", "action": "list", "url": "/admin/receipts"}}],
+ "links":  [{"from": "invoices", "to": "receipts", "kind": "leads"}]}
+```
+
+**Flutter admin.** Maps appear in the menu (`#/maps/<id>`). Wide screens draw the blocks on their
+grid, with arrows between tiles: solid for `leads`, dashed for `feeds`. Hovering or focusing a task
+highlights its arrows and dims unrelated tasks. Narrower than 720 px, each block becomes a list
+and each task shows its next steps as **Then** chips. A tap opens the task's `url` through the
+shell (list, `/new`, page) or `openLink` for external links. Maps marked `OnDashboard` are drawn at
+the top of the dashboard. The map mirrors in RTL and follows the theme.
 
 ### App Versioning & Hot Update Detection
 
@@ -1266,7 +1335,8 @@ When a panel runs with `.Engine(filament.EngineFlutter)`, it powers native mobil
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/admin/api/schema` | `GET` | Complete metadata: brand, theme colors, navigation items, resources, locales, account placement |
+| `/admin/api/schema` | `GET` | Complete metadata: brand, theme colors, navigation items, resources, locales, account placement, `workflow_maps` |
+| `/admin/api/maps/{id}` | `GET` | A [workflow map](#workflow-maps): blocks, tasks and arrows the user may open |
 | `/admin/api/resources/{slug}` | `GET` | List records with search, pagination, sort, and filters |
 | `/admin/api/resources/{slug}` | `POST` | Create a new record |
 | `/admin/api/resources/{slug}/{id}` | `GET` | Retrieve single record details |

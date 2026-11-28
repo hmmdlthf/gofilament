@@ -37,3 +37,4 @@ export 'src/tenant_settings_screen.dart';
 export 'src/session_store.dart';
 export 'src/shell.dart';
 export 'src/theme.dart';
+export 'src/workflow_map.dart';

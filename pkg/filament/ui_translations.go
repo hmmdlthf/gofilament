@@ -6,6 +6,8 @@ import "strings"
 // English text (see Panel.UITranslations). Generated from the app's tr() calls.
 var defaultUITranslations = map[string]map[string]string{
 	"ar": {
+		"Then":                                  "ثم",
+		"Could not load the map.":               "تعذّر تحميل الخريطة.",
 		"Camera":                                "الكاميرا",
 		"Cancel upload":                         "إلغاء الرفع",
 		"Choose files":                          "اختر ملفات",
@@ -298,6 +300,8 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} صفًا: {valid} جاهزة للاستيراد، و{invalid} بها مشكلات.",
 	},
 	"de": {
+		"Then":                                  "Danach",
+		"Could not load the map.":               "Die Karte konnte nicht geladen werden.",
 		"Camera":                                "Kamera",
 		"Cancel upload":                         "Hochladen abbrechen",
 		"Choose files":                          "Dateien auswählen",
@@ -590,6 +594,8 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} Zeilen: {valid} bereit zum Import, {invalid} mit Problemen.",
 	},
 	"es": {
+		"Then":                                  "Después",
+		"Could not load the map.":               "No se pudo cargar el mapa.",
 		"Camera":                                "Cámara",
 		"Cancel upload":                         "Cancelar subida",
 		"Choose files":                          "Elegir archivos",
@@ -882,6 +888,8 @@ var defaultUITranslations = map[string]map[string]string{
 		"{total} rows: {valid} ready to import, {invalid} with problems.": "{total} filas: {valid} listas para importar, {invalid} con problemas.",
 	},
 	"fr": {
+		"Then":                                  "Ensuite",
+		"Could not load the map.":               "Impossible de charger la carte.",
 		"Camera":                                "Appareil photo",
 		"Cancel upload":                         "Annuler l'envoi",
 		"Choose files":                          "Choisir des fichiers",

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Workflow maps**: an area of the app drawn as blocks of tasks joined by arrows (*Create invoices → Receive payments → Record deposits*), each task opening its screen. See *Workflow Maps* in DOCUMENTATION.md.
+  - `Panel.WorkflowMap(filament.NewWorkflowMap(id)...)`, with blocks placed on a grid (`MapBlock(...).At(col, row).Span(cols, rows)`).
+  - Resources place themselves with `res.OnMap(map, block)`, as they pick a navigation group: label, icon, `Opens(MapList | MapCreate)`, `LeadsTo(...)` (solid arrows), `Feeds(...)` (dashed), `Cell`, `Badge`, `Visible`. Pages and links join with `NewMapTask(...).Page(id) / .URL(u)`.
+  - Each user gets only the tasks whose screens they may open. Arrows to hidden tasks and empty blocks are left out, and `MapCreate` falls back to the list without create permission.
+  - `Panel.Register` rejects mistakes: unknown blocks or tasks, duplicate ids, tasks that open nothing.
+  - `GET /api/maps/{id}`, and `workflow_maps` in `/api/schema` (left out of the generated schema snapshot).
+  - Flutter admin: maps in the menu (`#/maps/<id>`), blocks with elbowed arrows on wide screens, hover and focus highlighting, lists with *Then* chips on phones, and optionally at the top of the dashboard. RTL, dark mode and screen-reader labels are supported.
+
 ## [v1.48.0] - 2026-11-28
 
 ### Added

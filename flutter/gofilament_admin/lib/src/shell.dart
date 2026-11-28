@@ -13,6 +13,7 @@ import 'responsive.dart';
 import 'tenant_switcher.dart';
 import 'resource_list.dart';
 import 'theme.dart';
+import 'workflow_map.dart';
 
 class _NavEntry {
   _NavEntry(this.id, this.label, this.icon, this.group);
@@ -66,12 +67,20 @@ class _AdminShellState extends State<AdminShell> {
         admin.initialLocation.split('/').where((p) => p.isNotEmpty).toList();
     // Drawn from a schema snapshot: pages wait for the live schema, which
     // decides who may open them (see build).
-    if (!admin.schemaIsLive && parts.isNotEmpty && parts[0] == 'pages') return;
+    if (!admin.schemaIsLive &&
+        parts.isNotEmpty &&
+        (parts[0] == 'pages' || parts[0] == 'maps')) {
+      return;
+    }
     if (parts.length >= 2 &&
         parts[0] == 'resources' &&
         admin.resource(parts[1]) != null) {
       _current = 'resource:${parts[1]}';
       if (parts.length >= 3) _pendingRecord = parts[2];
+    } else if (parts.length >= 2 &&
+        parts[0] == 'maps' &&
+        admin.workflowMap(parts[1]) != null) {
+      _current = 'map:${parts[1]}';
     } else if (parts.length >= 2 && parts[0] == 'pages') {
       final page =
           admin.pages.where((p) => p.id == parts[1] && admin.canOpenPage(p));
@@ -116,6 +125,12 @@ class _AdminShellState extends State<AdminShell> {
       _go(_dashboard);
       return;
     }
+    if (parts.length >= 2 &&
+        parts[0] == 'maps' &&
+        admin.workflowMap(parts[1]) != null) {
+      _go('map:${parts[1]}');
+      return;
+    }
     if (admin.resource(parts[0]) != null) {
       setState(() {
         _current = 'resource:${parts[0]}';
@@ -139,7 +154,9 @@ class _AdminShellState extends State<AdminShell> {
         ? '/'
         : (_current.startsWith('resource:')
             ? '/resources/${_current.substring(9)}'
-            : '/pages/${_current.substring(5)}');
+            : (_current.startsWith('map:')
+                ? '/maps/${_current.substring(4)}'
+                : '/pages/${_current.substring(5)}'));
     SystemNavigator.routeInformationUpdated(
         uri: Uri.parse(path), replace: true);
   }
@@ -149,6 +166,16 @@ class _AdminShellState extends State<AdminShell> {
   /// Navigation entries grouped in the order the server lists its groups.
   Map<String, List<_NavEntry>> _groups() {
     final entries = <_NavEntry>[];
+    final maps = [...admin.workflowMaps]..sort((a, b) =>
+        ((a['sort'] as num?) ?? 0).compareTo((b['sort'] as num?) ?? 0));
+    for (final m in maps) {
+      entries.add(_NavEntry(
+          'map:${m['id']}',
+          '${m['label'] ?? ''}',
+          adminIcon(m['icon'] as String?,
+              fallback: Icons.account_tree_outlined),
+          '${m['group'] ?? ''}'));
+    }
     for (final page in admin.pages) {
       if (!admin.canOpenPage(page)) continue;
       entries
@@ -205,6 +232,9 @@ class _AdminShellState extends State<AdminShell> {
 
   String _title() {
     if (_current == _dashboard) return 'Dashboard';
+    if (_current.startsWith('map:')) {
+      return '${admin.workflowMap(_current.substring(4))?['label'] ?? ''}';
+    }
     if (_current.startsWith('resource:')) {
       final r = admin.resource(_current.substring(9));
       return '${r?['plural_model_name'] ?? r?['model_name'] ?? ''}';
@@ -234,6 +264,13 @@ class _AdminShellState extends State<AdminShell> {
       final page = admin.pages
           .where((p) => 'page:${p.id}' == _current && admin.canOpenPage(p));
       if (page.isNotEmpty) return page.first.builder(context, admin);
+    }
+    if (_current.startsWith('map:')) {
+      final id = _current.substring(4);
+      if (admin.workflowMap(id) != null) {
+        return WorkflowMapPage(
+            key: ValueKey('map-$id'), admin: admin, id: id, onOpen: openUrl);
+      }
     }
     return DashboardPage(admin: admin, onOpen: openUrl);
   }

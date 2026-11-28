@@ -237,6 +237,10 @@ class AdminApi {
   /// Full panel description for the signed-in user.
   Future<Map<String, dynamic>> schema() async => _map(await _get('/schema'));
 
+  /// A workflow map (filament.WorkflowMap) as the signed-in user sees it.
+  Future<Map<String, dynamic>> workflowMap(String id) async =>
+      _map(await _get('/maps/${Uri.encodeComponent(id)}'));
+
   /// Signs in. Returns null when signed in, or the challenge id when the
   /// user has two-factor sign-in on: finish with [loginTwoFactor].
   Future<String?> login(String username, String password,
