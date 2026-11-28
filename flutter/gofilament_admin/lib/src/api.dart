@@ -398,11 +398,7 @@ class AdminApi {
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
     final meta = _map(data['row_meta']);
-    // image columns hold storage paths; the server sends their links
-    for (final row in rows) {
-      final images = _map(_map(meta[recordId(row)])['images']);
-      if (images.isNotEmpty) row[imageLinksKey] = images;
-    }
+    _attachImageLinks(rows, meta);
     return ListPage(
       rows: rows,
       total: (data['total'] as num?)?.toInt() ?? rows.length,
@@ -414,6 +410,16 @@ class AdminApi {
           _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toDouble() : 0.0))))
       ..facets = _map(data['facets']).map((col, v) => MapEntry(
           col, _map(v).map((k, n) => MapEntry(k, (n is num) ? n.toInt() : 0))));
+  }
+
+  /// Image columns hold storage paths; the server sends their links in
+  /// row_meta, which rows carry under [imageLinksKey].
+  static void _attachImageLinks(
+      List<Map<String, dynamic>> rows, Map<String, dynamic> meta) {
+    for (final row in rows) {
+      final images = _map(_map(meta[recordId(row)])['images']);
+      if (images.isNotEmpty) row[imageLinksKey] = images;
+    }
   }
 
   /// One record, as the resource's Go type serializes it.
@@ -787,6 +793,8 @@ class AdminApi {
             _map(data['abilities']).map((k, v) => MapEntry(k, v == true)),
         optionLabels:
             _map(data['option_labels']).map((k, v) => MapEntry(k, '$v')),
+        version: data['version'] == null ? null : '${data['version']}',
+        files: _files(data['files']),
       );
 
   /// The relation managers of a record, with their columns and abilities.
@@ -809,12 +817,33 @@ class AdminApi {
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
+    _attachImageLinks(rows, _map(data['row_meta']));
     return ListPage(
       rows: rows,
       total: (data['total'] as num?)?.toInt() ?? rows.length,
       page: page,
       perPage: perPage,
     );
+  }
+
+  /// Uploads one file for the file field [field] of a relation form (see
+  /// [upload]).
+  Future<Map<String, dynamic>> uploadRelation(String slug, String id,
+      String relation, String field, String filename, Uint8List bytes,
+      {UploadProgress? onProgress, Future<void>? cancel}) async {
+    final req = _ProgressMultipartRequest(
+        'POST',
+        _uri('/resources/$slug/$id/relations/$relation/uploads',
+            {'field': field}),
+        onProgress: onProgress,
+        abortTrigger: cancel)
+      ..headers.addAll({
+        'Accept': 'application/json',
+        if (isAuthenticated) 'Authorization': 'Bearer $token',
+      })
+      ..files
+          .add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    return _map(_decode(await http.Response.fromStream(await _http.send(req))));
   }
 
   Future<FormPayload> relationForm(String slug, String id, String relation,

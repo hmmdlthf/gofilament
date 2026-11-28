@@ -63,6 +63,42 @@ func TestDemoUploads(t *testing.T) {
 		t.Fatalf("avatar file: %v", err)
 	}
 
+	// relation forms upload to their own endpoint
+	var vid string
+	mu.RLock()
+	for id, v := range variants.rows {
+		if v.ProductID == "1" {
+			vid = id
+			break
+		}
+	}
+	mu.RUnlock()
+	var sb bytes.Buffer
+	sw := multipart.NewWriter(&sb)
+	sp, _ := sw.CreateFormFile("file", "red.png")
+	_, _ = sp.Write(gltest.FakeImage("red.png", 64, 64).Content)
+	_ = sw.Close()
+	sreq := httptest.NewRequest("POST", "/admin/api/resources/products/1/relations/variants/uploads?field=swatch", &sb)
+	sreq.RemoteAddr = "203.0.113.9:1234"
+	sreq.Header.Set("Content-Type", sw.FormDataContentType())
+	sreq.Header.Set("Authorization", "Bearer "+tok)
+	srec := httptest.NewRecorder()
+	h.ServeHTTP(srec, sreq)
+	if srec.Code != http.StatusCreated {
+		t.Fatalf("swatch upload: %d %s", srec.Code, srec.Body.String())
+	}
+	var sout map[string]any
+	_ = json.Unmarshal(srec.Body.Bytes(), &sout)
+	if rec := call(t, h, "PUT", "/admin/api/resources/products/1/relations/variants/"+vid, tok, `{"swatch":"`+sout["value"].(string)+`"}`); rec.Code != http.StatusOK {
+		t.Fatalf("save variant: %d %s", rec.Code, rec.Body.String())
+	}
+	mu.RLock()
+	swatch := variants.rows[vid].Swatch
+	mu.RUnlock()
+	if !strings.HasPrefix(swatch, "swatches/") {
+		t.Fatalf("swatch stored as %q", swatch)
+	}
+
 	// the stored files are served, and a reset wipes them
 	app := golaravel.New()
 	app.ServeStorage()

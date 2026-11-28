@@ -1693,8 +1693,16 @@ class _ResourceListPageState extends State<ResourceListPage> {
 
   Widget _cards(BuildContext context) {
     final theme = Theme.of(context);
-    final columns = _columns;
-    final entries = _tableRows(columns);
+    // the first image column becomes the card's picture; the others are
+    // listed like any column
+    final imageColumn = _columns
+        .cast<Map<String, dynamic>?>()
+        .firstWhere((c) => c!['type'] == 'image', orElse: () => null);
+    final columns = [
+      for (final c in _columns)
+        if (imageColumn == null || c['name'] != imageColumn['name']) c
+    ];
+    final entries = _tableRows(_columns);
     return ListView.separated(
       // room for the floating "New" button over the last card
       padding: EdgeInsets.only(bottom: _canCreate ? 76 : 0),
@@ -1719,25 +1727,36 @@ class _ResourceListPageState extends State<ResourceListPage> {
                       : null),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(
-                    child: Text(title,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 15))),
-                _rowActions(context, row),
-              ]),
-              const SizedBox(height: 4),
-              Wrap(spacing: 16, runSpacing: 6, children: [
-                for (final c in columns.skip(1))
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text('${c['label'] ?? humanize('${c['name']}')}: ',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant)),
-                    _cell(context, c, row),
-                  ]),
-              ]),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (imageColumn != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12, top: 2),
+                  child: cardPicture(context, imageColumn, row),
+                ),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Expanded(
+                            child: Text(title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15))),
+                        _rowActions(context, row),
+                      ]),
+                      const SizedBox(height: 4),
+                      Wrap(spacing: 16, runSpacing: 6, children: [
+                        for (final c in columns.skip(1))
+                          Row(mainAxisSize: MainAxisSize.min, children: [
+                            Text('${c['label'] ?? humanize('${c['name']}')}: ',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant)),
+                            _cell(context, c, row),
+                          ]),
+                      ]),
+                    ]),
+              ),
             ]),
           ),
         );

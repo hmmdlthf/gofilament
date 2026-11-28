@@ -338,6 +338,13 @@ class _RelationTableState extends State<_RelationTable> {
         // Like the resource list: cards when there is no room for a table
         // (a phone, or a narrow form dialog).
         if (c.maxWidth < relationCardBreakpoint) {
+          final imageColumn = columns
+              .cast<Map<String, dynamic>?>()
+              .firstWhere((c) => c!['type'] == 'image', orElse: () => null);
+          final cardColumns = [
+            for (final c in columns)
+              if (imageColumn == null || c['name'] != imageColumn['name']) c
+          ];
           return Column(
             key: Key('rel-$_name-cards'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -349,35 +356,49 @@ class _RelationTableState extends State<_RelationTable> {
                   onTap: canEdit ? () => _open(childId: recordId(row)) : null,
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-                    child: Column(
+                    child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(children: [
-                            Expanded(
-                              child: columns.isEmpty
-                                  ? Text(recordId(row))
-                                  : DefaultTextStyle.merge(
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 15),
-                                      child: cell(columns.first, row)),
+                          if (imageColumn != null)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 12, top: 2),
+                              child: cardPicture(context, imageColumn, row,
+                                  size: 44),
                             ),
-                            actions(row),
-                          ]),
-                          if (columns.length > 1) ...[
-                            const SizedBox(height: 4),
-                            Wrap(spacing: 16, runSpacing: 6, children: [
-                              for (final col in columns.skip(1))
-                                Row(mainAxisSize: MainAxisSize.min, children: [
-                                  Text('${label(col)}: ',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                              color: theme.colorScheme
-                                                  .onSurfaceVariant)),
-                                  cell(col, row),
+                          Expanded(
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                Row(children: [
+                                  Expanded(
+                                    child: cardColumns.isEmpty
+                                        ? Text(recordId(row))
+                                        : DefaultTextStyle.merge(
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 15),
+                                            child:
+                                                cell(cardColumns.first, row)),
+                                  ),
+                                  actions(row),
                                 ]),
-                            ]),
-                          ],
+                                if (cardColumns.length > 1) ...[
+                                  const SizedBox(height: 4),
+                                  Wrap(spacing: 16, runSpacing: 6, children: [
+                                    for (final col in cardColumns.skip(1))
+                                      Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text('${label(col)}: ',
+                                                style: theme.textTheme.bodySmall
+                                                    ?.copyWith(
+                                                        color: theme.colorScheme
+                                                            .onSurfaceVariant)),
+                                            cell(col, row),
+                                          ]),
+                                  ]),
+                                ],
+                              ]))
                         ]),
                   ),
                 ),

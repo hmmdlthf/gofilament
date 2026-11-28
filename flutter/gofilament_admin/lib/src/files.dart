@@ -230,7 +230,10 @@ class _FileFieldEditorState extends State<FileFieldEditor> {
   }
 
   Map<String, dynamic> get n => widget.node;
-  String get _name => '${n['name']}';
+
+  /// The field name used in widget keys; rows of a repeater prefix it
+  /// ("lines.0.photo").
+  String get _name => '${n['key_prefix'] ?? ''}${n['name']}';
   bool get _multiple => n['multiple'] == true;
   bool get _image => n['type'] == 'image';
   bool get _avatar => n['avatar'] == true;
@@ -460,7 +463,7 @@ class _FileFieldEditorState extends State<FileFieldEditor> {
   }
 
   String? _validate() {
-    final label = '${n['label'] ?? humanize(_name)}';
+    final label = '${n['label'] ?? humanize('${n['name']}')}';
     if (_entries.any((e) => e.uploading)) {
       return tr('Wait for the uploads to finish');
     }
@@ -478,7 +481,7 @@ class _FileFieldEditorState extends State<FileFieldEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final label = '${n['label'] ?? humanize(_name)}';
+    final label = '${n['label'] ?? humanize('${n['name']}')}';
     return FormField<dynamic>(
       key: Key('field-$_name'),
       validator: (_) => _validate(),

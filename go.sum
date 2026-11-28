@@ -28,8 +28,8 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/hashicorp/hcl/v2 v2.13.0 h1:0Apadu1w6M11dyGFxWnmhhcMjkbAiKCv7G1r/2QgCNc=
 github.com/hashicorp/hcl/v2 v2.13.0/go.mod h1:e4z5nxYlWNPdDSNYX+ph14EvWYMFm3eP0zIUqPc2jr0=
-github.com/hmmdlthf/golaravel v1.22.0 h1:2E7q3MfurtPTU8CNfL7a6F242ollp1JFgbgJhvxwWKM=
-github.com/hmmdlthf/golaravel v1.22.0/go.mod h1:yTTCFe5yQnze6ujq5gwHP5VnYIz6DttcJnhGwG8RJ80=
+github.com/hmmdlthf/golaravel v1.22.1 h1:kDnfjNmHEwj3B4TmlSd/ESvhk9LA7+aDb9wthqOVn50=
+github.com/hmmdlthf/golaravel v1.22.1/go.mod h1:yTTCFe5yQnze6ujq5gwHP5VnYIz6DttcJnhGwG8RJ80=
 github.com/mattn/go-sqlite3 v1.14.52 h1:wVbm2Qnf4OXkqhBTSPuCRZDRnxfbVrrmiCEroVdog8U=
 github.com/mattn/go-sqlite3 v1.14.52/go.mod h1:6JTjA44L93a0QCyJef5YvlPoKXntQPjzWv5gtm9sB6w=
 github.com/mitchellh/go-wordwrap v0.0.0-20150314170334-ad45545899c7 h1:DpOJ2HYzCv8LZP15IdmG+YdwD2luVPHITV96TkirNBM=

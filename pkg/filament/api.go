@@ -1904,14 +1904,22 @@ func (p *Panel) registerResourceAPI(res ResourceInterface, apiPrefix string, r *
 			if err != nil {
 				return p.apiError(c, err)
 			}
-			return c.JSON(http.StatusOK, map[string]any{
+			out := map[string]any{
 				"relationship": relName,
 				"parent_id":    parentID,
 				"data":         data,
 				"total":        total,
 				"page":         page,
 				"per_page":     perPage,
-			})
+			}
+			if rm, ok := relManager.(interface {
+				RowMeta(ctx *Context, records any) map[string]map[string]any
+			}); ok {
+				if meta := rm.RowMeta(ctx, data); meta != nil {
+					out["row_meta"] = meta
+				}
+			}
+			return c.JSON(http.StatusOK, out)
 		})
 
 		// POST /admin/api/resources/:slug/:id/relations/:rel - Create

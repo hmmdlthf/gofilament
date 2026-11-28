@@ -14,12 +14,18 @@ class RepeaterEditor extends StatefulWidget {
     required this.items,
     required this.enabled,
     required this.onChanged,
+    this.fileEditor,
   });
 
   final Map<String, dynamic> node;
   final List<Map<String, dynamic>> items;
   final bool enabled;
   final ValueChanged<List<Map<String, dynamic>>> onChanged;
+
+  /// Builds the editor of file and image fields in rows (uploads go to the
+  /// form's endpoint); without it those fields are shown as text.
+  final Widget Function(Map<String, dynamic> field, dynamic value, bool enabled,
+      ValueChanged<dynamic> onChanged)? fileEditor;
 
   @override
   State<RepeaterEditor> createState() => _RepeaterEditorState();
@@ -155,13 +161,24 @@ class _RepeaterEditorState extends State<RepeaterEditor> {
                   for (final f in _fields)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: _ItemField(
-                        key: Key('$_name.$i.${f['name']}'),
-                        field: f,
-                        value: _items[i]['${f['name']}'],
-                        enabled: widget.enabled && f['disabled'] != true,
-                        onChanged: (v) => _set(i, '${f['name']}', v),
-                      ),
+                      child: widget.fileEditor != null &&
+                              const {'file', 'image'}.contains(f['type'])
+                          ? KeyedSubtree(
+                              key: Key('$_name.${_ids[i]}.${f['name']}'),
+                              child: widget.fileEditor!(
+                                  // field keys inside rows: <repeater>.<i>.<name>
+                                  {...f, 'key_prefix': '$_name.$i.'},
+                                  _items[i]['${f['name']}'],
+                                  widget.enabled && f['disabled'] != true,
+                                  (v) => _set(i, '${f['name']}', v)),
+                            )
+                          : _ItemField(
+                              key: Key('$_name.$i.${f['name']}'),
+                              field: f,
+                              value: _items[i]['${f['name']}'],
+                              enabled: widget.enabled && f['disabled'] != true,
+                              onChanged: (v) => _set(i, '${f['name']}', v),
+                            ),
                     ),
                 ]),
               ),

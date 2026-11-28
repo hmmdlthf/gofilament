@@ -214,6 +214,7 @@ func variantsManager() filament.RelationManager {
 		RecordID(func(v *Variant) string { return v.ID })
 	rm.Table(func(t *tables.Table[*Variant]) *tables.Table[*Variant] {
 		return t.Columns(
+			tables.ImageColumn[*Variant]("swatch").Label("Swatch").Circular().Disk(publicDisk),
 			tables.TextColumn[*Variant]("name").Label("Option").Weight("bold").Searchable().Sortable(),
 			tables.TextColumn[*Variant]("sku").Label("SKU").Copyable(),
 			tables.TextColumn[*Variant]("price").Label("Price").Money("USD").Sortable(),
@@ -226,6 +227,10 @@ func variantsManager() filament.RelationManager {
 			forms.TextInput("sku").Label("SKU").Required(),
 			forms.TextInput("price").Label("Price").Numeric().Prefix("$").Required(),
 			forms.TextInput("stock").Label("Stock").Numeric(),
+			// a file field in a relation form: uploaded to the relation's endpoint
+			forms.ImageUpload("swatch").Label("Swatch").Disk(publicDisk).Directory("swatches").
+				ImageCropAspectRatio("1:1").ImageResizeTargetWidth(128).MaxSize(900).
+				AcceptedFileTypes("image/png", "image/jpeg", "image/webp"),
 		))
 	})
 	rm.OnList(func(ctx *filament.Context, parentID, search, sortCol, dir string, page, perPage int) ([]*Variant, int, error) {

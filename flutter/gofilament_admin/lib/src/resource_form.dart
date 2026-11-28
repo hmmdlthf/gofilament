@@ -285,8 +285,7 @@ class _ResourceFormState extends State<ResourceForm> {
       final type = '${f['type']}';
       if (hidden.contains(name)) continue;
       if (f['disabled'] == true ||
-          ((_isRelation || _isAction) &&
-              const {'file', 'image'}.contains(type))) {
+          (_isAction && const {'file', 'image'}.contains(type))) {
         continue;
       }
       if (const {'custom', 'repeater', 'key_value', 'file', 'image'}
@@ -706,6 +705,12 @@ class _ResourceFormState extends State<ResourceForm> {
       case 'repeater':
         final name = '${node['name']}';
         return RepeaterEditor(
+          fileEditor: _isAction
+              ? null
+              : (field, value, enabled, onChanged) => _fileEditor(field, value,
+                  enabled: enabled,
+                  required: field['required'] == true && value == null,
+                  onChanged: onChanged),
           node: node,
           items: (_values[name] as List?)?.cast<Map<String, dynamic>>() ??
               const [],
@@ -714,6 +719,36 @@ class _ResourceFormState extends State<ResourceForm> {
         );
     }
     return null;
+  }
+
+  /// The stored files the form was loaded with, from every file field
+  /// (repeater rows included): the editors look files up by value.
+  List<StoredFile> get _storedFiles =>
+      [for (final list in (_payload?.files ?? const {}).values) ...list];
+
+  /// A file field editor that uploads to this form's endpoint (the
+  /// resource's, or the relation's).
+  Widget _fileEditor(Map<String, dynamic> f, dynamic value,
+      {Key? key,
+      required bool enabled,
+      required bool required,
+      required ValueChanged<dynamic> onChanged}) {
+    final name = '${f['name']}';
+    final api = widget.admin.api;
+    return FileFieldEditor(
+      key: key,
+      node: f,
+      value: value,
+      enabled: enabled,
+      required: required,
+      files: _storedFiles,
+      upload: (filename, bytes, {onProgress, cancel}) => _isRelation
+          ? api.uploadRelation(widget.slug, widget.parentId!, widget.relation!,
+              name, filename, bytes, onProgress: onProgress, cancel: cancel)
+          : api.upload(widget.slug, name, filename, bytes,
+              onProgress: onProgress, cancel: cancel),
+      onChanged: onChanged,
+    );
   }
 
   Widget _unsupported(BuildContext context, String label, String message) {
@@ -940,18 +975,11 @@ class _ResourceFormState extends State<ResourceForm> {
         );
     }
 
-    if ((type == 'file' || type == 'image') && !_isRelation && !_isAction) {
-      return FileFieldEditor(
-        node: f,
-        value: _values[name],
-        enabled: enabled,
-        required: required && !(_isEdit && _values[name] != null),
-        files: _payload?.files[name] ?? const [],
-        upload: (filename, bytes, {onProgress, cancel}) => widget.admin.api
-            .upload(widget.slug, name, filename, bytes,
-                onProgress: onProgress, cancel: cancel),
-        onChanged: (v) => _values[name] = v,
-      );
+    if ((type == 'file' || type == 'image') && !_isAction) {
+      return _fileEditor(f, _values[name],
+          enabled: enabled,
+          required: required && !(_isEdit && _values[name] != null),
+          onChanged: (v) => _values[name] = v);
     }
 
     if (type == 'key_value') {

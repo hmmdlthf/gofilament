@@ -143,7 +143,7 @@ func checkUploadedFile(field *forms.FileUploadField, f *storage.UploadedFile) er
 // stageUpload checks a file against its field and stores it in the
 // temporary area of the field's disk. It returns the tmp: value the form
 // keeps until the record is saved, and a URL to preview the file.
-func stageUpload(resource string, field *forms.FileUploadField, f *storage.UploadedFile) (value, previewURL string, err error) {
+func stageUpload(scope string, field *forms.FileUploadField, f *storage.UploadedFile) (value, previewURL string, err error) {
 	if err := checkUploadedFile(field, f); err != nil {
 		return "", "", err
 	}
@@ -159,7 +159,7 @@ func stageUpload(resource string, field *forms.FileUploadField, f *storage.Uploa
 	if ext := f.Extension(); ext != "" {
 		key += "." + ext
 	}
-	dst := tmpPath(resource, field.GetName(), key)
+	dst := tmpPath(scope, field.GetName(), key)
 
 	rd, err := f.Open()
 	if err != nil {
@@ -251,43 +251,50 @@ func (p *Panel) registerUploadRoute(r *router.Router, res ResourceInterface, res
 		if !ok {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "Unknown file field"})
 		}
-		if err := c.Request.ParseMultipartForm(8 << 20); err != nil {
-			var tooLarge *http.MaxBytesError
-			if errors.As(err, &tooLarge) {
-				return p.apiError(c, &forms.ValidationError{Errors: map[string]string{field.GetName(): "The file is too large."}})
-			}
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Send the file as multipart form data (field \"file\")"})
-		}
-		defer func() {
-			if c.Request.MultipartForm != nil {
-				_ = c.Request.MultipartForm.RemoveAll()
-			}
-		}()
-		files := c.Files("file")
-		if len(files) != 1 {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Send exactly one file"})
-		}
-		f := files[0]
-		withSelf(ctx)
+		return p.serveUpload(c, ctx, field, res.Slug(), res.Slug())
+	})
+}
 
-		if p.uploadHandler != nil {
-			if err := checkUploadedFile(field, f); err != nil {
-				return p.apiError(c, err)
-			}
-			up := UploadedFile{Resource: res.Slug(), Field: field, Filename: f.ClientOriginalName(), Size: f.Size(), ContentType: f.MimeType(), header: f.Header()}
-			value, u, err := p.uploadHandler(ctx, up)
-			if err != nil {
-				return p.uploadError(c, err)
-			}
-			return c.JSON(http.StatusCreated, map[string]any{"value": value, "url": u, "name": f.ClientOriginalName()})
+// serveUpload reads the multipart "file" of an upload request and stores
+// it for field: staged in the temporary area of scope, or through the
+// panel's UploadsUsing handler.
+func (p *Panel) serveUpload(c *gcontext.Context, ctx *Context, field *forms.FileUploadField, resource, scope string) error {
+	if err := c.Request.ParseMultipartForm(8 << 20); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return p.apiError(c, &forms.ValidationError{Errors: map[string]string{field.GetName(): "The file is too large."}})
 		}
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Send the file as multipart form data (field \"file\")"})
+	}
+	defer func() {
+		if c.Request.MultipartForm != nil {
+			_ = c.Request.MultipartForm.RemoveAll()
+		}
+	}()
+	files := c.Files("file")
+	if len(files) != 1 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Send exactly one file"})
+	}
+	f := files[0]
+	withSelf(ctx)
 
-		value, u, err := stageUpload(res.Slug(), field, f)
+	if p.uploadHandler != nil {
+		if err := checkUploadedFile(field, f); err != nil {
+			return p.apiError(c, err)
+		}
+		up := UploadedFile{Resource: resource, Field: field, Filename: f.ClientOriginalName(), Size: f.Size(), ContentType: f.MimeType(), header: f.Header()}
+		value, u, err := p.uploadHandler(ctx, up)
 		if err != nil {
 			return p.uploadError(c, err)
 		}
 		return c.JSON(http.StatusCreated, map[string]any{"value": value, "url": u, "name": f.ClientOriginalName()})
-	})
+	}
+
+	value, u, err := stageUpload(scope, field, f)
+	if err != nil {
+		return p.uploadError(c, err)
+	}
+	return c.JSON(http.StatusCreated, map[string]any{"value": value, "url": u, "name": f.ClientOriginalName()})
 }
 
 func (p *Panel) uploadError(c *gcontext.Context, err error) error {

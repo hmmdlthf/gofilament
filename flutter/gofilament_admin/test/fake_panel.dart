@@ -80,6 +80,12 @@ class FakePanel {
   /// component tests).
   List<Map<String, dynamic>> extraFormFields = [];
 
+  /// Extra fields of the variants relation form, extra columns of its
+  /// table, and row_meta of its list.
+  List<Map<String, dynamic>> extraVariantFields = [];
+  List<Map<String, dynamic>> extraVariantColumns = [];
+  Map<String, Map<String, dynamic>> variantRowMeta = {};
+
   /// `files` of the edit form payload: stored file links per field.
   Map<String, List<Map<String, dynamic>>> formFiles = {};
   List<Map<String, dynamic>> extraColumns = [];
@@ -437,6 +443,7 @@ class FakePanel {
               'has_form': true,
               'abilities': {'create': true, 'update': true, 'delete': true},
               'columns': [
+                ...extraVariantColumns,
                 {'name': 'sku', 'label': 'SKU', 'type': 'text'},
                 {'name': 'price', 'label': 'Price', 'type': 'money'},
               ],
@@ -461,7 +468,7 @@ class FakePanel {
           'total': 1
         });
       }
-      const schema = [
+      final schema = [
         {
           'kind': 'field',
           'type': 'text',
@@ -470,6 +477,7 @@ class FakePanel {
           'required': true
         },
         {'kind': 'field', 'type': 'number', 'name': 'price', 'label': 'Price'},
+        ...extraVariantFields,
       ];
       if (rel.group(3) != null) {
         final childId = req.url.queryParameters['child_id'];
@@ -492,7 +500,11 @@ class FakePanel {
       }
       final childId = rel.group(5);
       if (childId == null && req.method == 'GET') {
-        return _json({'data': mine, 'total': mine.length});
+        return _json({
+          'data': mine,
+          'total': mine.length,
+          if (variantRowMeta.isNotEmpty) 'row_meta': variantRowMeta,
+        });
       }
       if (childId == null && req.method == 'POST') {
         final data = Map<String, dynamic>.from(json.decode(req.body) as Map);

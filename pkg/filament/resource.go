@@ -652,6 +652,11 @@ func (r *BaseResource[T]) RecordID(fn func(record T) string) *BaseResource[T] {
 }
 
 func (r *BaseResource[T]) Relations(rms ...RelationManager) *BaseResource[T] {
+	for _, rm := range rms {
+		if s, ok := rm.(interface{ setUploadScope(string) }); ok {
+			s.setUploadScope(relationUploadScope(r.Slug(), rm.Relationship()))
+		}
+	}
 	r.relations = append(r.relations, rms...)
 	return r
 }

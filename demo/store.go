@@ -70,6 +70,7 @@ type Variant struct {
 	SKU       string  `json:"sku"`
 	Price     float64 `json:"price"`
 	Stock     int     `json:"stock"`
+	Swatch    string  `json:"swatch"` // colour swatch image on demo-public
 }
 
 // Barcode is a scannable code attached to a product.

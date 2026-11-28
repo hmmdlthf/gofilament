@@ -323,6 +323,123 @@ void main() {
         .map((n) => n.url);
     expect(urls, contains('https://cdn.test/photos/1.png'));
   });
+
+  testWidgets('relation forms upload to the relation endpoint', (tester) async {
+    final panel = FakePanel()
+      ..extraVariantFields = [
+        {
+          'kind': 'field',
+          'type': 'image',
+          'name': 'swatch',
+          'label': 'Swatch',
+        },
+      ];
+    panel.extraRoutes['POST /resources/items/1/relations/variants/uploads'] =
+        (req) => {'value': 'tmp:k.png/s.png', 'name': 's.png'};
+    adminPickFiles =
+        ({bool multiple = false, List<String> extensions = const []}) async => [
+              (name: 's.png', bytes: Uint8List.fromList([0x89, 0x50, 1]))
+            ];
+    await openEdit(tester, panel);
+    await tester.ensureVisible(find.byKey(const Key('rel-variants-add')));
+    await tester.tap(find.byKey(const Key('rel-variants-add')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('field-sku')).last, 'RING-M');
+    await tester.ensureVisible(find.byKey(const Key('swatch-pick')));
+    await tester.tap(find.byKey(const Key('swatch-pick')));
+    await tester.pumpAndSettle();
+    expect(
+        panel.requests.where(
+            (r) => r.url.path.endsWith('/items/1/relations/variants/uploads')),
+        hasLength(1));
+    await tester.tap(find.byKey(const Key('form-save')).last);
+    await tester.pumpAndSettle();
+    expect(panel.variants.last['swatch'], 'tmp:k.png/s.png');
+  });
+
+  testWidgets('file fields work inside repeater rows', (tester) async {
+    final panel = FakePanel()
+      ..extraFormFields = [
+        {
+          'kind': 'repeater',
+          'name': 'gallery',
+          'label': 'Gallery',
+          'children': [
+            {'kind': 'field', 'type': 'text', 'name': 'caption'},
+            {'kind': 'field', 'type': 'image', 'name': 'photo'},
+          ],
+        },
+      ]
+      ..formFiles = {
+        'gallery.photo': [
+          {'value': 'g/1.png', 'name': 'beach.png', 'url': '/s/g/1.png'}
+        ]
+      };
+    panel.items.first['gallery'] = [
+      {'caption': 'Beach', 'photo': 'g/1.png'}
+    ];
+    String? uploadedField;
+    panel.extraRoutes['POST /resources/items/uploads'] = (req) {
+      uploadedField = req.url.queryParameters['field'];
+      return {'value': 'tmp:k.png/new.png', 'name': 'new.png'};
+    };
+    adminPickFiles =
+        ({bool multiple = false, List<String> extensions = const []}) async => [
+              (name: 'new.png', bytes: Uint8List.fromList([0x89, 0x50, 1]))
+            ];
+    await openEdit(tester, panel);
+    // the stored row shows its picture from the server's links
+    expect(find.byKey(const Key('gallery.0.photo-file-0')), findsOneWidget);
+
+    // these sit under the form dialog's sticky footer in a test window
+    tester
+        .widget<ButtonStyleButton>(find.byKey(const Key('gallery-add')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    tester
+        .widget<ButtonStyleButton>(
+            find.byKey(const Key('gallery.1.photo-pick')))
+        .onPressed!();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('form-save')));
+    await tester.tap(find.byKey(const Key('form-save')));
+    await tester.pumpAndSettle();
+    expect(uploadedField, 'photo');
+    expect(panel.requests.where((r) => r.url.path.endsWith('/uploads')),
+        hasLength(1));
+    final rows = panel.putBodies.last['gallery'] as List;
+    expect(rows.map((r) => r['photo']), ['g/1.png', 'tmp:k.png/new.png']);
+  });
+
+  testWidgets('phone cards show the row picture next to the title',
+      (tester) async {
+    final panel = FakePanel()
+      ..extraColumns = [
+        {'name': 'photo', 'label': 'Photo', 'type': 'image'}
+      ]
+      ..extraRowMeta = {
+        '1': {
+          'images': {'photo': 'https://cdn.test/photos/1.png'}
+        }
+      };
+    tester.view.physicalSize = const Size(390, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(GoFilamentAdmin(api: panel.api()));
+    await tester.pumpAndSettle();
+    await signIn(tester);
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    await openItems(tester);
+    final pic = find.byKey(const Key('card-picture-1'));
+    expect(pic, findsOneWidget);
+    final img = tester
+        .widget<Image>(find.descendant(of: pic, matching: find.byType(Image)));
+    expect((img.image as NetworkImage).url, 'https://cdn.test/photos/1.png');
+    // rows without a picture keep a placeholder, and no image text is shown
+    expect(find.byKey(const Key('card-picture-2')), findsOneWidget);
+    expect(find.text('Photo: '), findsNothing);
+  });
 }
 
 Future<List<PickedFile>> _noFiles(

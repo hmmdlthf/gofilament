@@ -241,7 +241,14 @@ func (f *FileUploadField) ImageProcessing() (width, height int, mode string, rat
 // (not those inside repeaters), skipping components gated out for ctx
 // (ctx may be nil).
 func FileFields(ctx context.Context, components []Component) []*FileUploadField {
-	var out []*FileUploadField
+	files, _ := FileScope(ctx, components)
+	return files
+}
+
+// FileScope returns the file fields of one level of a form (layout
+// containers are looked into) and the repeaters on that level, whose rows
+// hold their own fields. Components gated out for ctx are skipped.
+func FileScope(ctx context.Context, components []Component) (files []*FileUploadField, repeaters []*RepeaterComponent) {
 	var walk func([]Component)
 	walk = func(cs []Component) {
 		for _, c := range cs {
@@ -250,7 +257,9 @@ func FileFields(ctx context.Context, components []Component) []*FileUploadField 
 			}
 			switch f := c.(type) {
 			case *FileUploadField:
-				out = append(out, f)
+				files = append(files, f)
+			case *RepeaterComponent:
+				repeaters = append(repeaters, f)
 			case *SectionComponent:
 				walk(f.schema)
 			case *GridComponent:
@@ -271,7 +280,22 @@ func FileFields(ctx context.Context, components []Component) []*FileUploadField 
 		}
 	}
 	walk(components)
-	return out
+	return files, repeaters
+}
+
+// HasFileFields reports whether a form has file fields anywhere,
+// repeaters included.
+func HasFileFields(ctx context.Context, components []Component) bool {
+	files, reps := FileScope(ctx, components)
+	if len(files) > 0 {
+		return true
+	}
+	for _, r := range reps {
+		if HasFileFields(ctx, r.schema) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetLabelOrName returns the field's label, or its name when it has none.

@@ -53,6 +53,30 @@ type BaseRelationManager[T any] struct {
 	versionOf func(record T) string
 
 	acceptUnvalidated bool
+
+	// uploadScope names the relation form's temporary upload area; the
+	// resource sets it in Relations.
+	uploadScope string
+}
+
+// relationUploadScope is the temporary upload area of a relation form.
+func relationUploadScope(slug, relationship string) string {
+	return slug + "." + relationship
+}
+
+func (rm *BaseRelationManager[T]) setUploadScope(scope string) { rm.uploadScope = scope }
+
+// RecordFiles returns the stored files of the relation form's file fields
+// for a related record (see BaseResource.RecordFiles).
+func (rm *BaseRelationManager[T]) RecordFiles(ctx *Context, record any) map[string][]FileInfo {
+	return formFiles(ctx, rm.formComponents(), record)
+}
+
+func (rm *BaseRelationManager[T]) scope() string {
+	if rm.uploadScope != "" {
+		return rm.uploadScope
+	}
+	return "relation." + rm.relationship
 }
 
 // Versioned turns on edit-conflict detection for related records (see
@@ -213,7 +237,13 @@ func (rm *BaseRelationManager[T]) HandleCreate(ctx *Context, parentID string, da
 	if err != nil {
 		return err
 	}
-	return rm.onCreate(ctx, parentID, data)
+	files, err := resolveFormFiles(ctx, rm.scope(), rm.formComponents(), nil, data)
+	if err != nil {
+		return err
+	}
+	err = rm.onCreate(ctx, parentID, data)
+	files.finish(err == nil)
+	return err
 }
 
 // Returned (405) for writes a relation manager has no handler for, instead of
@@ -237,7 +267,19 @@ func (rm *BaseRelationManager[T]) HandleUpdate(ctx *Context, parentID, childID s
 	if err != nil {
 		return err
 	}
-	return rm.onUpdate(ctx, parentID, childID, data)
+	var old map[string]any
+	if rm.onFind != nil && forms.HasFileFields(ctx.GoContext(), rm.formComponents()) {
+		if rec, err := rm.onFind(ctx, parentID, childID); err == nil {
+			old = recordToMap(rec)
+		}
+	}
+	files, err := resolveFormFiles(ctx, rm.scope(), rm.formComponents(), old, data)
+	if err != nil {
+		return err
+	}
+	err = rm.onUpdate(ctx, parentID, childID, data)
+	files.finish(err == nil)
+	return err
 }
 
 // HandleDelete fulfills RelationManager interface.
@@ -246,6 +288,31 @@ func (rm *BaseRelationManager[T]) HandleDelete(ctx *Context, parentID, childID s
 		return ErrRelationDeleteUnavailable
 	}
 	return rm.onDelete(ctx, parentID, childID)
+}
+
+// RowMeta returns per-row data for the related records of a list: the
+// links of image columns ({id: {images: {column: url}}}).
+func (rm *BaseRelationManager[T]) RowMeta(ctx *Context, records any) map[string]map[string]any {
+	list, ok := records.([]T)
+	if !ok || len(list) == 0 {
+		return nil
+	}
+	tbl := rm.GetTable()
+	if tbl == nil {
+		return nil
+	}
+	var out map[string]map[string]any
+	for _, rec := range list {
+		urls := tbl.ImageURLs(rec)
+		if urls == nil {
+			continue
+		}
+		if out == nil {
+			out = map[string]map[string]any{}
+		}
+		out[rm.extractID(rec)] = map[string]any{"images": urls}
+	}
+	return out
 }
 
 // extractID gets the string ID of record T.

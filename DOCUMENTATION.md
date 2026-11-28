@@ -694,7 +694,20 @@ forms.FileUpload("attachments").Visibility("private").Directory("contracts").
 
 `panel.UploadsUsing(fn)` replaces all of this with your own storage. The field then keeps whatever value `fn` returns, and nothing is moved or deleted.
 
-The save step applies to file fields of the resource form, outside repeaters. Relation-manager forms, and files inside repeaters, keep the values as sent.
+**Relation managers and repeaters:**
+
+- **Relation-manager forms** work the same way. They upload to `POST <resource>/<id>/relations/<relationship>/uploads?field=<name>`, and their form payload returns `files`.
+  - Image columns in relation tables send their links in `row_meta`.
+  - An upload made for one form can't be used in another.
+- **Files inside repeater rows** (nested repeaters too) are saved the same way.
+  - A row may keep any file that was in that repeater on the record, so rows can be reordered.
+  - Files that are in no row any more are deleted after the save.
+  - Errors use the row's key, such as `tracks.1.cover`.
+  - `files` lists them under `<repeater>.<field>`.
+
+**Phone layout:** list cards and relation cards show the first image column as a picture next to the title.
+
+The HTML panel's own forms don't use the save step yet.
 
 ### Live Reactivity & Dynamic Micro-Swaps
 

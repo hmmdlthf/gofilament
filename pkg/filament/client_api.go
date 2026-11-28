@@ -7,6 +7,7 @@ import (
 
 	json "github.com/goccy/go-json"
 	gcontext "github.com/golaravel/golaravel/pkg/context"
+	"github.com/golaravel/golaravel/pkg/middleware"
 	"github.com/golaravel/golaravel/pkg/router"
 
 	"github.com/golaravel/gofilament/pkg/colors"
@@ -558,7 +559,34 @@ func (p *Panel) registerRelationClientRoutes(r *router.Router, res ResourceInter
 					out["version"] = ver
 				}
 			}
+			if rf, ok := rel.(interface {
+				RecordFiles(ctx *Context, record any) map[string][]FileInfo
+			}); ok {
+				if files := rf.RecordFiles(ctx, record); len(files) > 0 {
+					out["files"] = files
+				}
+			}
 			return c.JSON(http.StatusOK, out)
+		})
+
+		// POST .../relations/<rel>/uploads?field=<name> (multipart "file"):
+		// files of the relation form, staged until the related record is saved.
+		r.OPTIONS(relPath+"/uploads", preflight)
+		r.POST(relPath+"/uploads", middleware.MaxBodySize(maxUploadBytes+1<<20), func(c *gcontext.Context) error {
+			p.setCorsHeaders(c)
+			ctx, err := p.AuthorizeAccess(c)
+			if err != nil {
+				return err
+			}
+			if err := p.authorizeRelation(ctx, res, c.Param("id"), false); err != nil {
+				return p.apiErrorStatus(c, err, http.StatusNotFound)
+			}
+			withRelationParent(ctx, c.Param("id"))
+			field, ok := former.FormFieldFor(ctx, c.Query("field")).(*forms.FileUploadField)
+			if !ok {
+				return c.JSON(http.StatusNotFound, map[string]string{"error": "Unknown file field"})
+			}
+			return p.serveUpload(c, ctx, field, res.Slug(), relationUploadScope(res.Slug(), rel.Relationship()))
 		})
 
 		// GET .../relations/<rel>/form/options?field=&q=

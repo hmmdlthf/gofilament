@@ -99,71 +99,169 @@ func finalPath(field *forms.FileUploadField, u pendingUpload) string {
 //     after a successful save, unless the field KeepReplacedFiles;
 //   - StoreFileNamesIn fields get the original names.
 //
+// Fields inside repeaters (nested ones too) work the same way: a row may
+// keep any file that was in that repeater on the record.
+//
 // old is the current record (nil when creating). Panels with a custom
 // UploadsUsing handler keep their values unchanged.
 func (r *BaseResource[T]) resolveFiles(ctx *Context, old map[string]any, data map[string]any) (*fileCommit, error) {
+	return resolveFormFiles(ctx, r.Slug(), r.formComponents(), old, data)
+}
+
+// resolveFormFiles is resolveFiles for any form: scope names the form's
+// temporary upload area (the resource slug, or "<slug>.<relationship>").
+func resolveFormFiles(ctx *Context, scope string, comps []forms.Component, old, data map[string]any) (*fileCommit, error) {
 	if ctx.Panel() != nil && ctx.Panel().uploadHandler != nil {
 		return nil, nil
 	}
-	comps := r.formComponents()
-	fields := forms.FileFields(ctx.GoContext(), comps)
-	if len(fields) == 0 {
+	if !forms.HasFileFields(ctx.GoContext(), comps) {
 		return nil, nil
 	}
-	fc := &fileCommit{}
-	errs := map[string]string{}
-	for _, f := range fields {
-		name := f.GetName()
-		raw, present := data[name]
-		if !present {
-			continue
+	fr := &fileResolver{ctx: ctx, scope: scope, fc: &fileCommit{}, errs: map[string]string{}}
+	var oldRows []map[string]any
+	if old != nil {
+		oldRows = []map[string]any{old}
+	}
+	fr.level(comps, oldRows, []fileRow{{data: data}})
+	if len(fr.errs) > 0 {
+		fr.fc.finish(false)
+		return nil, &forms.ValidationError{Errors: fr.errs}
+	}
+	return fr.fc, nil
+}
+
+type fileResolver struct {
+	ctx   *Context
+	scope string
+	fc    *fileCommit
+	errs  map[string]string
+}
+
+// fileRow is one map of submitted values: the record, or a repeater row
+// (prefix is its error key prefix, such as "lines.2.").
+type fileRow struct {
+	data   map[string]any
+	prefix string
+}
+
+func rowMaps(v any) []map[string]any {
+	var out []map[string]any
+	switch x := v.(type) {
+	case []any:
+		for _, e := range x {
+			if m, ok := e.(map[string]any); ok {
+				out = append(out, m)
+			}
 		}
-		disk := f.GetDisk()
-		d := storage.Disk(disk)
-		oldVals := valueList(old[name])
-		known := map[string]bool{}
-		for _, v := range oldVals {
-			known[v] = true
+	case []map[string]any:
+		out = x
+	}
+	return out
+}
+
+// level resolves the file fields of one form level for the submitted rows,
+// against the values those fields held in oldRows (all rows of that level
+// on the record), then descends into repeaters.
+func (fr *fileResolver) level(comps []forms.Component, oldRows []map[string]any, rows []fileRow) {
+	files, reps := forms.FileScope(fr.ctx.GoContext(), comps)
+	for _, f := range files {
+		fr.field(f, oldRows, rows)
+	}
+	for _, rep := range reps {
+		name := rep.GetName()
+		var childOld []map[string]any
+		for _, o := range oldRows {
+			childOld = append(childOld, rowMaps(o[name])...)
 		}
-		oldNames := map[string]string{}
+		var childRows []fileRow
+		present := false
+		for _, row := range rows {
+			raw, ok := row.data[name]
+			if !ok {
+				continue
+			}
+			present = true
+			for i, m := range rowMaps(raw) {
+				childRows = append(childRows, fileRow{data: m, prefix: fmt.Sprintf("%s%s.%d.", row.prefix, name, i)})
+			}
+		}
+		if present {
+			fr.level(rep.GetSchema(), childOld, childRows)
+		}
+	}
+}
+
+// field resolves one file field across rows; files that were in the field
+// on any old row and are in none of the new rows are deleted after save.
+func (fr *fileResolver) field(f *forms.FileUploadField, oldRows []map[string]any, rows []fileRow) {
+	name := f.GetName()
+	disk := f.GetDisk()
+	d := storage.Disk(disk)
+
+	known := map[string]bool{}
+	var oldVals []string
+	oldNames := map[string]string{}
+	for _, o := range oldRows {
+		vals := valueList(o[name])
+		for _, v := range vals {
+			if !known[v] {
+				known[v] = true
+				oldVals = append(oldVals, v)
+			}
+		}
 		if col := f.FileNamesField(); col != "" {
-			switch x := old[col].(type) {
+			switch x := o[col].(type) {
 			case map[string]any:
 				for k, v := range x {
 					oldNames[k] = fmt.Sprint(v)
 				}
 			case string:
-				if len(oldVals) == 1 {
-					oldNames[oldVals[0]] = x
+				if len(vals) == 1 {
+					oldNames[vals[0]] = x
 				}
 			}
 		}
+	}
 
+	inField := map[string]bool{}
+	anyPresent := false
+	for _, row := range rows {
+		raw, present := row.data[name]
+		if !present {
+			continue
+		}
+		anyPresent = true
+		key := row.prefix + name
 		var kept, added []string
 		names := map[string]string{}
+		failed := false
 		for _, v := range valueList(raw) {
 			if u, ok := parsePending(v); ok {
 				if d == nil {
-					errs[name] = "Uploads are not configured for this field."
+					fr.errs[key] = "Uploads are not configured for this field."
+					failed = true
 					break
 				}
-				from := tmpPath(r.Slug(), name, u.key)
+				from := tmpPath(fr.scope, name, u.key)
 				if !d.Exists(from) {
-					errs[name] = f.GetLabelOrName() + ": an upload expired or was not found. Choose the file again."
+					fr.errs[key] = f.GetLabelOrName() + ": an upload expired or was not found. Choose the file again."
+					failed = true
 					break
 				}
 				to := finalPath(f, u)
 				if err := d.Move(from, to); err != nil {
-					errs[name] = f.GetLabelOrName() + ": the file could not be stored."
+					fr.errs[key] = f.GetLabelOrName() + ": the file could not be stored."
+					failed = true
 					break
 				}
-				fc.moved = append(fc.moved, fileMove{disk: disk, from: from, to: to})
+				fr.fc.moved = append(fr.fc.moved, fileMove{disk: disk, from: from, to: to})
 				added = append(added, to)
 				names[to] = u.original
 				continue
 			}
 			if !known[v] {
-				errs[name] = f.GetLabelOrName() + " contains a file that was not uploaded to it."
+				fr.errs[key] = f.GetLabelOrName() + " contains a file that was not uploaded to it."
+				failed = true
 				break
 			}
 			kept = append(kept, v)
@@ -171,7 +269,11 @@ func (r *BaseResource[T]) resolveFiles(ctx *Context, old map[string]any, data ma
 				names[v] = n
 			}
 		}
-		if _, failed := errs[name]; failed {
+		if failed {
+			// keep the old files of this field: the save will not happen
+			for _, v := range oldVals {
+				inField[v] = true
+			}
 			continue
 		}
 
@@ -182,27 +284,18 @@ func (r *BaseResource[T]) resolveFiles(ctx *Context, old map[string]any, data ma
 		if !f.IsMultiple() && len(values) > 1 {
 			values = values[len(values)-1:] // a new file replaces the old one
 		}
-		inField := map[string]bool{}
 		for _, v := range values {
 			inField[v] = true
 		}
-		if !f.KeepsReplacedFiles() {
-			for _, v := range oldVals {
-				if !inField[v] && !isURL(v) {
-					fc.removed = append(fc.removed, fileRef{disk: disk, path: v})
-				}
-			}
-		}
-
 		if f.IsMultiple() {
 			if values == nil {
 				values = []string{}
 			}
-			data[name] = values
+			row.data[name] = values
 		} else if len(values) == 1 {
-			data[name] = values[0]
+			row.data[name] = values[0]
 		} else {
-			data[name] = ""
+			row.data[name] = ""
 		}
 		if col := f.FileNamesField(); col != "" {
 			if f.IsMultiple() {
@@ -212,19 +305,22 @@ func (r *BaseResource[T]) resolveFiles(ctx *Context, old map[string]any, data ma
 						m[v] = n
 					}
 				}
-				data[col] = m
+				row.data[col] = m
 			} else if len(values) == 1 {
-				data[col] = names[values[0]]
+				row.data[col] = names[values[0]]
 			} else {
-				data[col] = ""
+				row.data[col] = ""
 			}
 		}
 	}
-	if len(errs) > 0 {
-		fc.finish(false)
-		return nil, &forms.ValidationError{Errors: errs}
+	if !anyPresent || f.KeepsReplacedFiles() {
+		return
 	}
-	return fc, nil
+	for _, v := range oldVals {
+		if !inField[v] && !isURL(v) {
+			fr.fc.removed = append(fr.fc.removed, fileRef{disk: disk, path: v})
+		}
+	}
 }
 
 func isURL(v string) bool {
@@ -234,7 +330,7 @@ func isURL(v string) bool {
 // oldRecordFor loads the record a write updates as a map, for
 // resolveFiles; nil when the resource has no finder or form file fields.
 func (r *BaseResource[T]) oldRecordFor(ctx *Context, id string) map[string]any {
-	if r.onFind == nil || len(forms.FileFields(ctx.GoContext(), r.formComponents())) == 0 {
+	if r.onFind == nil || !forms.HasFileFields(ctx.GoContext(), r.formComponents()) {
 		return nil
 	}
 	rec, err := r.onFind(ctx, id)
@@ -259,39 +355,59 @@ type FileInfo struct {
 func FileURL(disk, value string) string { return tables.StorageURL(disk, value) }
 
 // RecordFiles returns the stored files of each file field of the
-// resource form for a record, keyed by field name.
+// resource form for a record, keyed by field name; fields inside
+// repeaters are keyed "<repeater>.<field>" and list the files of all rows.
 func (r *BaseResource[T]) RecordFiles(ctx *Context, record any) map[string][]FileInfo {
-	fields := forms.FileFields(ctx.GoContext(), r.formComponents())
-	if len(fields) == 0 {
+	return formFiles(ctx, r.formComponents(), record)
+}
+
+func formFiles(ctx *Context, comps []forms.Component, record any) map[string][]FileInfo {
+	if !forms.HasFileFields(ctx.GoContext(), comps) {
 		return nil
 	}
-	m := recordToMap(record)
 	out := map[string][]FileInfo{}
-	for _, f := range fields {
-		vals := valueList(m[f.GetName()])
-		if len(vals) == 0 {
-			continue
-		}
-		names := map[string]string{}
-		if col := f.FileNamesField(); col != "" {
-			switch x := m[col].(type) {
-			case map[string]any:
-				for k, v := range x {
-					names[k] = fmt.Sprint(v)
-				}
-			case string:
-				names[vals[0]] = x
-			}
-		}
-		list := make([]FileInfo, 0, len(vals))
-		for _, v := range vals {
-			n := names[v]
-			if n == "" {
-				n = path.Base(v)
-			}
-			list = append(list, FileInfo{Value: v, URL: FileURL(f.GetDisk(), v), Name: n})
-		}
-		out[f.GetName()] = list
-	}
+	collectFiles(ctx, comps, []map[string]any{recordToMap(record)}, "", out)
 	return out
+}
+
+func collectFiles(ctx *Context, comps []forms.Component, rows []map[string]any, prefix string, out map[string][]FileInfo) {
+	files, reps := forms.FileScope(ctx.GoContext(), comps)
+	for _, f := range files {
+		var list []FileInfo
+		for _, m := range rows {
+			vals := valueList(m[f.GetName()])
+			names := map[string]string{}
+			if col := f.FileNamesField(); col != "" {
+				switch x := m[col].(type) {
+				case map[string]any:
+					for k, v := range x {
+						names[k] = fmt.Sprint(v)
+					}
+				case string:
+					if len(vals) > 0 {
+						names[vals[0]] = x
+					}
+				}
+			}
+			for _, v := range vals {
+				n := names[v]
+				if n == "" {
+					n = path.Base(v)
+				}
+				list = append(list, FileInfo{Value: v, URL: FileURL(f.GetDisk(), v), Name: n})
+			}
+		}
+		if len(list) > 0 {
+			out[prefix+f.GetName()] = list
+		}
+	}
+	for _, rep := range reps {
+		var child []map[string]any
+		for _, m := range rows {
+			child = append(child, rowMaps(m[rep.GetName()])...)
+		}
+		if len(child) > 0 {
+			collectFiles(ctx, rep.GetSchema(), child, prefix+rep.GetName()+".", out)
+		}
+	}
 }

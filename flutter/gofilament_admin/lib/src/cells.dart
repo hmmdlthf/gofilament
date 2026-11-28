@@ -143,3 +143,39 @@ Widget adminCell(
   return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360), child: label);
 }
+
+/// The picture of a list card on narrow screens: the row's image from an
+/// image column (the link the server sent), or a placeholder so cards
+/// line up. Circular columns draw a round picture.
+Widget cardPicture(
+    BuildContext context, Map<String, dynamic> column, Map<String, dynamic> row,
+    {double size = 52}) {
+  final scheme = Theme.of(context).colorScheme;
+  final name = '${column['name']}';
+  final links = row[imageLinksKey];
+  var url = links is Map && links[name] != null ? '${links[name]}' : '';
+  if (url.isEmpty) {
+    final v = valueAt(row, name);
+    final first = v is List ? (v.isEmpty ? null : v.first) : v;
+    final s = first == null ? '' : '$first';
+    if (s.startsWith('http') || s.startsWith('/')) url = s;
+  }
+  final circular = column['circular'] == true;
+  final placeholder =
+      Icon(Icons.image_outlined, color: scheme.onSurfaceVariant);
+  final box = SizedBox(
+    key: Key('card-picture-${recordId(row)}'),
+    width: size,
+    height: size,
+    child: ColoredBox(
+      color: scheme.surfaceContainerHighest,
+      child: url.isEmpty
+          ? placeholder
+          : Image.network(url,
+              fit: BoxFit.cover, errorBuilder: (_, __, ___) => placeholder),
+    ),
+  );
+  return circular
+      ? ClipOval(child: box)
+      : ClipRRect(borderRadius: BorderRadius.circular(8), child: box);
+}
