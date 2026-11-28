@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.49.0] - 2026-11-28
+
 ### Added
 - **Workflow maps**: an area of the app drawn as blocks of tasks joined by arrows (*Create invoices → Receive payments → Record deposits*), each task opening its screen. See *Workflow Maps* in DOCUMENTATION.md.
   - `Panel.WorkflowMap(filament.NewWorkflowMap(id)...)`, with blocks placed on a grid (`MapBlock(...).At(col, row).Span(cols, rows)`).
