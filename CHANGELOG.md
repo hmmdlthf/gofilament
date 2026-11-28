@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.48.0] - 2026-11-28
+
+### Added
+- **File fields in relation-manager forms**:
+  - an upload endpoint per relation, `POST <resource>/<id>/relations/<relationship>/uploads`;
+  - the same save step as resource forms: pending uploads move into place, other values must already be on the record, and replaced files are deleted after the save;
+  - `files` in the relation form payload;
+  - image links in relation list `row_meta`.
+  - The Flutter app uploads to the relation endpoint.
+- **File fields inside repeater rows**, nested repeaters included:
+  - saved the same way, with errors keyed by row (`tracks.1.cover`);
+  - a row may keep any file the repeater held, so rows can be reordered;
+  - files that are in no row any more are deleted after the save;
+  - links come in `files` as `<repeater>.<field>`.
+  - The Flutter repeater editor uses the full file field editor in each row.
+- **Pictures in phone cards**: list and relation cards on narrow screens show the first image column as a picture beside the title. They used to leave image columns out and take the title from the first column.
+- **Demo:** product variants have a swatch image, a file field in a relation form.
+
+### Changed
+- **golaravel v1.22.1**, which fixes a routing bug the relation upload route ran into.
+
 ## [v1.47.0] - 2026-11-28
 
 ### Added
